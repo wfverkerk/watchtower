@@ -11,10 +11,12 @@ defineProps<{
   recentActions: RecentAction[]
   teamStats: TeamStats[]
   playerName: (playerId: string) => string
+  canUndo: boolean
 }>()
 
 const emit = defineEmits<{
   'edit-action': [action: GameAction]
+  undo: []
 }>()
 
 function actionTime(timestamp: number) {
@@ -26,6 +28,22 @@ function actionLabel(action: GameAction) {
   const { key, params } = getActionTranslation(action, isAppLocale(locale.value) ? locale.value : 'nl')
   return t(key, params ?? {})
 }
+
+function actionIcon(action: GameAction) {
+  if (action.type === 'score') return `+${action.value === 1 ? 'FT' : action.value}`
+  if (action.type === 'missed_shot') return action.value === 1 ? 'FT' : String(action.value)
+
+  return {
+    offensive_rebound: '↗',
+    defensive_rebound: '↙',
+    rebound: '↕',
+    assist: 'A',
+    turnover: '↻',
+    foul: '!',
+    block: '▰',
+    steal: '↗',
+  }[action.type]
+}
 </script>
 
 <template>
@@ -35,15 +53,21 @@ function actionLabel(action: GameAction) {
         <p class="eyebrow">{{ t('activity.heading') }}</p>
         <h2>{{ t('activity.recent') }} <span class="count">{{ actions.length }}</span></h2>
       </div>
-      <span class="activity-mark" aria-hidden="true">↗</span>
+      <div class="activity-header-actions">
+        <button class="text-button activity-undo" :disabled="!canUndo" @click="emit('undo')">
+          <span aria-hidden="true">↶</span><span class="activity-undo-label">{{ t('app.undo') }}</span>
+        </button>
+        <span class="activity-mark" aria-hidden="true">↗</span>
+      </div>
     </div>
 
     <div v-if="recentActions.length" class="activity-list">
       <div v-for="item in recentActions" :key="item.action.id" class="activity-row">
         <span class="activity-dot" :class="item.action.teamId === 'home' ? 'orange' : 'blue'"></span>
+        <span class="activity-action-icon" :class="`activity-action-icon-${item.action.type}`" aria-hidden="true">{{ actionIcon(item.action) }}</span>
         <div class="activity-description">
           <strong>
-            {{ playerName(item.action.playerId) }}<span v-if="item.assistName" class="assist-attribution"> {{ t('activity.assistAttribution', { name: displayPlayerName(item.assistName) }) }}</span>
+            {{ playerName(item.action.playerId) }}<template v-if="item.assistName">&nbsp;<span class="assist-attribution">{{ t('activity.assistAttribution', { name: displayPlayerName(item.assistName) }) }}</span></template>
           </strong>
           <span>{{ actionLabel(item.action) }}</span>
         </div>

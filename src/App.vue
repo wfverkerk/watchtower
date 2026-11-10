@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import ActivityPanel from './components/ActivityPanel.vue'
 import GameControls from './components/GameControls.vue'
 import LineupDialog from './components/LineupDialog.vue'
+import MatchSyncDialog from './components/MatchSyncDialog.vue'
 import PlayerPickerDialog from './components/PlayerPickerDialog.vue'
 import Scoreboard from './components/Scoreboard.vue'
 import type { GameAction } from './domain/game'
@@ -11,6 +12,7 @@ import { appLocales, isAppLocale, localeLabels, saveLocale, useLocale } from './
 
 const { t, locale, displayTeamName } = useLocale()
 const localeSaveError = ref(false)
+const matchSyncOpen = ref(false)
 
 type Theme = 'light' | 'dark'
 
@@ -48,6 +50,7 @@ const {
   pendingAction,
   pendingScorerId,
   pendingAssistId,
+  pendingShotLocation,
   editingActionId,
   lineupEditorOpen,
   draftCourtPlayerIds,
@@ -57,11 +60,15 @@ const {
   lineupError,
   editingPlayerId,
   storageError,
+  matchLink,
+  matchSyncStatus,
+  matchSyncError,
+  matchSyncConfigured,
   playerName,
   addAction,
   selectPlayer,
   selectScorer,
-  finishScoringAction,
+  finishShotAction,
   cancelPendingAction,
   editAction,
   undoLastAction,
@@ -76,7 +83,17 @@ const {
   toggleDraftCourtPlayer,
   saveLineup,
   cancelLineupEdit,
+  createSharedMatch,
+  joinSharedMatch,
 } = useGameSession()
+
+async function createMatch(displayName: string) {
+  if (await createSharedMatch(displayName)) matchSyncOpen.value = false
+}
+
+async function joinMatch(joinCode: string, displayName: string) {
+  if (await joinSharedMatch(joinCode, displayName)) matchSyncOpen.value = false
+}
 
 function updateTeamName(teamId: string, name: string) {
   const team = game.teams.find((item) => item.id === teamId)
@@ -117,7 +134,18 @@ watch(locale, (value) => {
         <span>watchtower<span class="brand-dot">.</span></span>
       </a>
       <div class="topbar-right">
-        <span class="offline-indicator"><span></span> {{ t('app.savedLocally') }}</span>
+        <span class="offline-indicator">
+          <span :class="matchLink ? `sync-dot-${matchSyncStatus}` : ''"></span>
+          {{ matchLink ? t(`sync.status.${matchSyncStatus}`) : t('app.savedLocally') }}
+        </span>
+        <button class="share-match-button" type="button" :aria-label="t('sync.open')" :title="t('sync.open')" @click="matchSyncOpen = true">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="18" cy="5" r="3" />
+            <circle cx="6" cy="12" r="3" />
+            <circle cx="18" cy="19" r="3" />
+            <path d="m8.7 10.7 6.6-4.4m-6.6 7 6.6 4.4" />
+          </svg>
+        </button>
         <button
           class="theme-toggle"
           type="button"
@@ -134,29 +162,12 @@ watch(locale, (value) => {
             <path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z" />
           </svg>
         </button>
-        <label class="language-picker">
-          <span class="visually-hidden">{{ t('app.language') }}</span>
-          <select :value="locale" :aria-label="t('app.language')" @change="changeLocale">
-            <option v-for="language in appLocales" :key="language" :value="language">{{ localeLabels[language] }}</option>
-          </select>
-        </label>
         <span class="avatar" :aria-label="t('app.profile')">J</span>
       </div>
     </header>
 
     <div v-if="storageError" class="notice" role="alert">{{ storageError }}</div>
     <div v-if="localeSaveError" class="notice" role="alert">{{ t('errors.saveLanguage') }}</div>
-
-    <section class="page-heading">
-      <div>
-        <p class="eyebrow">{{ t('app.breadcrumb') }} <span>/</span> {{ t('app.newGame') }}</p>
-        <h1>{{ t('app.heading') }}</h1>
-        <p class="subtitle">{{ t('app.subtitle') }}</p>
-      </div>
-      <button class="text-button" :disabled="game.actions.length === 0" @click="undoLastAction">
-        <span aria-hidden="true">↶</span> {{ t('app.undo') }}
-      </button>
-    </section>
 
     <Scoreboard
       :teams="game.teams"
@@ -197,13 +208,16 @@ watch(locale, (value) => {
         :recent-actions="recentActions"
         :team-stats="teamStats"
         :player-name="playerName"
+        :can-undo="game.actions.length > 0"
         @edit-action="handleEditAction"
+        @undo="undoLastAction"
       />
     </div>
 
     <PlayerPickerDialog
       v-if="pendingAction"
       v-model:assist-player-id="pendingAssistId"
+      v-model:shot-location="pendingShotLocation"
       :action="pendingAction"
       :team-name="displayTeamName(selectedTeam)"
       :players="pickerPlayers"
@@ -212,7 +226,7 @@ watch(locale, (value) => {
       @cancel="cancelPendingAction"
       @select-player="selectPlayer"
       @select-scorer="selectScorer"
-      @finish-scoring="finishScoringAction"
+      @finish-shot="finishShotAction"
     />
     <LineupDialog
       v-if="lineupEditorOpen"
@@ -223,7 +237,25 @@ watch(locale, (value) => {
       @save="saveLineup"
       @toggle="toggleDraftCourtPlayer"
     />
+    <MatchSyncDialog
+      v-if="matchSyncOpen"
+      :configured="matchSyncConfigured"
+      :match-link="matchLink"
+      :status="matchSyncStatus"
+      :error="matchSyncError"
+      @close="matchSyncOpen = false"
+      @create="createMatch"
+      @join="joinMatch"
+    />
 
-    <footer><span class="footer-ball">◉</span> {{ t('app.footer') }} <span>·</span> Watchtower</footer>
+    <footer>
+      <div class="footer-copy"><span class="footer-ball">◉</span> {{ t('app.footer') }} <span>·</span> Watchtower</div>
+      <label class="language-picker">
+        <span class="visually-hidden">{{ t('app.language') }}</span>
+        <select :value="locale" :aria-label="t('app.language')" @change="changeLocale">
+          <option v-for="language in appLocales" :key="language" :value="language">{{ localeLabels[language] }}</option>
+        </select>
+      </label>
+    </footer>
   </main>
 </template>

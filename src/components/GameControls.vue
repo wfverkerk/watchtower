@@ -44,15 +44,15 @@ function updateInput(event: Event, field: 'name' | 'number') {
 
 <template>
   <section class="panel logging-panel">
-    <div class="section-title">
+    <div v-if="!gameStarted" class="section-title">
       <div>
-        <p class="eyebrow">{{ gameStarted ? t('controls.liveInput') : t('controls.prepare') }}</p>
-        <h2>{{ gameStarted ? t('controls.registerAction') : t('controls.enterPlayers') }}</h2>
+        <p class="eyebrow">{{ t('controls.prepare') }}</p>
+        <h2>{{ t('controls.enterPlayers') }}</h2>
       </div>
       <span class="step-number">01</span>
     </div>
 
-    <div class="team-switch" role="group" :aria-label="t('controls.chooseTeam')">
+    <div v-if="!gameStarted" class="team-switch" role="group" :aria-label="t('controls.chooseTeam')">
       <button
         v-for="team in teams"
         :key="team.id"
@@ -176,9 +176,6 @@ function updateInput(event: Event, field: 'name' | 'number') {
       <div class="action-group">
         <p class="field-label action-label">{{ t('controls.otherActions') }}</p>
         <div class="action-grid">
-          <button class="action-card" @click="emit('add-action', 'assist')">
-            <span class="action-icon">↗</span><span>{{ t('controls.assist') }}</span>
-          </button>
           <button class="action-card" @click="emit('add-action', 'turnover')">
             <span class="action-icon">↻</span><span>{{ t('controls.turnover') }}</span>
           </button>
