@@ -3,7 +3,7 @@
 :root {
   font-family: 'DM Sans', sans-serif;
   color: #242323;
-  background: #f7f6f3;
+  background: var(--page);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -17,6 +17,7 @@
   --muted: #898985;
   --line: #eeece7;
   --panel: #fff;
+  --page: #f7f6f3;
 }
 
 * { box-sizing: border-box; }
@@ -73,6 +74,20 @@ button:disabled { cursor: not-allowed; }
 
 .brand-dot { color: var(--orange); }
 .topbar-right { display: flex; align-items: center; gap: 18px; }
+.theme-toggle {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  flex: 0 0 32px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--ink);
+  background: var(--panel);
+}
+.theme-toggle:hover { background: var(--page); }
+.theme-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
 .offline-indicator { display: flex; align-items: center; gap: 8px; color: #696962; font-size: 12px; }
 .offline-indicator > span { width: 7px; height: 7px; border-radius: 50%; background: #56a574; }
 .avatar { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 50%; color: #78503d; background: #f4e3d8; font-size: 12px; font-weight: 700; }
@@ -320,6 +335,8 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 @media (max-width: 390px) {
   .app-shell { width: calc(100% - 24px); }
   .offline-indicator { font-size: 10px; }
+  .topbar-right { gap: 10px; }
+  .avatar { display: none; }
   .scoreboard { grid-template-columns: 1fr 100px 1fr; }
   .team-name { width: 100%; padding-inline: 1px; font-size: 12px; }
   .start-button { width: 104px; }
@@ -336,6 +353,7 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
   .game-live .brand { gap: 7px; font-size: 16px; }
   .game-live .brand-mark { width: 26px; height: 26px; border-radius: 7px; font-size: 13px; }
   .game-live .topbar-right { gap: 0; }
+  .game-live .theme-toggle { width: 29px; height: 29px; flex-basis: 29px; }
   .game-live .offline-indicator { gap: 6px; font-size: 9px; }
   .game-live .avatar { display: none; }
   .game-live .page-heading { align-items: center; gap: 8px; padding: 9px 0; }
@@ -353,6 +371,162 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
     border-radius: 8px;
     box-shadow: 0 3px 12px #24232312;
   }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  color: #eceef2;
+  background: var(--page);
+
+  --orange: #f27b4f;
+  --blue: #8292f2;
+  --ink: #eceef2;
+  --muted: #a0a6b2;
+  --line: #343943;
+  --panel: #20232b;
+  --page: #17191f;
+  --control: #252932;
+  --raised: #2b303a;
+  --hover: #303641;
+}
+
+:root[data-theme='dark'] .topbar,
+:root[data-theme='dark'] .panel,
+:root[data-theme='dark'] .live-pill,
+:root[data-theme='dark'] .team-switch button.selected,
+:root[data-theme='dark'] .player-choice,
+:root[data-theme='dark'] .roster-edit,
+:root[data-theme='dark'] .roster-remove,
+:root[data-theme='dark'] .player-input input,
+:root[data-theme='dark'] .cancel-edit,
+:root[data-theme='dark'] .lineup-change-button,
+:root[data-theme='dark'] .picker-close,
+:root[data-theme='dark'] .player-select,
+:root[data-theme='dark'] .add-player input,
+:root[data-theme='dark'] .add-player button,
+:root[data-theme='dark'] .action-card,
+:root[data-theme='dark'] .activity-mark,
+:root[data-theme='dark'] .activity-edit,
+:root[data-theme='dark'] .court-toggle {
+  border-color: var(--line);
+}
+
+:root[data-theme='dark'] .eyebrow,
+:root[data-theme='dark'] .subtitle,
+:root[data-theme='dark'] .offline-indicator,
+:root[data-theme='dark'] .text-button,
+:root[data-theme='dark'] .team-caption,
+:root[data-theme='dark'] .live-pill,
+:root[data-theme='dark'] .versus,
+:root[data-theme='dark'] .team-switch button,
+:root[data-theme='dark'] .roster-heading > span,
+:root[data-theme='dark'] .player-choice,
+:root[data-theme='dark'] .roster-edit,
+:root[data-theme='dark'] .roster-empty,
+:root[data-theme='dark'] .player-input,
+:root[data-theme='dark'] .player-input input,
+:root[data-theme='dark'] .cancel-edit,
+:root[data-theme='dark'] .roster-requirement,
+:root[data-theme='dark'] .live-team-label,
+:root[data-theme='dark'] .lineup-change-button,
+:root[data-theme='dark'] .scoring-picker-title,
+:root[data-theme='dark'] .picker-close,
+:root[data-theme='dark'] .picker-cancel,
+:root[data-theme='dark'] .scoring-player-list h3,
+:root[data-theme='dark'] .court-status,
+:root[data-theme='dark'] .court-toggle,
+:root[data-theme='dark'] .lineup-count,
+:root[data-theme='dark'] .field-label,
+:root[data-theme='dark'] .player-select,
+:root[data-theme='dark'] .add-player button,
+:root[data-theme='dark'] .action-card,
+:root[data-theme='dark'] .action-icon,
+:root[data-theme='dark'] .helper-text,
+:root[data-theme='dark'] .activity-mark,
+:root[data-theme='dark'] .activity-description strong,
+:root[data-theme='dark'] .activity-description span,
+:root[data-theme='dark'] .activity-row time,
+:root[data-theme='dark'] .activity-edit,
+:root[data-theme='dark'] .empty-state,
+:root[data-theme='dark'] .empty-state strong,
+:root[data-theme='dark'] .team-stat-name strong,
+:root[data-theme='dark'] .stat-values,
+:root[data-theme='dark'] .stat-values b,
+:root[data-theme='dark'] footer {
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .team-switch,
+:root[data-theme='dark'] .team-switch button.selected,
+:root[data-theme='dark'] .player-choice,
+:root[data-theme='dark'] .roster-edit,
+:root[data-theme='dark'] .roster-remove,
+:root[data-theme='dark'] .player-input input,
+:root[data-theme='dark'] .cancel-edit,
+:root[data-theme='dark'] .lineup-change-button,
+:root[data-theme='dark'] .player-select,
+:root[data-theme='dark'] .add-player input,
+:root[data-theme='dark'] .add-player button,
+:root[data-theme='dark'] .action-card,
+:root[data-theme='dark'] .activity-edit,
+:root[data-theme='dark'] .court-toggle,
+:root[data-theme='dark'] .picker-cancel {
+  background: var(--control);
+}
+
+  :root[data-theme='dark'] .team-switch { background: var(--raised); }
+  :root[data-theme='dark'] .team-switch button.selected { color: var(--ink); }
+  :root[data-theme='dark'] .player-choice:hover,
+  :root[data-theme='dark'] .activity-edit:hover,
+  :root[data-theme='dark'] .theme-toggle:hover { background: var(--hover); }
+  :root[data-theme='dark'] .player-choice.selected,
+  :root[data-theme='dark'] .picker-player.selected {
+    border-color: #9f6048;
+    color: #ffe3d7;
+    background: #422d28;
+  }
+  :root[data-theme='dark'] .team-name { color: var(--ink); }
+  :root[data-theme='dark'] .live-pill.active { border-color: #684536; color: #ff9a70; background: #33251f; }
+  :root[data-theme='dark'] .start-button.started { color: #ffc0a3; background: #422d28; }
+  :root[data-theme='dark'] .start-button:disabled,
+  :root[data-theme='dark'] .picker-confirm:disabled { color: #8d929c; background: #30343c; }
+  :root[data-theme='dark'] .jersey-number { color: #ffad86; background: #422d28; }
+  :root[data-theme='dark'] .roster-remove { color: #e28e7c; }
+  :root[data-theme='dark'] .roster-empty { border-color: #424751; }
+  :root[data-theme='dark'] .player-input input::placeholder,
+  :root[data-theme='dark'] .add-player input::placeholder { color: #777f8d; }
+  :root[data-theme='dark'] .form-error { color: #ff8e7a; }
+  :root[data-theme='dark'] .player-picker-backdrop { background: #08090dcc; }
+  :root[data-theme='dark'] .scoring-player-list[aria-label='Kies scorer'] .picker-player { border-color: #34523d; background: #24352b; }
+  :root[data-theme='dark'] .scoring-player-list[aria-label='Kies scorer'] .picker-player.selected,
+  :root[data-theme='dark'] .lineup-player-grid .picker-player.selected { border-color: #478c59; color: white; background: #39784b; }
+  :root[data-theme='dark'] .scoring-player-list[aria-label='Kies scorer'] .picker-player .jersey-number { color: #a9deb4; background: #314d38; }
+  :root[data-theme='dark'] .scoring-player-list[aria-label='Kies scorer'] .picker-player.selected .jersey-number,
+  :root[data-theme='dark'] .lineup-player-grid .picker-player.selected .jersey-number { color: #397f4c; background: white; }
+  :root[data-theme='dark'] .scoring-player-list[aria-label='Kies assistgever'] .picker-player { border-color: #514466; background: #30283b; }
+  :root[data-theme='dark'] .scoring-player-list[aria-label='Kies assistgever'] .picker-player.selected { border-color: #8062ad; color: white; background: #674d8d; }
+  :root[data-theme='dark'] .scoring-player-list[aria-label='Kies assistgever'] .picker-player .jersey-number { color: #ccb7e8; background: #44375a; }
+  :root[data-theme='dark'] .scoring-player-list[aria-label='Kies assistgever'] .picker-player.selected .jersey-number { color: #705394; background: white; }
+  :root[data-theme='dark'] .scoring-player-list[aria-label='Kies assistgever'] .no-assist-button,
+  :root[data-theme='dark'] .scoring-player-list[aria-label='Kies assistgever'] .no-assist-button.selected { border-color: #424751; color: #c5c9d1; background: #343840; }
+  :root[data-theme='dark'] .scoring-player-list[aria-label='Kies assistgever'] .no-assist-button .jersey-number { color: #c5c9d1; background: #414650; }
+  :root[data-theme='dark'] .missed-shot-player-list .picker-player { border-color: #62413f; background: #392827; }
+  :root[data-theme='dark'] .missed-shot-player-list .picker-player.selected { border-color: #b85b55; color: white; background: #a64e49; }
+  :root[data-theme='dark'] .missed-shot-player-list .picker-player .jersey-number,
+  :root[data-theme='dark'] .missed-shot-player-list .picker-player.selected .jersey-number { color: #a64e49; background: white; }
+  :root[data-theme='dark'] .standard-player-list .picker-player,
+  :root[data-theme='dark'] .lineup-player-grid .picker-player { border-color: var(--line); background: var(--control); }
+  :root[data-theme='dark'] .standard-player-list .picker-player.selected { border-color: var(--orange); color: #ffe3d7; background: #422d28; }
+  :root[data-theme='dark'] .standard-player-list .picker-player.selected .jersey-number { color: white; background: var(--orange); }
+  :root[data-theme='dark'] .activity-row,
+  :root[data-theme='dark'] .team-stat-row { border-color: #30343c; }
+  :root[data-theme='dark'] .activity-description .assist-attribution { color: #c7a6df; }
+  :root[data-theme='dark'] .empty-icon,
+  :root[data-theme='dark'] .count { color: #a0a6b2; background: #2b303a; }
+  :root[data-theme='dark'] .notice { border-color: #684536; color: #ffb18d; background: #33251f; }
+  :root[data-theme='dark'] .avatar { color: #f0c4ae; background: #422d28; }
+
+@media (max-width: 700px) {
   .game-live .team-caption { gap: 4px; font-size: 7px; letter-spacing: .7px; }
   .game-live .team-name { width: 100%; margin-top: 2px; padding: 1px 2px; font-size: 11px; }
   .game-live .team-score > strong { font-size: 25px; }
