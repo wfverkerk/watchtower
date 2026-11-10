@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import ActivityPanel from './components/ActivityPanel.vue'
 import GameControls from './components/GameControls.vue'
 import LineupDialog from './components/LineupDialog.vue'
@@ -6,6 +7,27 @@ import PlayerPickerDialog from './components/PlayerPickerDialog.vue'
 import Scoreboard from './components/Scoreboard.vue'
 import type { GameAction } from './domain/game'
 import { useGameSession } from './composables/useGameSession'
+
+type Theme = 'light' | 'dark'
+
+const themeStorageKey = 'watchtower-theme'
+const theme = ref<Theme>(localStorage.getItem(themeStorageKey) === 'dark' ? 'dark' : 'light')
+
+function applyTheme() {
+  document.documentElement.dataset.theme = theme.value
+  document.querySelector('meta[name="theme-color"]')?.setAttribute(
+    'content',
+    theme.value === 'dark' ? '#17191f' : '#f7f6f3',
+  )
+}
+
+applyTheme()
+
+function toggleTheme() {
+  theme.value = theme.value === 'dark' ? 'light' : 'dark'
+  applyTheme()
+  localStorage.setItem(themeStorageKey, theme.value)
+}
 
 const {
   game,
@@ -71,6 +93,22 @@ function handleEditAction(action: GameAction) {
       </a>
       <div class="topbar-right">
         <span class="offline-indicator"><span></span> Lokaal opgeslagen</span>
+        <button
+          class="theme-toggle"
+          type="button"
+          :aria-label="`Schakel naar ${theme === 'dark' ? 'lichte' : 'donkere'} modus`"
+          :title="`Schakel naar ${theme === 'dark' ? 'lichte' : 'donkere'} modus`"
+          :aria-pressed="theme === 'dark'"
+          @click="toggleTheme"
+        >
+          <svg v-if="theme === 'dark'" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+          </svg>
+          <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z" />
+          </svg>
+        </button>
         <span class="avatar" aria-label="Jouw profiel">J</span>
       </div>
     </header>
