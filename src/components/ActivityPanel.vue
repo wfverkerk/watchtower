@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { getActionLabel, type GameAction, type RecentAction, type Team, type TeamStats } from '../domain/game'
+import { getActionTranslation } from '../i18n/actionLabel'
+import { getIntlLocale, isAppLocale, useLocale } from '../i18n/useLocale'
+import type { GameAction, RecentAction, Team, TeamStats } from '../domain/game'
+
+const { t, locale, displayTeamName, displayPlayerName } = useLocale()
 
 defineProps<{
   teams: Team[]
@@ -14,7 +18,13 @@ const emit = defineEmits<{
 }>()
 
 function actionTime(timestamp: number) {
-  return new Intl.DateTimeFormat('nl-NL', { hour: '2-digit', minute: '2-digit' }).format(timestamp)
+  const activeLocale = isAppLocale(locale.value) ? locale.value : 'nl'
+  return new Intl.DateTimeFormat(getIntlLocale(activeLocale), { hour: '2-digit', minute: '2-digit' }).format(timestamp)
+}
+
+function actionLabel(action: GameAction) {
+  const { key, params } = getActionTranslation(action, isAppLocale(locale.value) ? locale.value : 'nl')
+  return t(key, params ?? {})
 }
 </script>
 
@@ -22,8 +32,8 @@ function actionTime(timestamp: number) {
   <section class="panel activity-panel">
     <div class="section-title">
       <div>
-        <p class="eyebrow">WEDSTRIJDOVERZICHT</p>
-        <h2>Recente acties <span class="count">{{ actions.length }}</span></h2>
+        <p class="eyebrow">{{ t('activity.heading') }}</p>
+        <h2>{{ t('activity.recent') }} <span class="count">{{ actions.length }}</span></h2>
       </div>
       <span class="activity-mark" aria-hidden="true">↗</span>
     </div>
@@ -33,47 +43,47 @@ function actionTime(timestamp: number) {
         <span class="activity-dot" :class="item.action.teamId === 'home' ? 'orange' : 'blue'"></span>
         <div class="activity-description">
           <strong>
-            {{ playerName(item.action.playerId) }}<span v-if="item.assistName" class="assist-attribution"> (assist {{ item.assistName }})</span>
+            {{ playerName(item.action.playerId) }}<span v-if="item.assistName" class="assist-attribution"> {{ t('activity.assistAttribution', { name: displayPlayerName(item.assistName) }) }}</span>
           </strong>
-          <span>{{ getActionLabel(item.action) }}</span>
+          <span>{{ actionLabel(item.action) }}</span>
         </div>
         <time>{{ actionTime(item.action.createdAt) }}</time>
         <button
           class="activity-edit"
-          :aria-label="`Bewerk actie: ${playerName(item.action.playerId)} ${getActionLabel(item.action)}`"
-          :title="`Bewerk actie: ${playerName(item.action.playerId)} ${getActionLabel(item.action)}`"
+          :aria-label="t('activity.editAction', { player: playerName(item.action.playerId), action: actionLabel(item.action) })"
+          :title="t('activity.editAction', { player: playerName(item.action.playerId), action: actionLabel(item.action) })"
           @click="emit('edit-action', item.action)"
         >✎</button>
       </div>
     </div>
     <div v-else class="empty-state">
       <div class="empty-icon">◎</div>
-      <strong>Nog geen acties</strong>
-      <span>Geregistreerde acties verschijnen hier.</span>
+      <strong>{{ t('activity.emptyTitle') }}</strong>
+      <span>{{ t('activity.emptyDescription') }}</span>
     </div>
 
     <div class="divider"></div>
     <div class="stats-heading">
-      <p class="eyebrow">TEAMSTATISTIEKEN</p>
-      <span>LIVE</span>
+      <p class="eyebrow">{{ t('activity.stats') }}</p>
+      <span>{{ t('activity.live') }}</span>
     </div>
     <div class="team-stats">
       <div v-for="team in teams" :key="team.id" class="team-stat-row">
         <div class="team-stat-name">
           <span class="team-dot" :class="team.id === 'home' ? 'orange' : 'blue'"></span>
-          <strong>{{ team.name }}</strong>
+          <strong>{{ displayTeamName(team) }}</strong>
         </div>
         <div class="stat-values">
           <template v-for="stats in teamStats.filter((item) => item.teamId === team.id)" :key="stats.teamId">
-            <span><b>{{ stats.offensiveRebounds }}</b> OREB</span>
-            <span><b>{{ stats.defensiveRebounds }}</b> DREB</span>
-            <span v-if="stats.legacyRebounds"><b>{{ stats.legacyRebounds }}</b> REB</span>
-            <span><b>{{ stats.assists }}</b> AST</span>
-            <span><b>{{ stats.turnovers }}</b> TO</span>
-            <span><b>{{ stats.fouls }}</b> FLS</span>
-            <span><b>{{ stats.blocks }}</b> BLK</span>
-            <span><b>{{ stats.steals }}</b> STL</span>
-            <span><b>{{ stats.missedShots }}</b> MIS</span>
+            <span><b>{{ stats.offensiveRebounds }}</b> {{ t('activity.oreb') }}</span>
+            <span><b>{{ stats.defensiveRebounds }}</b> {{ t('activity.dreb') }}</span>
+            <span v-if="stats.legacyRebounds"><b>{{ stats.legacyRebounds }}</b> {{ t('activity.reb') }}</span>
+            <span><b>{{ stats.assists }}</b> {{ t('activity.ast') }}</span>
+            <span><b>{{ stats.turnovers }}</b> {{ t('activity.to') }}</span>
+            <span><b>{{ stats.fouls }}</b> {{ t('activity.fouls') }}</span>
+            <span><b>{{ stats.blocks }}</b> {{ t('activity.blk') }}</span>
+            <span><b>{{ stats.steals }}</b> {{ t('activity.stl') }}</span>
+            <span><b>{{ stats.missedShots }}</b> {{ t('activity.missed') }}</span>
           </template>
         </div>
       </div>

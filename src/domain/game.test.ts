@@ -139,6 +139,6 @@ describe('game domain rules', () => {
     saveGameState(game, storage)
 
     expect(gameStorageKey).toBe('watchtower-game-v1')
-    expect(loadGameState(storage)).toEqual(game)
+    expect(loadGameState('nl', storage)).toEqual(game)
   })
 })

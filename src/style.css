@@ -90,7 +90,9 @@ button:disabled { cursor: not-allowed; }
 .theme-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
 .offline-indicator { display: flex; align-items: center; gap: 8px; color: #696962; font-size: 12px; }
 .offline-indicator > span { width: 7px; height: 7px; border-radius: 50%; background: #56a574; }
+.language-picker select { min-height: 31px; padding: 4px 24px 4px 8px; border: 1px solid #eae8e2; border-radius: 6px; color: #696962; background: white; font-size: 11px; }
 .avatar { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 50%; color: #78503d; background: #f4e3d8; font-size: 12px; font-weight: 700; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
 
 .page-heading {
   display: flex;
@@ -201,14 +203,14 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .scoring-player-lists { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .scoring-player-list { min-width: 0; }
 .scoring-player-list h3 { margin: 0 0 7px; color: #6f6d67; font-size: 14px; font-weight: 700; }
-.scoring-player-list[aria-label="Kies scorer"] .picker-player { border-color: #cfe4d2; background: #f0f8f1; }
-.scoring-player-list[aria-label="Kies scorer"] .picker-player.selected { border-color: #478c59; color: white; background: #478c59; }
-.scoring-player-list[aria-label="Kies scorer"] .picker-player .jersey-number { color: #397f4c; background: #dcefe0; }
-.scoring-player-list[aria-label="Kies scorer"] .picker-player.selected .jersey-number { color: #397f4c; background: white; }
-.scoring-player-list[aria-label="Kies assistgever"] .picker-player { border-color: #ddd4ed; background: #f6f2fb; }
-.scoring-player-list[aria-label="Kies assistgever"] .picker-player.selected { border-color: #8062ad; color: white; background: #8062ad; }
-.scoring-player-list[aria-label="Kies assistgever"] .picker-player .jersey-number { color: #705394; background: #e8def5; }
-.scoring-player-list[aria-label="Kies assistgever"] .picker-player.selected .jersey-number { color: #705394; background: white; }
+.scorer-player-list .picker-player { border-color: #cfe4d2; background: #f0f8f1; }
+.scorer-player-list .picker-player.selected { border-color: #478c59; color: white; background: #478c59; }
+.scorer-player-list .picker-player .jersey-number { color: #397f4c; background: #dcefe0; }
+.scorer-player-list .picker-player.selected .jersey-number { color: #397f4c; background: white; }
+.assist-player-list .picker-player { border-color: #ddd4ed; background: #f6f2fb; }
+.assist-player-list .picker-player.selected { border-color: #8062ad; color: white; background: #8062ad; }
+.assist-player-list .picker-player .jersey-number { color: #705394; background: #e8def5; }
+.assist-player-list .picker-player.selected .jersey-number { color: #705394; background: white; }
 .missed-shot-player-list .picker-player { border-color: #e1c2bf; background: #fcf1f0; }
 .missed-shot-player-list .picker-player:hover { border-color: #c96a63; }
 .missed-shot-player-list .picker-player.selected { border-color: #b85b55; color: white; background: #c96a63; }
@@ -229,13 +231,13 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .picker-empty-slot { min-height: 42px; }
 .picker-player.selected { border-color: #f0c4ae; background: #fff8f4; }
 .picker-player:disabled { cursor: not-allowed; opacity: .48; }
-.scoring-player-list[aria-label="Kies assistgever"] .no-assist-button,
-.scoring-player-list[aria-label="Kies assistgever"] .no-assist-button.selected {
+.assist-player-list .no-assist-button,
+.assist-player-list .no-assist-button.selected {
   border-color: #deddd9;
   color: #66645e;
   background: #f1f0ed;
 }
-.scoring-player-list[aria-label="Kies assistgever"] .no-assist-button .jersey-number { color: #66645e; background: white; }
+.assist-player-list .no-assist-button .jersey-number { color: #66645e; background: white; }
 .scoring-picker-footer { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; margin-top: 12px; }
 .scoring-picker-footer .picker-cancel { margin: 0; }
 .picker-confirm { min-height: 44px; border: 0; border-radius: 7px; color: white; background: var(--orange); font-size: 12px; font-weight: 700; }
@@ -355,6 +357,8 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
   .game-live .topbar-right { gap: 0; }
   .game-live .theme-toggle { width: 29px; height: 29px; flex-basis: 29px; }
   .game-live .offline-indicator { gap: 6px; font-size: 9px; }
+  .game-live .language-picker { margin-left: 8px; }
+  .game-live .language-picker select { min-height: 28px; padding: 3px 20px 3px 6px; font-size: 10px; }
   .game-live .avatar { display: none; }
   .game-live .page-heading { align-items: center; gap: 8px; padding: 9px 0; }
   .game-live .page-heading .eyebrow,

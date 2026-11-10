@@ -1,3 +1,5 @@
+import type { AppLocale } from '../i18n/types'
+
 export type StatType =
   | 'score'
   | 'missed_shot'
@@ -60,15 +62,20 @@ const statTypes: StatType[] = [
   'steal',
 ]
 
-export function createInitialGameState(): GameState {
+export function createInitialGameState(locale: AppLocale = 'nl'): GameState {
+  const names = {
+    nl: { home: 'Thuis', away: 'Uit', player: 'Speler' },
+    en: { home: 'Home', away: 'Away', player: 'Player' },
+    cs: { home: 'Domácí', away: 'Hosté', player: 'Hráč' },
+  }[locale]
   const teams: Team[] = [
-    { id: 'home', name: 'Thuis', color: '#f26a36' },
-    { id: 'away', name: 'Uit', color: '#5d72d9' },
+    { id: 'home', name: names.home, color: '#f26a36' },
+    { id: 'away', name: names.away, color: '#5d72d9' },
   ]
   const players = teams.flatMap((team) =>
     Array.from({ length: 5 }, (_, index): Player => ({
       id: `${team.id}-${index + 1}`,
-      name: `Speler ${index + 1}`,
+      name: `${names.player} ${index + 1}`,
       teamId: team.id,
       jerseyNumber: String(index + 1),
       isOnCourt: true,
@@ -96,7 +103,7 @@ function isUnusedLegacyDemoRoster(players: unknown[], actions: unknown[]) {
     })
 }
 
-export function parseGameState(value: unknown): GameState {
+export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameState {
   if (!isRecord(value)
     || !Array.isArray(value.teams)
     || !Array.isArray(value.players)
@@ -121,7 +128,7 @@ export function parseGameState(value: unknown): GameState {
   const rawPlayers = value.players
   const rawActions = value.actions
   if (isUnusedLegacyDemoRoster(rawPlayers, rawActions)) {
-    return { ...createInitialGameState(), teams, gameStarted: value.gameStarted }
+    return { ...createInitialGameState(locale), teams, gameStarted: value.gameStarted }
   }
 
   const courtCounts = new Map<string, number>()
@@ -212,13 +219,13 @@ export function getTeamStats(game: GameState): TeamStats[] {
   })
 }
 
-export function getRecentActions(game: GameState, limit = 8): RecentAction[] {
+export function getRecentActions(game: GameState, limit = 8, unknownPlayerName = '—'): RecentAction[] {
   const assistsByGroup = new Map<string, string>()
   for (const action of game.actions) {
     if (action.type === 'assist' && action.groupId) {
       assistsByGroup.set(
         action.groupId,
-        game.players.find((player) => player.id === action.playerId)?.name ?? 'Onbekende speler',
+        game.players.find((player) => player.id === action.playerId)?.name ?? unknownPlayerName,
       )
     }
   }
@@ -237,21 +244,8 @@ export function getRecentActions(game: GameState, limit = 8): RecentAction[] {
     }))
 }
 
-export function getPlayerName(game: GameState, playerId: string) {
-  return game.players.find((player) => player.id === playerId)?.name ?? 'Onbekende speler'
-}
-
-export function getActionLabel(action: Pick<GameAction, 'type' | 'value'>) {
-  if (action.type === 'score') return `+${action.value} punt${action.value > 1 ? 'en' : ''}`
-  if (action.type === 'missed_shot') return `Gemist (${action.value} punt${action.value > 1 ? 'en' : ''})`
-  if (action.type === 'offensive_rebound') return 'Aanvallende rebound'
-  if (action.type === 'defensive_rebound') return 'Verdedigende rebound'
-  if (action.type === 'rebound') return 'Rebound'
-  if (action.type === 'assist') return 'Assist'
-  if (action.type === 'turnover') return 'Turnover'
-  if (action.type === 'foul') return 'Fout'
-  if (action.type === 'block') return 'Block'
-  return 'Steal'
+export function getPlayerName(game: GameState, playerId: string, unknownPlayerName = '—') {
+  return game.players.find((player) => player.id === playerId)?.name ?? unknownPlayerName
 }
 
 export function undoLastAction(actions: GameAction[]) {
