@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import ActivityPanel from './components/ActivityPanel.vue'
 import GameControls from './components/GameControls.vue'
 import LineupDialog from './components/LineupDialog.vue'
@@ -7,6 +7,10 @@ import PlayerPickerDialog from './components/PlayerPickerDialog.vue'
 import Scoreboard from './components/Scoreboard.vue'
 import type { GameAction } from './domain/game'
 import { useGameSession } from './composables/useGameSession'
+import { appLocales, isAppLocale, localeLabels, saveLocale, useLocale } from './i18n/useLocale'
+
+const { t, locale, displayTeamName } = useLocale()
+const localeSaveError = ref(false)
 
 type Theme = 'light' | 'dark'
 
@@ -82,17 +86,38 @@ function updateTeamName(teamId: string, name: string) {
 function handleEditAction(action: GameAction) {
   editAction(action)
 }
+
+function changeLocale(event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  if (!isAppLocale(value)) return
+
+  locale.value = value
+  localeSaveError.value = false
+  try {
+    saveLocale(value)
+  } catch (error) {
+    console.error('Failed to save language preference.', error)
+    localeSaveError.value = true
+  }
+}
+
+watch(locale, (value) => {
+  const activeLocale = isAppLocale(value) ? value : 'nl'
+  document.documentElement.lang = activeLocale
+  document.title = t('app.title')
+  document.querySelector('meta[name="description"]')?.setAttribute('content', t('app.metaDescription'))
+}, { immediate: true })
 </script>
 
 <template>
   <main class="app-shell" :class="{ 'game-live': game.gameStarted }">
     <header class="topbar">
-      <a class="brand" href="#" aria-label="Watchtower startpagina">
+      <a class="brand" href="#" :aria-label="t('app.brandHome')">
         <span class="brand-mark">W</span>
         <span>watchtower<span class="brand-dot">.</span></span>
       </a>
       <div class="topbar-right">
-        <span class="offline-indicator"><span></span> Lokaal opgeslagen</span>
+        <span class="offline-indicator"><span></span> {{ t('app.savedLocally') }}</span>
         <button
           class="theme-toggle"
           type="button"
@@ -109,20 +134,27 @@ function handleEditAction(action: GameAction) {
             <path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z" />
           </svg>
         </button>
-        <span class="avatar" aria-label="Jouw profiel">J</span>
+        <label class="language-picker">
+          <span class="visually-hidden">{{ t('app.language') }}</span>
+          <select :value="locale" :aria-label="t('app.language')" @change="changeLocale">
+            <option v-for="language in appLocales" :key="language" :value="language">{{ localeLabels[language] }}</option>
+          </select>
+        </label>
+        <span class="avatar" :aria-label="t('app.profile')">J</span>
       </div>
     </header>
 
     <div v-if="storageError" class="notice" role="alert">{{ storageError }}</div>
+    <div v-if="localeSaveError" class="notice" role="alert">{{ t('errors.saveLanguage') }}</div>
 
     <section class="page-heading">
       <div>
-        <p class="eyebrow">WEDSTRIJDEN <span>/</span> NIEUWE WEDSTRIJD</p>
-        <h1>Wedstrijd loggen</h1>
-        <p class="subtitle">Houd live de statistieken bij. Je invoer wordt automatisch bewaard.</p>
+        <p class="eyebrow">{{ t('app.breadcrumb') }} <span>/</span> {{ t('app.newGame') }}</p>
+        <h1>{{ t('app.heading') }}</h1>
+        <p class="subtitle">{{ t('app.subtitle') }}</p>
       </div>
       <button class="text-button" :disabled="game.actions.length === 0" @click="undoLastAction">
-        <span aria-hidden="true">↶</span> Laatste actie ongedaan maken
+        <span aria-hidden="true">↶</span> {{ t('app.undo') }}
       </button>
     </section>
 
@@ -173,7 +205,7 @@ function handleEditAction(action: GameAction) {
       v-if="pendingAction"
       v-model:assist-player-id="pendingAssistId"
       :action="pendingAction"
-      :team-name="selectedTeam.name"
+      :team-name="displayTeamName(selectedTeam)"
       :players="pickerPlayers"
       :scorer-id="pendingScorerId"
       :editing="editingActionId !== null"
@@ -184,7 +216,7 @@ function handleEditAction(action: GameAction) {
     />
     <LineupDialog
       v-if="lineupEditorOpen"
-      :team-name="selectedTeam.name"
+      :team-name="displayTeamName(selectedTeam)"
       :players="teamPlayers"
       :selected-player-ids="draftCourtPlayerIds"
       @cancel="cancelLineupEdit"
@@ -192,6 +224,6 @@ function handleEditAction(action: GameAction) {
       @toggle="toggleDraftCourtPlayer"
     />
 
-    <footer><span class="footer-ball">◉</span> Made for the love of the game <span>·</span> Watchtower</footer>
+    <footer><span class="footer-ball">◉</span> {{ t('app.footer') }} <span>·</span> Watchtower</footer>
   </main>
 </template>

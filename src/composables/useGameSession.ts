@@ -15,11 +15,14 @@ import {
   type StatType,
 } from '../domain/game'
 import { loadGameState, saveGameState } from '../services/gameStorage'
+import { isAppLocale, useLocale } from '../i18n/useLocale'
 
 type PendingAction = { type: StatType; value: number }
 
 export function useGameSession() {
-  const game = reactive<GameState>(createInitialGameState())
+  const { t, locale, displayPlayerName } = useLocale()
+  const currentLocale = computed(() => isAppLocale(locale.value) ? locale.value : 'nl')
+  const game = reactive<GameState>(createInitialGameState(currentLocale.value))
   const selectedTeamId = ref(game.teams[0].id)
   const selectedPlayerId = ref('')
   const pendingAction = ref<PendingAction | null>(null)
@@ -30,10 +33,10 @@ export function useGameSession() {
   const draftCourtPlayerIds = ref<string[]>([])
   const newPlayerName = ref('')
   const newPlayerNumber = ref('')
-  const playerFormError = ref('')
-  const lineupError = ref('')
+  const playerFormErrorKey = ref('')
+  const lineupErrorKey = ref('')
   const editingPlayerId = ref('')
-  const storageError = ref('')
+  const storageErrorKey = ref('')
 
   const selectedTeam = computed(() =>
     game.teams.find((team) => team.id === selectedTeamId.value) ?? game.teams[0],
@@ -44,10 +47,13 @@ export function useGameSession() {
   const canStart = computed(() => isReadyToStart(game))
   const scores = computed(() => getScore(game))
   const teamStats = computed(() => getTeamStats(game))
-  const recentActions = computed(() => getRecentActions(game))
+  const recentActions = computed(() => getRecentActions(game, 8, t('app.unknownPlayer')))
+  const playerFormError = computed(() => playerFormErrorKey.value ? t(playerFormErrorKey.value) : '')
+  const lineupError = computed(() => lineupErrorKey.value ? t(lineupErrorKey.value) : '')
+  const storageError = computed(() => storageErrorKey.value ? t(storageErrorKey.value) : '')
 
   function playerName(playerId: string) {
-    return getPlayerName(game, playerId)
+    return displayPlayerName(getPlayerName(game, playerId, t('app.unknownPlayer')))
   }
 
   function cancelPendingAction() {
@@ -152,7 +158,7 @@ export function useGameSession() {
     const name = newPlayerName.value.trim()
     const number = newPlayerNumber.value.trim()
     if (!name || !/^\d{1,2}$/.test(number) || Number(number) > 99) {
-      playerFormError.value = 'Vul een naam en een rugnummer van 0 t/m 99 in.'
+      playerFormErrorKey.value = 'errors.invalidPlayer'
       return
     }
 
@@ -162,7 +168,7 @@ export function useGameSession() {
         && Number(player.jerseyNumber) === Number(number),
     )
     if (duplicateNumber) {
-      playerFormError.value = 'Dit rugnummer is al in gebruik bij dit team.'
+      playerFormErrorKey.value = 'errors.duplicateNumber'
       return
     }
 
@@ -190,14 +196,14 @@ export function useGameSession() {
     editingPlayerId.value = player.id
     newPlayerName.value = player.name
     newPlayerNumber.value = player.jerseyNumber
-    playerFormError.value = ''
+    playerFormErrorKey.value = ''
   }
 
   function cancelPlayerEdit() {
     editingPlayerId.value = ''
     newPlayerName.value = ''
     newPlayerNumber.value = ''
-    playerFormError.value = ''
+    playerFormErrorKey.value = ''
   }
 
   function removePlayer(playerId: string) {
@@ -210,11 +216,11 @@ export function useGameSession() {
   function togglePregamePlayer(player: Player) {
     const activeCount = teamPlayers.value.filter((item) => item.isOnCourt).length
     if (!player.isOnCourt && activeCount >= 5) {
-      lineupError.value = 'Er kunnen maximaal vijf spelers tegelijk in het veld staan.'
+      lineupErrorKey.value = 'errors.maxOnCourt'
       return
     }
     player.isOnCourt = !player.isOnCourt
-    lineupError.value = ''
+    lineupErrorKey.value = ''
   }
 
   function playerHasActions(playerId: string) {
@@ -252,14 +258,13 @@ export function useGameSession() {
 
   onMounted(() => {
     try {
-      const savedState = loadGameState()
+      const savedState = loadGameState(currentLocale.value)
       if (!savedState) return
       Object.assign(game, savedState)
       selectedTeamId.value = game.teams[0].id
     } catch (error) {
-      storageError.value = error instanceof Error
-        ? `Wedstrijdgegevens laden is niet gelukt: ${error.message}`
-        : 'Wedstrijdgegevens laden is niet gelukt.'
+      console.error('Failed to load saved game state.', error)
+      storageErrorKey.value = 'errors.loadGame'
     }
   })
 
@@ -268,11 +273,10 @@ export function useGameSession() {
     (value) => {
       try {
         saveGameState(value)
-        storageError.value = ''
+        storageErrorKey.value = ''
       } catch (error) {
-        storageError.value = error instanceof Error
-          ? `Opslaan op dit apparaat is niet gelukt: ${error.message}`
-          : 'Opslaan op dit apparaat is niet gelukt.'
+        console.error('Failed to save game state.', error)
+        storageErrorKey.value = 'errors.saveGame'
       }
     },
     { deep: true },

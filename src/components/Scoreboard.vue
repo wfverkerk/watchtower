@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useLocale } from '../i18n/useLocale'
 import type { Team } from '../domain/game'
+
+const { t, displayTeamName } = useLocale()
 
 defineProps<{
   teams: Team[]
@@ -15,20 +18,20 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <section class="scoreboard panel" aria-label="Wedstrijdscore">
+  <section class="scoreboard panel" :aria-label="t('scoreboard.label')">
     <div class="team-score home-score">
-      <span class="team-caption"><span class="team-dot orange"></span> THUIS</span>
+      <span class="team-caption"><span class="team-dot orange"></span> {{ t('scoreboard.home') }}</span>
       <input
         class="team-name"
-        :value="teams[0].name"
-        aria-label="Naam thuisteam"
+        :value="displayTeamName(teams[0])"
+        :aria-label="t('scoreboard.homeName')"
         @input="emit('team-name-change', teams[0].id, ($event.target as HTMLInputElement).value)"
       >
       <strong>{{ scores[0]?.points ?? 0 }}</strong>
     </div>
     <div class="score-middle">
       <span class="live-pill" :class="{ active: gameStarted }">
-        <span></span>{{ gameStarted ? 'LIVE' : 'KLAAR OM TE STARTEN' }}
+        <span></span>{{ gameStarted ? t('scoreboard.live') : t('scoreboard.ready') }}
       </span>
       <div class="versus">VS</div>
       <button
@@ -37,16 +40,16 @@ const emit = defineEmits<{
         :disabled="!gameStarted && !canStart"
         @click="emit('toggle-game')"
       >
-        {{ gameStarted ? 'Pauze' : 'Start wedstrijd' }}
+        {{ gameStarted ? t('scoreboard.pause') : t('scoreboard.start') }}
         <span aria-hidden="true">{{ gameStarted ? 'Ⅱ' : '▶' }}</span>
       </button>
     </div>
     <div class="team-score away-score">
-      <span class="team-caption">UIT <span class="team-dot blue"></span></span>
+      <span class="team-caption">{{ t('scoreboard.away') }} <span class="team-dot blue"></span></span>
       <input
         class="team-name"
-        :value="teams[1].name"
-        aria-label="Naam uitteam"
+        :value="displayTeamName(teams[1])"
+        :aria-label="t('scoreboard.awayName')"
         @input="emit('team-name-change', teams[1].id, ($event.target as HTMLInputElement).value)"
       >
       <strong>{{ scores[1]?.points ?? 0 }}</strong>
