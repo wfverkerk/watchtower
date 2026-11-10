@@ -47,6 +47,7 @@ describe('game domain rules', () => {
       scorerId: 'home-1',
       value: 3,
       assistPlayerId: 'home-2',
+      shotLocation: { area: 'opponent', x: 25, y: 70 },
       createdAt: 50,
       createId: (() => {
         let id = 0
@@ -55,7 +56,13 @@ describe('game domain rules', () => {
     })
 
     expect(actions).toHaveLength(2)
-    expect(actions[0]).toMatchObject({ type: 'score', playerId: 'home-1', value: 3, groupId: 'new-1' })
+    expect(actions[0]).toMatchObject({
+      type: 'score',
+      playerId: 'home-1',
+      value: 3,
+      groupId: 'new-1',
+      shotLocation: { area: 'opponent', x: 25, y: 70 },
+    })
     expect(actions[1]).toMatchObject({ type: 'assist', playerId: 'home-2', groupId: 'new-1' })
 
     const game = { ...createInitialGameState(), actions }
@@ -74,11 +81,12 @@ describe('game domain rules', () => {
       scorerId: 'home-3',
       value: 3,
       assistPlayerId: 'home-4',
+      shotLocation: { area: 'own' },
       createdAt: 60,
       createId: () => 'unused',
     })
     expect(updated).toMatchObject([
-      { id: 'score', playerId: 'home-3', value: 3, groupId: 'play' },
+      { id: 'score', playerId: 'home-3', value: 3, groupId: 'play', shotLocation: { area: 'own' } },
       { id: 'assist', playerId: 'home-4', groupId: 'play' },
     ])
 
@@ -88,11 +96,17 @@ describe('game domain rules', () => {
       scorerId: 'home-3',
       value: 3,
       assistPlayerId: null,
+      shotLocation: { area: 'opponent', x: 51, y: 42 },
       createdAt: 70,
       createId: () => 'unused',
     })
     expect(withoutAssist).toEqual([
-      expect.objectContaining({ id: 'score', playerId: 'home-3', value: 3 }),
+      expect.objectContaining({
+        id: 'score',
+        playerId: 'home-3',
+        value: 3,
+        shotLocation: { area: 'opponent', x: 51, y: 42 },
+      }),
     ])
     expect(withoutAssist[0]).not.toHaveProperty('groupId')
   })
@@ -126,6 +140,23 @@ describe('game domain rules', () => {
     expect(() => parseGameState({ ...oldState, teams: [] })).toThrow('precies twee')
   })
 
+  it('preserves shot locations and rejects invalid court coordinates when loading', () => {
+    const game = createInitialGameState()
+    game.actions.push(makeAction({
+      type: 'score',
+      teamId: 'home',
+      playerId: 'home-1',
+      value: 2,
+      shotLocation: { area: 'opponent', x: 36, y: 72 },
+    }))
+
+    expect(parseGameState(game).actions[0].shotLocation).toEqual({ area: 'opponent', x: 36, y: 72 })
+    expect(() => parseGameState({
+      ...game,
+      actions: [{ ...game.actions[0], shotLocation: { area: 'opponent', x: 101, y: 50 } }],
+    })).toThrow('Opgeslagen wedstrijdacties zijn ongeldig.')
+  })
+
   it('loads and saves the existing local-storage key without dropping game data', () => {
     const values = new Map<string, string>()
     const storage = {
@@ -134,7 +165,13 @@ describe('game domain rules', () => {
     }
     const game = createInitialGameState()
     game.gameStarted = true
-    game.actions.push(makeAction({ type: 'score', teamId: 'home', playerId: 'home-1', value: 2 }))
+    game.actions.push(makeAction({
+      type: 'score',
+      teamId: 'home',
+      playerId: 'home-1',
+      value: 2,
+      shotLocation: { area: 'own' },
+    }))
 
     saveGameState(game, storage)
 

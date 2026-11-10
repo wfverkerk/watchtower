@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { getActionTranslation } from '../i18n/actionLabel'
 import { isAppLocale, useLocale } from '../i18n/useLocale'
-import type { Player, StatType } from '../domain/game'
+import type { Player, ShotLocation, StatType } from '../domain/game'
+import ShotLocationPicker from './ShotLocationPicker.vue'
 
 type PendingAction = { type: StatType; value: number }
 
@@ -13,6 +14,7 @@ defineProps<{
   players: Player[]
   scorerId: string
   assistPlayerId: string | 'none' | null
+  shotLocation: ShotLocation | null
   editing: boolean
 }>()
 
@@ -21,7 +23,8 @@ const emit = defineEmits<{
   'select-player': [playerId: string]
   'select-scorer': [playerId: string]
   'update:assistPlayerId': [playerId: string | 'none' | null]
-  'finish-scoring': []
+  'update:shotLocation': [location: ShotLocation]
+  'finish-shot': []
 }>()
 
 function actionLabel(action: PendingAction) {
@@ -69,10 +72,9 @@ function actionLabel(action: PendingAction) {
               :aria-pressed="scorerId === player.id"
               @click="emit('select-scorer', player.id)"
             >
-              <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
               <span class="jersey-number">{{ player.jerseyNumber || '—' }}</span>
+              <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
             </button>
-            <span class="picker-empty-slot" aria-hidden="true"></span>
           </div>
         </section>
         <section
@@ -83,47 +85,40 @@ function actionLabel(action: PendingAction) {
           <h3>{{ t('picker.assister') }}</h3>
           <div class="player-picker-grid">
             <button
-              class="player-choice picker-player no-assist-button"
-              :class="{ selected: assistPlayerId === 'none' }"
-              :aria-pressed="assistPlayerId === 'none'"
-              @click="emit('update:assistPlayerId', 'none')"
-            >
-              <span class="player-choice-name">{{ t('picker.noAssist') }}</span>
-              <span class="jersey-number">—</span>
-            </button>
-            <button
               v-for="player in players"
               :key="player.id"
               class="player-choice picker-player"
-              :class="{ selected: assistPlayerId === player.id }"
-              :aria-pressed="assistPlayerId === player.id"
-              :disabled="!scorerId || player.id === scorerId"
-              @click="emit('update:assistPlayerId', player.id)"
+              :class="{
+                selected: player.id === scorerId ? assistPlayerId === 'none' : assistPlayerId === player.id,
+                'no-assist-button': player.id === scorerId,
+              }"
+              :aria-pressed="player.id === scorerId ? assistPlayerId === 'none' : assistPlayerId === player.id"
+              :disabled="!scorerId"
+              @click="emit('update:assistPlayerId', player.id === scorerId ? 'none' : player.id)"
             >
-              <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
               <span class="jersey-number">{{ player.jerseyNumber || '—' }}</span>
+              <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
             </button>
           </div>
         </section>
       </div>
-      <section v-else-if="action.type === 'missed_shot'" class="scoring-player-list missed-shot-player-list">
+      <section v-if="action.type === 'missed_shot'" class="scoring-player-list missed-shot-player-list">
         <h3>{{ t('picker.missedBy') }}</h3>
         <div class="player-picker-grid">
           <button
             v-for="player in players"
             :key="player.id"
             class="player-choice picker-player"
-            :class="{ selected: editing && scorerId === player.id }"
-            :aria-pressed="editing ? scorerId === player.id : undefined"
+            :class="{ selected: action.value > 1 ? scorerId === player.id : editing && scorerId === player.id }"
+            :aria-pressed="action.value > 1 ? scorerId === player.id : editing ? scorerId === player.id : undefined"
             @click="emit('select-player', player.id)"
           >
-            <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
             <span class="jersey-number">{{ player.jerseyNumber || '—' }}</span>
+            <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
           </button>
-          <span class="picker-empty-slot" aria-hidden="true"></span>
         </div>
       </section>
-      <section v-else class="scoring-player-list standard-player-list" :aria-label="t('picker.choosePlayerLabel')">
+      <section v-if="action.type !== 'score' && action.type !== 'missed_shot'" class="scoring-player-list standard-player-list" :aria-label="t('picker.choosePlayerLabel')">
         <h3>{{ editing ? t('picker.changePlayer') : t('picker.choosePlayerLabel') }}</h3>
         <div class="player-picker-grid">
           <button
@@ -134,17 +129,25 @@ function actionLabel(action: PendingAction) {
             :aria-pressed="editing ? scorerId === player.id : undefined"
             @click="emit('select-player', player.id)"
           >
-            <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
             <span class="jersey-number">{{ player.jerseyNumber || '—' }}</span>
+            <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
           </button>
-          <span class="picker-empty-slot" aria-hidden="true"></span>
         </div>
       </section>
+      <ShotLocationPicker
+        v-if="(action.type === 'score' || action.type === 'missed_shot') && action.value > 1"
+        :location="shotLocation"
+        @update:location="emit('update:shotLocation', $event)"
+      />
 
-      <div v-if="action.type === 'score' && action.value > 1" class="scoring-picker-footer">
+      <div v-if="(action.type === 'score' || action.type === 'missed_shot') && action.value > 1" class="scoring-picker-footer">
         <button class="picker-cancel" @click="emit('cancel')">{{ t('picker.cancel') }}</button>
-        <button class="picker-confirm" :disabled="!scorerId || assistPlayerId === null" @click="emit('finish-scoring')">
-          {{ t('picker.confirmScore') }}
+        <button
+          class="picker-confirm"
+          :disabled="!scorerId || !shotLocation || (action.type === 'score' && assistPlayerId === null)"
+          @click="emit('finish-shot')"
+        >
+          {{ t(action.type === 'score' ? 'picker.confirmScore' : 'picker.confirmShot') }}
         </button>
       </div>
       <button v-else class="picker-cancel" @click="emit('cancel')">{{ t('picker.cancel') }}</button>

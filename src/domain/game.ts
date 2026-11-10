@@ -20,6 +20,9 @@ export type Player = {
   jerseyNumber: string
   isOnCourt: boolean
 }
+export type ShotLocation =
+  | { area: 'opponent'; x: number; y: number }
+  | { area: 'own' }
 export type GameAction = {
   id: string
   playerId: string
@@ -28,6 +31,7 @@ export type GameAction = {
   value: number
   createdAt: number
   groupId?: string
+  shotLocation?: ShotLocation
 }
 export type GameState = {
   teams: Team[]
@@ -91,6 +95,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isStatType(value: unknown): value is StatType {
   return typeof value === 'string' && statTypes.includes(value as StatType)
+}
+
+function isShotLocation(value: unknown): value is ShotLocation {
+  if (!isRecord(value)) return false
+  if (value.area === 'own') return true
+  return value.area === 'opponent'
+    && typeof value.x === 'number'
+    && Number.isFinite(value.x)
+    && value.x >= 0
+    && value.x <= 100
+    && typeof value.y === 'number'
+    && Number.isFinite(value.y)
+    && value.y >= 0
+    && value.y <= 100
 }
 
 function isUnusedLegacyDemoRoster(players: unknown[], actions: unknown[]) {
@@ -166,7 +184,8 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       || !Number.isFinite(action.value)
       || typeof action.createdAt !== 'number'
       || !Number.isFinite(action.createdAt)
-      || (action.groupId !== undefined && typeof action.groupId !== 'string')) {
+      || (action.groupId !== undefined && typeof action.groupId !== 'string')
+      || (action.shotLocation !== undefined && !isShotLocation(action.shotLocation))) {
       throw new Error('Opgeslagen wedstrijdacties zijn ongeldig.')
     }
 
@@ -178,6 +197,7 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       value: action.value,
       createdAt: action.createdAt,
       ...(typeof action.groupId === 'string' ? { groupId: action.groupId } : {}),
+      ...(isShotLocation(action.shotLocation) ? { shotLocation: action.shotLocation } : {}),
     }
   })
 
@@ -267,6 +287,7 @@ export function updateScoringPlay(
     scorerId: string
     value: number
     assistPlayerId: string | null
+    shotLocation: ShotLocation
     createdAt: number
     createId: () => string
   },
@@ -287,7 +308,13 @@ export function updateScoringPlay(
       if (action.id !== existingScore.id) return action
       const score = { ...action }
       delete score.groupId
-      return { ...score, playerId: input.scorerId, value: input.value, ...(groupId ? { groupId } : {}) }
+      return {
+        ...score,
+        playerId: input.scorerId,
+        value: input.value,
+        shotLocation: input.shotLocation,
+        ...(groupId ? { groupId } : {}),
+      }
     })
   } else {
     updated.push({
@@ -297,6 +324,7 @@ export function updateScoringPlay(
       type: 'score',
       value: input.value,
       createdAt: input.createdAt,
+      shotLocation: input.shotLocation,
       ...(groupId ? { groupId } : {}),
     })
   }
