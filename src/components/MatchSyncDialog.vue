@@ -8,6 +8,7 @@ const props = defineProps<{
   matchLink: MatchLink | null
   status: 'local' | 'offline' | 'syncing' | 'synced' | 'error'
   error: string
+  defaultDisplayName?: string
 }>()
 
 const emit = defineEmits<{
@@ -17,7 +18,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useLocale()
-const displayName = ref(t('sync.defaultName'))
+const displayName = ref(props.defaultDisplayName?.trim() || t('sync.defaultName'))
 const joinCode = ref('')
 
 function createMatch() {

@@ -7,6 +7,12 @@ export const localeLabels: Record<AppLocale, string> = {
   cs: 'Čeština',
 }
 
+export const localeFlags: Record<AppLocale, string> = {
+  nl: '🇳🇱',
+  en: '🇬🇧',
+  cs: '🇨🇿',
+}
+
 export function isAppLocale(value: string): value is AppLocale {
   return appLocales.some((locale) => locale === value)
 }

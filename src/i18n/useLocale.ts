@@ -62,4 +62,4 @@ export function saveLocale(locale: AppLocale) {
   window.localStorage.setItem(localeStorageKey, locale)
 }
 
-export { appLocales, getIntlLocale, isAppLocale, localeLabels, type AppLocale } from './types'
+export { appLocales, getIntlLocale, isAppLocale, localeFlags, localeLabels, type AppLocale } from './types'
