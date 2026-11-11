@@ -68,3 +68,15 @@ De workflow in [deploy-pages.yml](./.github/workflows/deploy-pages.yml) publicee
 3. Kies bij **Settings → Pages → Build and deployment → Source** voor **GitHub Actions**. Controleer daarna de workflow bij **Actions** en open de site op je telefoon.
 
 Browseropslag is per apparaat en per websiteadres gescheiden. Een lokale wedstrijd op je computer verschijnt dus niet automatisch op je telefoon. Deel een wedstrijdcode om de gedeelde sync te testen.
+
+## Testgegevens eenmalig wissen
+
+**Let op:** hiermee verdwijnen alle gedeelde wedstrijden, leden en events definitief, ook die van andere scorers. Oude wedstrijdcodes werken daarna niet meer. Lokale wedstrijden, profielen en wachtende events op andere apparaten blijven bestaan; start daar een nieuwe gedeelde wedstrijd om een oude koppeling te vervangen.
+
+Voer eerst alle migraties hierboven uit. Maak vervolgens een SQL-script met de bestaande team- en stafseed:
+
+```sh
+node scripts/print-test-reset.mjs | pbcopy
+```
+
+Plak de volledige inhoud in de Supabase SQL Editor en voer die als één query uit. De verwijderingen en het opnieuw vullen van de catalogus gebeuren in één transactie; bij een fout wordt deze niet gecommit. Het script draait daarna `ANALYZE` op de betrokken tabellen. De teamcatalogus wordt gevuld met de gegevens uit de migraties, niet opnieuw opgehaald uit FOYS; wedstrijdprogramma's worden door de app apart bij FOYS opgehaald.

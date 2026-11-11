@@ -16,7 +16,6 @@ import { useGameSession } from './composables/useGameSession'
 import { isAppLocale, saveLocale, useLocale } from './i18n/useLocale'
 
 const { t, locale, displayTeamName } = useLocale()
-const localeSaveError = ref(false)
 const matchSyncOpen = ref(false)
 const userProfile = ref<UserProfile | null>(null)
 const userProfileOpen = ref(false)
@@ -164,7 +163,6 @@ function saveUserPreferences(profile: UserProfile) {
     locale.value = profile.locale
     userProfileOpen.value = false
     userProfileError.value = ''
-    localeSaveError.value = false
   } catch (error) {
     console.error('Failed to save user preferences.', error)
     userProfileError.value = t('errors.saveUserProfile')
@@ -173,7 +171,6 @@ function saveUserPreferences(profile: UserProfile) {
 
 function previewProfileLocale(value: UserProfile['locale']) {
   locale.value = value
-  localeSaveError.value = false
 }
 
 function cancelUserProfileEdit() {
@@ -217,8 +214,6 @@ watch(locale, (value) => {
     </header>
 
     <div v-if="storageError" class="notice" role="alert">{{ storageError }}</div>
-    <div v-if="localeSaveError" class="notice" role="alert">{{ t('errors.saveLanguage') }}</div>
-
     <UserProfileDialog
       v-if="userProfileOpen"
       :profile="userProfile"
