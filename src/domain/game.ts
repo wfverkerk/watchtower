@@ -213,49 +213,76 @@ export function canStartGame(game: GameState) {
 }
 
 export function getScore(game: GameState) {
+  const pointsByTeam = new Map(game.teams.map((team) => [team.id, 0]))
+  for (const action of game.actions) {
+    if (action.type === 'score') {
+      const points = pointsByTeam.get(action.teamId)
+      if (points !== undefined) pointsByTeam.set(action.teamId, points + action.value)
+    }
+  }
+
   return game.teams.map((team) => ({
     ...team,
-    points: game.actions
-      .filter((action) => action.teamId === team.id && action.type === 'score')
-      .reduce((total, action) => total + action.value, 0),
+    points: pointsByTeam.get(team.id) ?? 0,
   }))
 }
 
 export function getTeamStats(game: GameState): TeamStats[] {
-  return game.teams.map((team) => {
-    const actions = game.actions.filter((action) => action.teamId === team.id)
-    return {
-      teamId: team.id,
-      offensiveRebounds: actions.filter((action) => action.type === 'offensive_rebound').length,
-      defensiveRebounds: actions.filter((action) => action.type === 'defensive_rebound').length,
-      legacyRebounds: actions.filter((action) => action.type === 'rebound').length,
-      assists: actions.filter((action) => action.type === 'assist').length,
-      turnovers: actions.filter((action) => action.type === 'turnover').length,
-      fouls: actions.filter((action) => action.type === 'foul').length,
-      blocks: actions.filter((action) => action.type === 'block').length,
-      steals: actions.filter((action) => action.type === 'steal').length,
-      missedShots: actions.filter((action) => action.type === 'missed_shot').length,
+  const stats = game.teams.map((team) => ({
+    teamId: team.id,
+    offensiveRebounds: 0,
+    defensiveRebounds: 0,
+    legacyRebounds: 0,
+    assists: 0,
+    turnovers: 0,
+    fouls: 0,
+    blocks: 0,
+    steals: 0,
+    missedShots: 0,
+  }))
+  const statsByTeam = new Map(stats.map((item) => [item.teamId, item]))
+
+  for (const action of game.actions) {
+    const teamStats = statsByTeam.get(action.teamId)
+    if (!teamStats) continue
+
+    switch (action.type) {
+      case 'offensive_rebound': teamStats.offensiveRebounds += 1; break
+      case 'defensive_rebound': teamStats.defensiveRebounds += 1; break
+      case 'rebound': teamStats.legacyRebounds += 1; break
+      case 'assist': teamStats.assists += 1; break
+      case 'turnover': teamStats.turnovers += 1; break
+      case 'foul': teamStats.fouls += 1; break
+      case 'block': teamStats.blocks += 1; break
+      case 'steal': teamStats.steals += 1; break
+      case 'missed_shot': teamStats.missedShots += 1; break
     }
-  })
+  }
+  return stats
 }
 
 export function getRecentActions(game: GameState, limit = 8, unknownPlayerName = '—'): RecentAction[] {
+  const playerNamesById = new Map(game.players.map((player) => [player.id, player.name]))
   const assistsByGroup = new Map<string, string>()
   for (const action of game.actions) {
     if (action.type === 'assist' && action.groupId) {
       assistsByGroup.set(
         action.groupId,
-        game.players.find((player) => player.id === action.playerId)?.name ?? unknownPlayerName,
+        playerNamesById.get(action.playerId) ?? unknownPlayerName,
       )
     }
   }
+
+  const scoredGroups = new Set(
+    game.actions.filter((action) => action.type === 'score' && action.groupId).map((action) => action.groupId),
+  )
 
   return [...game.actions]
     .reverse()
     .filter((action) => !(
       action.type === 'assist'
       && action.groupId
-      && game.actions.some((score) => score.groupId === action.groupId && score.type === 'score')
+      && scoredGroups.has(action.groupId)
     ))
     .slice(0, limit)
     .map((action) => ({

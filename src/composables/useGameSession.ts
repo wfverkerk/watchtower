@@ -19,9 +19,10 @@ import {
 import { loadGameState, saveGameState } from '../services/gameStorage'
 import {
   appendMatchEvents,
+  discardMatchEventsExcept,
   loadMatchEvents,
   loadMatchLink,
-  markMatchEventsSynced,
+  removeMatchEvents,
   saveMatchLink,
   type MatchEvent,
   type MatchEventType,
@@ -124,8 +125,15 @@ export function useGameSession() {
         throw new Error('This device is signed in as a different tracker. Rejoin the match to continue syncing.')
       }
 
-      const pendingEvents = loadMatchEvents().filter((event) => event.matchId === link.matchId && !event.synced)
+      const queuedEvents = loadMatchEvents()
+      const completedEvents = queuedEvents.filter((event) =>
+        event.matchId === link.matchId && event.trackerId === link.trackerId && event.synced,
+      )
+      const pendingEvents = queuedEvents.filter((event) =>
+        event.matchId === link.matchId && event.trackerId === link.trackerId && !event.synced,
+      )
       if (pendingEvents.length === 0) {
+        if (completedEvents.length) removeMatchEvents(completedEvents.map((event) => event.id))
         matchSyncStatus.value = 'synced'
         matchSyncError.value = ''
         return
@@ -134,7 +142,10 @@ export function useGameSession() {
       matchSyncStatus.value = 'syncing'
       matchSyncError.value = ''
       await uploadMatchEvents(pendingEvents)
-      markMatchEventsSynced(pendingEvents.map((event) => event.id))
+      removeMatchEvents([
+        ...completedEvents.map((event) => event.id),
+        ...pendingEvents.map((event) => event.id),
+      ])
       matchSyncStatus.value = 'synced'
     } catch (error) {
       console.error('Failed to sync match events.', error)
@@ -162,6 +173,7 @@ export function useGameSession() {
       }
       const created = await createSharedMatchRecord(gameData, displayName)
       saveMatchLink(created.link)
+      discardMatchEventsExcept(created.link.matchId)
       matchLink.value = created.link
       matchSyncError.value = ''
       const initialEvents = game.actions.map((action) => makeMatchEvent(action, 'action_added', created.link))
@@ -191,6 +203,7 @@ export function useGameSession() {
       game.actions = sharedGame.actions
       game.gameStarted = sharedGame.gameStarted
       saveMatchLink(joined.link)
+      discardMatchEventsExcept(joined.link.matchId)
       matchLink.value = joined.link
       selectedTeamId.value = 'home'
       previousActions = JSON.parse(JSON.stringify(game.actions)) as GameAction[]
@@ -500,11 +513,15 @@ export function useGameSession() {
           if (!previousById.has(current.id)) events.push(makeMatchEvent(current, 'action_added', link))
         }
       }
-      previousActions = nextActions
-      if (!events.length) return
+      if (!events.length) {
+        previousActions = nextActions
+        return
+      }
 
       try {
         appendMatchEvents(events)
+        // Advance the baseline only once the events are stored, so a failed write is retried on the next change.
+        previousActions = nextActions
         matchSyncStatus.value = navigator.onLine ? 'syncing' : 'offline'
         scheduleMatchSync()
       } catch (error) {

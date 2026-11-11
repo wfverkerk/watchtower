@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   appendMatchEvents,
+  discardMatchEventsExcept,
+  invalidMatchEventsStorageKey,
   loadMatchEvents,
-  markMatchEventsSynced,
   matchEventsStorageKey,
+  removeMatchEvents,
   type MatchEvent,
 } from './matchEventLog'
 
@@ -39,7 +41,7 @@ function createEvent(overrides: Partial<MatchEvent> = {}): MatchEvent {
 }
 
 describe('shared match event log', () => {
-  it('queues events locally and marks only uploaded event IDs as synced', () => {
+  it('queues events locally and removes only uploaded event IDs after confirmation', () => {
     const storage = createStorage()
     const first = createEvent()
     const second = createEvent({
@@ -49,19 +51,41 @@ describe('shared match event log', () => {
     })
 
     appendMatchEvents([first, second], storage)
-    markMatchEventsSynced(['event-1'], storage)
+    removeMatchEvents(['event-1'], storage)
 
-    expect(loadMatchEvents(storage)).toEqual([
-      { ...first, synced: true },
-      second,
-    ])
+    expect(loadMatchEvents(storage)).toEqual([second])
     expect(storage.getItem(matchEventsStorageKey)).not.toBeNull()
   })
 
-  it('rejects malformed saved event queues rather than silently dropping them', () => {
+  it('preserves malformed events and keeps valid events available for the next operation', () => {
     const storage = createStorage()
-    storage.setItem(matchEventsStorageKey, JSON.stringify([{ id: 'invalid' }]))
+    const valid = createEvent()
+    const corruptQueue = JSON.stringify([valid, { id: 'invalid' }])
+    storage.setItem(matchEventsStorageKey, corruptQueue)
 
-    expect(() => loadMatchEvents(storage)).toThrow('Saved match events have an invalid format.')
+    expect(loadMatchEvents(storage)).toEqual([valid])
+    expect(JSON.parse(JSON.parse(storage.getItem(invalidMatchEventsStorageKey) ?? '{}').raw)).toEqual([{ id: 'invalid' }])
+    expect(loadMatchEvents(storage)).toEqual([valid])
+  })
+
+  it('recovers from invalid JSON without discarding the original queue', () => {
+    const storage = createStorage()
+    storage.setItem(matchEventsStorageKey, '[invalid')
+
+    expect(loadMatchEvents(storage)).toEqual([])
+    expect(JSON.parse(storage.getItem(invalidMatchEventsStorageKey) ?? '{}').raw).toBe('[invalid')
+    expect(loadMatchEvents(storage)).toEqual([])
+  })
+
+  it('discards events that belong to other matches', () => {
+    const storage = createStorage()
+    appendMatchEvents([
+      createEvent({ id: 'old', matchId: 'match-old' }),
+      createEvent({ id: 'current', matchId: 'match-1' }),
+    ], storage)
+
+    discardMatchEventsExcept('match-1', storage)
+
+    expect(loadMatchEvents(storage).map((event) => event.id)).toEqual(['current'])
   })
 })
