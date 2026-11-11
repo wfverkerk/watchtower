@@ -34,7 +34,17 @@ try {
 type Theme = 'light' | 'dark'
 
 const themeStorageKey = 'watchtower-theme'
-const theme = ref<Theme>(localStorage.getItem(themeStorageKey) === 'dark' ? 'dark' : 'light')
+
+function loadTheme(): Theme {
+  try {
+    return window.localStorage.getItem(themeStorageKey) === 'dark' ? 'dark' : 'light'
+  } catch (error) {
+    console.error('Failed to load saved theme.', error)
+    return 'light'
+  }
+}
+
+const theme = ref<Theme>(loadTheme())
 
 function applyTheme() {
   document.documentElement.dataset.theme = theme.value
@@ -49,7 +59,11 @@ applyTheme()
 function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
   applyTheme()
-  localStorage.setItem(themeStorageKey, theme.value)
+  try {
+    window.localStorage.setItem(themeStorageKey, theme.value)
+  } catch (error) {
+    console.error('Failed to save theme preference.', error)
+  }
 }
 
 const {
@@ -200,8 +214,8 @@ watch(locale, (value) => {
         <button
           class="theme-toggle"
           type="button"
-          :aria-label="`Schakel naar ${theme === 'dark' ? 'lichte' : 'donkere'} modus`"
-          :title="`Schakel naar ${theme === 'dark' ? 'lichte' : 'donkere'} modus`"
+          :aria-label="theme === 'dark' ? t('app.switchToLight') : t('app.switchToDark')"
+          :title="theme === 'dark' ? t('app.switchToLight') : t('app.switchToDark')"
           :aria-pressed="theme === 'dark'"
           @click="toggleTheme"
         >

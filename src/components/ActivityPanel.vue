@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { getActionTranslation } from '../i18n/actionLabel'
 import { getIntlLocale, isAppLocale, useLocale } from '../i18n/useLocale'
 import type { GameAction, RecentAction, Team, TeamStats } from '../domain/game'
@@ -19,9 +20,13 @@ const emit = defineEmits<{
   undo: []
 }>()
 
-function actionTime(timestamp: number) {
+const timeFormatter = computed(() => {
   const activeLocale = isAppLocale(locale.value) ? locale.value : 'nl'
-  return new Intl.DateTimeFormat(getIntlLocale(activeLocale), { hour: '2-digit', minute: '2-digit' }).format(timestamp)
+  return new Intl.DateTimeFormat(getIntlLocale(activeLocale), { hour: '2-digit', minute: '2-digit' })
+})
+
+function actionTime(timestamp: number) {
+  return timeFormatter.value.format(timestamp)
 }
 
 function actionLabel(action: GameAction) {
