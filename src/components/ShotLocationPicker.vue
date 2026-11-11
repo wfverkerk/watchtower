@@ -12,15 +12,26 @@ const emit = defineEmits<{
 
 const { t } = useLocale()
 
+// Court outline in SVG viewBox units (see the <rect class="court-outline"> below).
+const COURT = { left: 15, top: 10, width: 270, height: 200 }
+
 function selectOpponentSpot(event: MouseEvent) {
   if (event.detail === 0) {
     emit('update:location', { area: 'opponent', x: 50, y: 50 })
     return
   }
 
-  const bounds = (event.currentTarget as HTMLButtonElement).getBoundingClientRect()
-  const x = Math.round(Math.max(0, Math.min(100, ((event.clientX - bounds.left) / bounds.width) * 100)))
-  const y = Math.round(Math.max(0, Math.min(100, ((event.clientY - bounds.top) / bounds.height) * 100)))
+  const svg = (event.currentTarget as HTMLElement).querySelector('svg')
+  const ctm = svg?.getScreenCTM()
+  if (!svg || !ctm) return
+
+  // Map the click into the SVG's viewBox space, the same space the marker is drawn in.
+  const point = svg.createSVGPoint()
+  point.x = event.clientX
+  point.y = event.clientY
+  const local = point.matrixTransform(ctm.inverse())
+  const x = Math.round(Math.max(0, Math.min(100, ((local.x - COURT.left) / COURT.width) * 100)))
+  const y = Math.round(Math.max(0, Math.min(100, ((local.y - COURT.top) / COURT.height) * 100)))
   emit('update:location', { area: 'opponent', x, y })
 }
 
@@ -77,8 +88,8 @@ function moveOpponentSpot(event: KeyboardEvent) {
           <circle
             v-if="location?.area === 'opponent'"
             class="court-shot-marker"
-            :cx="15 + location.x * 2.7"
-            :cy="10 + location.y * 2"
+            :cx="COURT.left + location.x * COURT.width / 100"
+            :cy="COURT.top + location.y * COURT.height / 100"
             r="6"
           />
         </svg>

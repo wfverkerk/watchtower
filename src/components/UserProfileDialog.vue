@@ -9,12 +9,14 @@ const props = defineProps<{
   profile: UserProfile | null
   teams: ZoebasTeam[]
   error: string
+  theme: 'light' | 'dark'
 }>()
 
 const emit = defineEmits<{
   cancel: []
   save: [profile: UserProfile]
   localeChange: [locale: AppLocale]
+  themeChange: [theme: 'light' | 'dark']
 }>()
 
 const { t, locale } = useLocale()
@@ -56,12 +58,10 @@ function save() {
     >
       <header class="match-dialog-header">
         <div>
-          <p class="eyebrow">{{ t('userProfile.eyebrow') }}</p>
           <h2 id="user-profile-title">{{ t(profile ? 'userProfile.editTitle' : 'userProfile.welcomeTitle') }}</h2>
         </div>
         <button v-if="profile" class="match-dialog-close" type="button" :aria-label="t('userProfile.cancel')" @click="emit('cancel')">×</button>
       </header>
-      <p class="match-dialog-description">{{ t('userProfile.description') }}</p>
       <form class="user-profile-form" @submit.prevent="save">
         <label class="match-sync-field">
           <span>{{ t('userProfile.name') }}</span>
@@ -86,6 +86,28 @@ function save() {
             >
             <span class="profile-language-flag" aria-hidden="true">{{ localeFlags[language] }}</span>
             <span>{{ localeLabels[language] }}</span>
+          </label>
+        </fieldset>
+
+        <fieldset class="profile-language-options">
+          <legend>{{ t('userProfile.appearance') }}</legend>
+          <label v-for="option in (['light', 'dark'] as const)" :key="option" class="profile-language-option">
+            <input
+              class="visually-hidden"
+              type="radio"
+              name="profile-theme"
+              :value="option"
+              :checked="theme === option"
+              @change="emit('themeChange', option)"
+            >
+            <svg v-if="option === 'light'" class="profile-theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+            </svg>
+            <svg v-else class="profile-theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z" />
+            </svg>
+            <span>{{ t(option === 'light' ? 'userProfile.light' : 'userProfile.dark') }}</span>
           </label>
         </fieldset>
 

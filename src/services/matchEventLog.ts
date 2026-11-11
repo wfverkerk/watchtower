@@ -2,6 +2,7 @@ import type { GameAction, ShotLocation } from '../domain/game'
 
 export const matchLinkStorageKey = 'watchtower-shared-match-v1'
 export const matchEventsStorageKey = 'watchtower-match-events-v1'
+export const invalidMatchEventsStorageKey = 'watchtower-match-events-recovery-v1'
 
 export type MatchLink = {
   matchId: string
@@ -72,6 +73,31 @@ function isGameAction(value: unknown): value is GameAction {
     && (value.shotLocation === undefined || isShotLocation(value.shotLocation))
 }
 
+function isMatchEvent(value: unknown): value is MatchEvent {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.matchId === 'string'
+    && typeof value.trackerId === 'string'
+    && typeof value.trackerName === 'string'
+    && typeof value.actionId === 'string'
+    && (value.type === 'action_added' || value.type === 'action_updated' || value.type === 'action_removed')
+    && isGameAction(value.action)
+    && value.actionId === value.action.id
+    && typeof value.occurredAt === 'number'
+    && Number.isFinite(value.occurredAt)
+    && typeof value.synced === 'boolean'
+}
+
+function recoverInvalidMatchEvents(raw: string, validEvents: MatchEvent[], storage: StringStorage): MatchEvent[] {
+  storage.setItem(invalidMatchEventsStorageKey, JSON.stringify({
+    previous: storage.getItem(invalidMatchEventsStorageKey),
+    raw,
+  }))
+  storage.setItem(matchEventsStorageKey, JSON.stringify(validEvents))
+  console.error(`Invalid match events were preserved in ${invalidMatchEventsStorageKey}; valid events will continue.`)
+  return validEvents
+}
+
 export function loadMatchLink(storage: StringStorage = window.localStorage): MatchLink | null {
   const saved = storage.getItem(matchLinkStorageKey)
   if (saved === null) return null
@@ -99,22 +125,20 @@ export function saveMatchLink(link: MatchLink | null, storage: StringStorage = w
 export function loadMatchEvents(storage: StringStorage = window.localStorage): MatchEvent[] {
   const saved = storage.getItem(matchEventsStorageKey)
   if (saved === null) return []
-  const events: unknown = JSON.parse(saved)
-  if (!Array.isArray(events) || !events.every((event) =>
-    isRecord(event)
-      && typeof event.id === 'string'
-      && typeof event.matchId === 'string'
-      && typeof event.trackerId === 'string'
-      && typeof event.trackerName === 'string'
-      && typeof event.actionId === 'string'
-      && (event.type === 'action_added' || event.type === 'action_updated' || event.type === 'action_removed')
-      && isGameAction(event.action)
-      && event.actionId === event.action.id
-      && typeof event.occurredAt === 'number'
-      && typeof event.synced === 'boolean')) {
-    throw new Error('Saved match events have an invalid format.')
+  let decoded: unknown
+  try {
+    decoded = JSON.parse(saved)
+  } catch {
+    return recoverInvalidMatchEvents(saved, [], storage)
   }
-  return events as MatchEvent[]
+  if (!Array.isArray(decoded)) return recoverInvalidMatchEvents(saved, [], storage)
+
+  const events = decoded.filter(isMatchEvent)
+  if (events.length !== decoded.length) {
+    const invalidEvents = decoded.filter((event) => !isMatchEvent(event))
+    return recoverInvalidMatchEvents(JSON.stringify(invalidEvents), events, storage)
+  }
+  return events
 }
 
 export function saveMatchEvents(events: MatchEvent[], storage: StringStorage = window.localStorage) {
@@ -126,10 +150,13 @@ export function appendMatchEvents(events: MatchEvent[], storage: StringStorage =
   saveMatchEvents([...savedEvents, ...events], storage)
 }
 
-export function markMatchEventsSynced(ids: string[], storage: StringStorage = window.localStorage) {
+export function removeMatchEvents(ids: string[], storage: StringStorage = window.localStorage) {
   const idSet = new Set(ids)
-  const events = loadMatchEvents(storage).map((event) =>
-    idSet.has(event.id) ? { ...event, synced: true } : event,
-  )
+  const events = loadMatchEvents(storage).filter((event) => !idSet.has(event.id))
   saveMatchEvents(events, storage)
+}
+
+// Drops queued events that belong to a match other than the active one, so they cannot pile up.
+export function discardMatchEventsExcept(matchId: string, storage: StringStorage = window.localStorage) {
+  saveMatchEvents(loadMatchEvents(storage).filter((event) => event.matchId === matchId), storage)
 }

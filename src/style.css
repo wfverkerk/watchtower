@@ -77,20 +77,6 @@ button:disabled { cursor: not-allowed; }
 .share-match-button { width: 32px; height: 32px; display: grid; flex: 0 0 32px; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 50%; color: var(--ink); background: var(--panel); }
 .share-match-button:hover { background: var(--page); }
 .share-match-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; }
-.theme-toggle {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  flex: 0 0 32px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  color: var(--ink);
-  background: var(--panel);
-}
-.theme-toggle:hover { background: var(--page); }
-.theme-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
 .offline-indicator { display: flex; align-items: center; gap: 8px; color: #696962; font-size: 12px; }
 .offline-indicator > span { width: 7px; height: 7px; border-radius: 50%; background: #56a574; }
 .offline-indicator > .sync-dot-offline { background: #d78a34; }
@@ -296,7 +282,7 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .coach-choice .jersey-number { font-size: 12px; }
 .team-setup-backdrop { position: fixed; z-index: 25; inset: 0; display: grid; place-items: center; padding: 18px; background: #24232366; }
 .team-setup-dialog { width: min(100%, 560px); max-height: calc(100dvh - 36px); display: flex; flex-direction: column; padding: 22px; overflow: hidden; border-radius: 14px; box-shadow: 0 14px 50px #24232330; }
-.team-setup-page { min-height: calc(100dvh - 150px); display: grid; place-items: start center; padding: 28px 0; }
+.team-setup-page { min-height: calc(100dvh - 74px); display: grid; place-items: start center; padding: 28px 0; }
 .team-setup-loading { margin: 28px auto; padding: 24px; color: #77756e; text-align: center; }
 .team-setup-home-card { width: min(100%, 760px); max-height: min(780px, calc(100dvh - 170px)); padding: 30px; }
 .team-setup-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
@@ -355,11 +341,12 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .team-setup-match-badge { color: var(--orange) !important; font-weight: 700; }
 .team-setup-manual-match { min-height: 36px; border: 1px dashed var(--line); border-radius: 7px; color: var(--ink); background: var(--page); font-size: 11px; }
 .team-setup-manual-match[aria-pressed='true'] { border-color: var(--orange); }
-.user-profile-page { min-height: calc(100dvh - 150px); display: grid; place-items: start center; padding: 28px 0; }
+.user-profile-page { min-height: calc(100dvh - 74px); display: grid; place-items: start center; padding: 28px 0; }
 .user-profile-dialog { width: min(100%, 520px); max-height: min(780px, calc(100dvh - 36px)); display: flex; flex-direction: column; gap: 12px; padding: 22px; overflow-y: auto; }
 .user-profile-modal { max-height: min(90vh, 700px); }
 .user-profile-onboarding { width: min(100%, 760px); padding: 30px; }
 .user-profile-form { display: flex; flex-direction: column; gap: 12px; }
+.user-profile-form .match-sync-field small { color: var(--muted); font-style: italic; font-weight: 400; }
 .user-profile-form select { min-height: 39px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); background: var(--panel); font-size: 13px; }
 .profile-language-options { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; border: 0; }
 .profile-language-options legend { margin-bottom: 6px; color: var(--ink); font-size: 11px; font-weight: 600; }
@@ -367,6 +354,7 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .profile-language-option:has(input:checked) { border-color: var(--orange); background: color-mix(in srgb, var(--orange) 8%, var(--panel)); }
 .profile-language-option:has(input:focus-visible) { outline: 3px solid #f26a3655; outline-offset: 2px; }
 .profile-language-flag { font-size: 16px; }
+.profile-theme-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
 .user-profile-footer { display: flex; justify-content: flex-end; gap: 8px; }
 .team-setup-primary, .team-setup-secondary { min-height: 42px; padding: 0 15px; border: 0; border-radius: 7px; font-size: 12px; font-weight: 700; }
 .team-setup-primary { color: white; background: var(--orange); }
@@ -447,7 +435,7 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .stat-values { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px 10px; color: #a09e97; font-size: 7px; letter-spacing: .3px; white-space: nowrap; }
 .stat-values b { margin-right: 2px; color: #5c5a54; font-size: 9px; }
 .notice { margin-top: 12px; padding: 9px 12px; border: 1px solid #f0c5ad; border-radius: 6px; color: #a34320; background: #fff8f4; font-size: 11px; }
-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 22px 0 30px; color: #aaa89f; font-size: 9px; }
+.app-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 22px 0 30px; color: #aaa89f; font-size: 9px; }
 .footer-copy { display: flex; align-items: center; gap: 8px; }
 .footer-ball { color: var(--orange); font-size: 11px; }
 
@@ -464,9 +452,9 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
   .action-card { min-height: 63px; }
   .team-setup-backdrop { align-items: end; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
   .team-setup-dialog { max-height: calc(100dvh - 20px - env(safe-area-inset-bottom)); padding: 18px 15px 14px; border-radius: 14px 14px 10px 10px; }
-  .team-setup-page { min-height: calc(100dvh - 130px); padding: 12px 0; }
+  .team-setup-page { min-height: calc(100dvh - 62px); padding: 12px 0; }
   .team-setup-home-card { max-height: calc(100dvh - 130px); padding: 18px 15px 14px; border-radius: 14px; }
-  .user-profile-page { min-height: calc(100dvh - 130px); padding: 12px 0; }
+  .user-profile-page { min-height: calc(100dvh - 62px); padding: 12px 0; }
   .user-profile-onboarding { padding: 18px 15px 14px; }
   .team-setup-header { margin-bottom: 10px; }
   .team-setup-steps { margin-bottom: 10px; }
@@ -480,7 +468,7 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
   .offline-indicator { font-size: 10px; }
   .topbar-right { gap: 10px; }
   .avatar { width: 29px; height: 29px; flex: 0 0 29px; }
-  footer { align-items: flex-end; }
+  .app-footer { align-items: flex-end; }
   .footer-copy { flex-wrap: wrap; gap: 5px; }
   .scoreboard { grid-template-columns: 1fr 100px 1fr; }
   .team-name { width: 100%; padding-inline: 1px; font-size: 12px; }
@@ -502,9 +490,7 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
   .game-live .brand-mark { width: 26px; height: 26px; border-radius: 7px; font-size: 13px; }
   .game-live .topbar-right { gap: 5px; }
   .game-live .share-match-button { width: 29px; height: 29px; flex-basis: 29px; }
-  .game-live .theme-toggle { width: 29px; height: 29px; flex-basis: 29px; }
   .game-live .offline-indicator { gap: 6px; font-size: 9px; }
-  .game-live .avatar { display: none; }
   .game-live .activity-header-actions { gap: 6px; }
   .game-live .activity-undo { font-size: 9px; }
   .game-live .scoreboard {
@@ -603,7 +589,7 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
 :root[data-theme='dark'] .team-stat-name strong,
 :root[data-theme='dark'] .stat-values,
 :root[data-theme='dark'] .stat-values b,
-:root[data-theme='dark'] footer {
+:root[data-theme='dark'] .app-footer {
   color: var(--muted);
 }
 
@@ -642,8 +628,7 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
   :root[data-theme='dark'] .team-switch button.selected { color: var(--ink); }
   :root[data-theme='dark'] .player-choice:hover,
   :root[data-theme='dark'] .share-match-button:hover,
-  :root[data-theme='dark'] .activity-edit:hover,
-  :root[data-theme='dark'] .theme-toggle:hover { background: var(--hover); }
+  :root[data-theme='dark'] .activity-edit:hover { background: var(--hover); }
   :root[data-theme='dark'] .player-choice.selected,
   :root[data-theme='dark'] .picker-player.selected {
     border-color: #9f6048;
@@ -741,7 +726,7 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
   .game-live .action-card { min-height: 54px; gap: 2px; border-radius: 7px; font-size: 10px; touch-action: manipulation; }
   .game-live .action-card .action-icon { font-size: 17px; }
   .game-live .activity-panel { padding: 15px 12px; }
-  .game-live footer { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+  .game-live .app-footer { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
   .game-live .player-picker-backdrop { align-items: end; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
   .game-live .player-picker { max-height: calc(100dvh - 24px); padding: 18px 15px 14px; border-radius: 14px 14px 10px 10px; }
   .game-live .shot-court-board { width: min(100%, 220px); margin-inline: auto; }

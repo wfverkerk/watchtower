@@ -16,7 +16,6 @@ import { useGameSession } from './composables/useGameSession'
 import { isAppLocale, saveLocale, useLocale } from './i18n/useLocale'
 
 const { t, locale, displayTeamName } = useLocale()
-const localeSaveError = ref(false)
 const matchSyncOpen = ref(false)
 const userProfile = ref<UserProfile | null>(null)
 const userProfileOpen = ref(false)
@@ -34,7 +33,18 @@ try {
 type Theme = 'light' | 'dark'
 
 const themeStorageKey = 'watchtower-theme'
-const theme = ref<Theme>(localStorage.getItem(themeStorageKey) === 'dark' ? 'dark' : 'light')
+
+function loadTheme(): Theme {
+  try {
+    return window.localStorage.getItem(themeStorageKey) === 'dark' ? 'dark' : 'light'
+  } catch (error) {
+    console.error('Failed to load saved theme.', error)
+    return 'light'
+  }
+}
+
+const theme = ref<Theme>(loadTheme())
+let savedTheme = theme.value
 
 function applyTheme() {
   document.documentElement.dataset.theme = theme.value
@@ -46,10 +56,9 @@ function applyTheme() {
 
 applyTheme()
 
-function toggleTheme() {
-  theme.value = theme.value === 'dark' ? 'light' : 'dark'
+function previewTheme(value: Theme) {
+  theme.value = value
   applyTheme()
-  localStorage.setItem(themeStorageKey, theme.value)
 }
 
 const {
@@ -148,11 +157,12 @@ function saveUserPreferences(profile: UserProfile) {
   try {
     saveLocale(profile.locale)
     persistUserProfile(profile)
+    window.localStorage.setItem(themeStorageKey, theme.value)
+    savedTheme = theme.value
     userProfile.value = profile
     locale.value = profile.locale
     userProfileOpen.value = false
     userProfileError.value = ''
-    localeSaveError.value = false
   } catch (error) {
     console.error('Failed to save user preferences.', error)
     userProfileError.value = t('errors.saveUserProfile')
@@ -161,12 +171,12 @@ function saveUserPreferences(profile: UserProfile) {
 
 function previewProfileLocale(value: UserProfile['locale']) {
   locale.value = value
-  localeSaveError.value = false
 }
 
 function cancelUserProfileEdit() {
   userProfileOpen.value = false
   if (userProfile.value) locale.value = userProfile.value.locale
+  previewTheme(savedTheme)
 }
 
 watch(locale, (value) => {
@@ -197,22 +207,6 @@ watch(locale, (value) => {
             <path d="m8.7 10.7 6.6-4.4m-6.6 7 6.6 4.4" />
           </svg>
         </button>
-        <button
-          class="theme-toggle"
-          type="button"
-          :aria-label="`Schakel naar ${theme === 'dark' ? 'lichte' : 'donkere'} modus`"
-          :title="`Schakel naar ${theme === 'dark' ? 'lichte' : 'donkere'} modus`"
-          :aria-pressed="theme === 'dark'"
-          @click="toggleTheme"
-        >
-          <svg v-if="theme === 'dark'" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="4" />
-            <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
-          </svg>
-          <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z" />
-          </svg>
-        </button>
         <button class="avatar" type="button" :aria-label="userProfile?.name ? `${t('app.profile')}: ${userProfile.name}` : t('app.profile')" :title="t('app.profile')" @click="userProfileOpen = true">
           {{ userProfile?.name.trim().charAt(0).toLocaleUpperCase() || '?' }}
         </button>
@@ -220,16 +214,16 @@ watch(locale, (value) => {
     </header>
 
     <div v-if="storageError" class="notice" role="alert">{{ storageError }}</div>
-    <div v-if="localeSaveError" class="notice" role="alert">{{ t('errors.saveLanguage') }}</div>
-
     <UserProfileDialog
       v-if="userProfileOpen"
       :profile="userProfile"
       :teams="teamCatalog"
       :error="userProfileError"
+      :theme="theme"
       @cancel="cancelUserProfileEdit"
       @save="saveUserPreferences"
       @locale-change="previewProfileLocale"
+      @theme-change="previewTheme"
     />
 
     <TeamSetupDialog
@@ -337,7 +331,7 @@ watch(locale, (value) => {
     />
     </template>
 
-    <footer>
+    <footer class="app-footer">
       <div class="footer-copy"><span class="footer-ball">◉</span> {{ t('app.footer') }} <span>·</span> Watchtower</div>
     </footer>
   </main>
