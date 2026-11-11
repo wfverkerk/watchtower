@@ -15,34 +15,41 @@ const props = defineProps<{
   canCancel: boolean
   error: string
   home?: boolean
+  rosterProfile?: TeamProfile
+  requireOnCourt?: boolean
 }>()
 
 const emit = defineEmits<{
   cancel: []
   save: [profiles: TeamProfile[], selectedProfileIds: [string, string], match: ZoebasMatch | null, manualOpponentName: string]
+  'save-roster': [profile: TeamProfile]
 }>()
 
 const { t } = useLocale()
 const steps = ['stepTeam', 'stepPlayers', 'stepOpponent'] as const
-const step = ref(0)
+const step = ref(props.rosterProfile ? 1 : 0)
 const furthestStep = ref(0)
 const stepContent = ref<HTMLElement | null>(null)
 const draftStorageError = ref('')
 let draftLoadFailed = false
 let restoredDraft: TeamSetupDraft | null = null
-try {
-  restoredDraft = loadTeamSetupDraft()
-} catch (error) {
-  console.error('Failed to load team setup draft.', error)
-  draftStorageError.value = 'errors.loadTeams'
-  draftLoadFailed = true
+if (!props.rosterProfile) {
+  try {
+    restoredDraft = loadTeamSetupDraft()
+  } catch (error) {
+    console.error('Failed to load team setup draft.', error)
+    draftStorageError.value = 'errors.loadTeams'
+    draftLoadFailed = true
+  }
 }
-const draftProfiles = ref((restoredDraft?.profiles ?? props.profiles).map((profile) => ({
+const draftProfiles = ref((props.rosterProfile ? [props.rosterProfile] : restoredDraft?.profiles ?? props.profiles).map((profile) => ({
   ...profile,
-  players: profile.players.map((player) => ({ ...player, isParticipating: restoredDraft ? player.isParticipating : !!player.name.trim() })),
+  players: profile.players.map((player) => ({ ...player, isParticipating: restoredDraft || props.rosterProfile ? player.isParticipating : !!player.name.trim() })),
   coaches: (profile.coaches ?? []).map((coach) => ({ ...coach, isParticipating: coach.isParticipating ?? true })),
 })))
-const selected = ref<[string, string]>([...(restoredDraft?.selectedProfileIds ?? props.selectedProfileIds)])
+const selected = ref<[string, string]>(props.rosterProfile
+  ? [props.rosterProfile.id, props.selectedProfileIds[1]]
+  : [...(restoredDraft?.selectedProfileIds ?? props.selectedProfileIds)])
 const selectedCatalogTeamId = ref(
   restoredDraft?.catalogTeamId || (draftProfiles.value.find((profile) => profile.id === selected.value[0])?.catalogTeamId ?? ''),
 )
@@ -57,6 +64,7 @@ const jerseyError = ref('')
 const jerseyNumbers = ref<JerseyNumber[]>([])
 const jerseyBaselines = ref<Record<string, JerseyNumber[]>>(restoredDraft?.jerseyBaselines ?? {})
 const catalogPlayerIds = ref<string[]>([])
+const rosterJerseyBaseline = new Map(props.rosterProfile?.players.map((player) => [player.id, player.jerseyNumber]) ?? [])
 const initializedTeams = new Set<string>()
 const newCoachName = ref('')
 const newCoachRole = ref<TeamProfileCoach['role']>('coach')
@@ -79,7 +87,7 @@ const pastMatches = computed(() => matches.value.filter((match) =>
 const hasMatchSelection = computed(() => !!selectedMatch.value || !!manualOpponentName.value.trim())
 
 watch([draftProfiles, selected, selectedCatalogTeamId, jerseyBaselines], () => {
-  if (!selectedCatalogTeamId.value || draftLoadFailed) return
+  if (props.rosterProfile || !selectedCatalogTeamId.value || draftLoadFailed) return
   try {
     saveTeamSetupDraft({
       profiles: draftProfiles.value,
@@ -223,6 +231,7 @@ function formatMatchDate(match: ZoebasMatch) {
 let matchRequest = 0
 let jerseyRequest = 0
 watch([selectedCatalogTeamId, () => props.catalogTeams], async ([teamId], previous) => {
+  if (props.rosterProfile) return
   const request = ++matchRequest
   ++jerseyRequest
   matches.value = []
@@ -285,7 +294,7 @@ function toggleCoachParticipation(coach: TeamProfileCoach) {
 
 function toggleParticipation(player: TeamProfilePlayer) {
   player.isParticipating = !player.isParticipating
-  if (!player.isParticipating) player.isOnCourt = false
+  if (!player.isParticipating && !props.rosterProfile) player.isOnCourt = false
 }
 
 function participantError(profile: TeamProfile | undefined) {
@@ -301,13 +310,96 @@ function participantError(profile: TeamProfile | undefined) {
   return ''
 }
 
-const currentStepError = computed(() => step.value === 1 ? participantError(currentProfile.value ?? undefined) : '')
+const currentStepError = computed(() => {
+  if (step.value !== 1) return ''
+  const error = participantError(currentProfile.value ?? undefined)
+  if (error) return error
+  if (props.requireOnCourt && participatingPlayers.value.filter((player) => player.isOnCourt).length < 2) {
+    return t('teamSetup.rosterMinOnCourt')
+  }
+  return ''
+})
 const validTeam = computed(() => !props.catalogError && !jerseyLoading.value && !jerseyError.value && !!availableTeams.value.find((team) => team.id === selectedCatalogTeamId.value))
 const canAdvance = computed(() => {
+  if (props.rosterProfile) return !currentStepError.value
   if (step.value === 0) return validTeam.value
   if (step.value === 1) return validTeam.value && !currentStepError.value
   return hasMatchSelection.value
 })
+
+function catalogRoster(team: ZoebasTeam, profile: TeamProfile) {
+  const used = new Set<string>()
+  return team.playerNames.flatMap((name, index) => {
+    const player = profile.players.find((item) => !used.has(item.id) && item.catalogName === name)
+    if (!player) return []
+    used.add(player.id)
+    return [{ name, position: index + 1, player }]
+  })
+}
+
+async function reloadRosterJerseys() {
+  const profile = currentProfile.value
+  const team = props.catalogTeams.find((item) => item.id === profile?.catalogTeamId)
+  if (!profile || !team) {
+    jerseyError.value = t('teamSetup.jerseyLoadError')
+    return
+  }
+  jerseyLoading.value = true
+  try {
+    const numbers = await loadJerseyNumbers(team.id)
+    for (const { name, position, player } of catalogRoster(team, profile)) {
+      player.jerseyNumber = numbers.find((item) => item.position === position && item.name === name)?.number ?? ''
+      rosterJerseyBaseline.set(player.id, player.jerseyNumber)
+    }
+    jerseyError.value = ''
+  } catch (error) {
+    console.error('Failed to load shared jersey numbers.', error)
+    jerseyError.value = t('teamSetup.jerseyLoadError')
+  } finally {
+    jerseyLoading.value = false
+  }
+}
+
+async function saveRoster() {
+  const profile = currentProfile.value
+  if (!profile || !canAdvance.value) return
+  const changedCatalogPlayers = profile.players.filter((player) =>
+    player.catalogName && rosterJerseyBaseline.has(player.id) && player.jerseyNumber !== rosterJerseyBaseline.get(player.id),
+  )
+  if (changedCatalogPlayers.length) {
+    const team = props.catalogTeams.find((item) => item.id === profile.catalogTeamId)
+    if (!team) {
+      jerseyError.value = t('teamSetup.jerseyLoadError')
+      return
+    }
+    const changes: JerseyChange[] = catalogRoster(team, profile).flatMap(({ name, position, player }) => {
+      if (!changedCatalogPlayers.includes(player)) return []
+      return [{
+        position,
+        name,
+        expected: rosterJerseyBaseline.get(player.id) || null,
+        number: player.jerseyNumber || null,
+      }]
+    })
+    if (changes.length !== changedCatalogPlayers.length) {
+      jerseyError.value = t('teamSetup.jerseyLoadError')
+      return
+    }
+    jerseySaving.value = true
+    jerseyError.value = ''
+    try {
+      await saveJerseyNumbers(team.id, changes)
+      for (const player of changedCatalogPlayers) rosterJerseyBaseline.set(player.id, player.jerseyNumber)
+    } catch (error) {
+      console.error('Failed to save shared jersey numbers.', error)
+      jerseyError.value = t('teamSetup.jerseySaveError')
+      return
+    } finally {
+      jerseySaving.value = false
+    }
+  }
+  emit('save-roster', profile)
+}
 
 function save() {
   if (!canAdvance.value || participantError(currentProfile.value ?? undefined)) return
@@ -394,18 +486,19 @@ function stepCompleted(index: number) {
       :class="{ 'team-setup-home-card': home }"
       :role="home ? 'region' : 'dialog'"
       :aria-modal="home ? undefined : true"
-      :aria-label="t('teamSetup.title')"
+      :aria-label="t(rosterProfile ? 'scoreboard.editPlayers' : 'teamSetup.title')"
     >
       <header v-if="canCancel" class="team-setup-header">
         <button class="team-setup-close" type="button" :disabled="jerseySaving" :aria-label="t('teamSetup.cancel')" @click="emit('cancel')">×</button>
       </header>
-      <p v-if="error || catalogError || draftStorageError" class="notice team-setup-notice" role="alert">{{ error || catalogError || t(draftStorageError) }}</p>
+      <p v-if="error || (!rosterProfile && catalogError) || draftStorageError" class="notice team-setup-notice" role="alert">{{ error || catalogError || t(draftStorageError) }}</p>
       <div v-if="jerseyError" class="notice team-setup-notice" role="alert">
         <p>{{ jerseyError }}</p>
-        <button type="button" :disabled="jerseyLoading || jerseySaving" @click="retryJerseyNumbers">{{ t('teamSetup.reloadJerseys') }}</button>
+        <button type="button" :disabled="jerseyLoading || jerseySaving" @click="rosterProfile ? reloadRosterJerseys() : retryJerseyNumbers()">{{ t('teamSetup.reloadJerseys') }}</button>
       </div>
 
-      <div class="team-setup-steps" role="tablist" :aria-label="t('teamSetup.title')">
+      <h2 v-if="rosterProfile">{{ t('scoreboard.editPlayers') }}</h2>
+      <div v-else class="team-setup-steps" role="tablist" :aria-label="t('teamSetup.title')">
         <button
           v-for="(wizardStep, index) in steps"
           :key="wizardStep"
@@ -486,7 +579,7 @@ function stepCompleted(index: number) {
           <span>{{ t('teamSetup.participantCount', { count: participatingMembersCount }) }}</span>
         </div>
         <p class="team-setup-hint">{{ t('teamSetup.participantHint') }}</p>
-        <p class="team-setup-hint">{{ t('teamSetup.sharedJerseysHint') }}</p>
+        <p v-if="!rosterProfile || currentProfile.catalogTeamId" class="team-setup-hint">{{ t('teamSetup.sharedJerseysHint') }}</p>
         <div class="team-setup-player team-setup-column-heading" aria-hidden="true">
           <span>#</span><span>{{ t('teamSetup.name') }}</span><span>{{ t('teamSetup.present') }}</span>
         </div>
@@ -542,8 +635,10 @@ function stepCompleted(index: number) {
       </div>
 
       <footer class="team-setup-footer">
-        <button v-if="step > 0" class="team-setup-secondary" type="button" :disabled="jerseySaving" @click="step--">{{ t('teamSetup.back') }}</button>
-        <button class="team-setup-primary" type="button" :disabled="!canAdvance || jerseySaving" @click="advance">{{ t(step === steps.length - 1 ? 'teamSetup.saveAndContinue' : 'teamSetup.next') }}</button>
+        <button v-if="rosterProfile" class="team-setup-secondary" type="button" :disabled="jerseySaving" @click="emit('cancel')">{{ t('teamSetup.cancel') }}</button>
+        <button v-else-if="step > 0" class="team-setup-secondary" type="button" :disabled="jerseySaving" @click="step--">{{ t('teamSetup.back') }}</button>
+        <button v-if="rosterProfile" class="team-setup-primary" type="button" :disabled="!canAdvance || jerseySaving || jerseyLoading" @click="saveRoster">{{ t('teamSetup.saveAndContinue') }}</button>
+        <button v-else class="team-setup-primary" type="button" :disabled="!canAdvance || jerseySaving" @click="advance">{{ t(step === steps.length - 1 ? 'teamSetup.saveAndContinue' : 'teamSetup.next') }}</button>
       </footer>
     </section>
   </div>

@@ -23,6 +23,7 @@ const matchSyncOpen = ref(false)
 const userProfile = ref<UserProfile | null>(null)
 const userProfileOpen = ref(false)
 const userProfileError = ref('')
+const rosterEditing = ref(false)
 try {
   userProfile.value = loadUserProfile()
   userProfileOpen.value = userProfile.value === null
@@ -101,6 +102,7 @@ const {
   matchSyncError,
   matchSyncConfigured,
   teamProfiles,
+  rosterEditProfile,
   selectedTeamProfileIds,
   teamSetupOpen,
   teamSetupInitializing,
@@ -123,6 +125,7 @@ const {
   toggleGame,
   toggleClock,
   applyTeamSetup,
+  saveGameRoster,
   openTeamSetup,
   cancelTeamSetup,
   savePlayer,
@@ -174,6 +177,16 @@ function saveTeamSetup(
   manualOpponentName: string,
 ) {
   applyTeamSetup(profiles, profileIds, match, manualOpponentName)
+}
+
+function openRosterEditor() {
+  if (game.clock?.deadline != null) toggleClock()
+  rosterEditing.value = true
+  window.scrollTo(0, 0)
+}
+
+function saveRoster(profile: TeamProfile) {
+  if (saveGameRoster(profile)) rosterEditing.value = false
 }
 
 function saveUserPreferences(profile: UserProfile) {
@@ -279,6 +292,22 @@ watch(locale, (value) => {
     <div v-else-if="teamSetupInitializing" class="team-setup-loading panel" role="status">
       {{ t('teamSetup.preparing') }}
     </div>
+
+    <TeamSetupDialog
+      v-else-if="rosterEditing && rosterEditProfile && !userProfileOpen"
+      :profiles="teamProfiles"
+      :selected-profile-ids="selectedTeamProfileIds"
+      :catalog-teams="teamCatalog"
+      :catalog-loading="teamCatalogLoading"
+      :catalog-error="teamCatalogError"
+      :roster-profile="rosterEditProfile"
+      :require-on-court="(game.period ?? 0) > 0"
+      :error="storageError"
+      can-cancel
+      home
+      @cancel="rosterEditing = false"
+      @save-roster="saveRoster"
+    />
 
     <template v-else-if="!userProfileOpen">
       <div class="game-header" :class="{ 'game-header-sticky': game.gameStarted || (game.period !== undefined && game.period > 0) }">
@@ -401,6 +430,14 @@ watch(locale, (value) => {
 
     <footer class="app-footer">
       <div class="footer-copy"><span class="footer-ball">◉</span> {{ t('app.footer') }} <span>·</span> Watchtower</div>
+      <button
+        v-if="game.gameStarted && !teamSetupOpen && !userProfileOpen && !rosterEditing"
+        class="new-match-button"
+        type="button"
+        :disabled="!rosterEditProfile"
+        :title="t('scoreboard.editPlayersHint')"
+        @click="openRosterEditor"
+      >{{ t('scoreboard.editPlayers') }}</button>
     </footer>
   </main>
 </template>

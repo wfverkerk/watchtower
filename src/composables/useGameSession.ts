@@ -25,6 +25,7 @@ import {
 import { clockRemaining, formatClock, isYouthTeam, newPeriodClock, pauseClock, reconcileClock, startClock } from '../domain/gameClock'
 import { lineupChanges } from '../domain/matchTimeline'
 import { loadGameState, saveGameState } from '../services/gameStorage'
+import { applyGameRoster, createGameRosterDraft } from '../services/gameRoster'
 import {
   createDefaultTeamProfiles,
   clearTeamSetupDraft,
@@ -102,15 +103,16 @@ export function useGameSession() {
   const selectedTeam = computed(() =>
     game.teams.find((team) => team.id === selectedTeamId.value) ?? game.teams[0],
   )
-  const teamPeople = computed(() => game.players.filter((player) => player.teamId === selectedTeamId.value))
+  const allTeamPeople = computed(() => game.players.filter((player) => player.teamId === selectedTeamId.value))
+  const teamPeople = computed(() => allTeamPeople.value.filter((player) => player.isParticipating !== false))
   const teamPlayers = computed(() => teamPeople.value.filter((player) => !player.isCoach))
   const onCourtPlayers = computed(() => teamPlayers.value.filter((player) => player.isOnCourt))
   const pickerPlayers = computed(() => {
-    if (pendingAction.value?.type === 'foul') return teamPeople.value
-    return editingActionId.value ? teamPlayers.value : onCourtPlayers.value
+    if (pendingAction.value?.type === 'foul') return editingActionId.value ? allTeamPeople.value : teamPeople.value
+    return editingActionId.value ? allTeamPeople.value.filter((player) => !player.isCoach) : onCourtPlayers.value
   })
   const canStart = computed(() => teamSetupComplete.value && (game.period === 0
-    ? game.players.filter((player) => player.teamId === game.teams[0].id && !player.isCoach).length >= 2
+    ? game.players.filter((player) => player.teamId === game.teams[0].id && !player.isCoach && player.isParticipating !== false).length >= 2
     : isReadyToStart(game)))
   const canCancelTeamSetup = computed(() => game.period !== undefined || game.gameStarted || game.actions.length > 0)
   const canStartNewMatch = computed(() => !game.gameStarted && (game.period !== undefined || game.actions.length > 0))
@@ -123,6 +125,26 @@ export function useGameSession() {
   const playerFormError = computed(() => playerFormErrorKey.value ? t(playerFormErrorKey.value) : '')
   const lineupError = computed(() => lineupErrorKey.value ? t(lineupErrorKey.value) : '')
   const storageError = computed(() => storageErrorKey.value ? t(storageErrorKey.value) : '')
+  const rosterEditProfile = computed(() => {
+    const home = game.teams[0]
+    const homePlayers = game.players.filter((player) => player.teamId === home.id && !player.isCoach)
+    const matchesGame = (profile: TeamProfile) =>
+      profile.id !== selectedTeamProfileIds.value[1]
+      && profile.name.trim().toLocaleLowerCase() === home.name.trim().toLocaleLowerCase()
+      && profile.players.some((player) =>
+        homePlayers.some((item) => item.id === player.id || item.id === `${home.id}-${player.id}`),
+      )
+    const selected = teamProfiles.value.find((item) => item.id === selectedTeamProfileIds.value[0])
+    const profile = selected && matchesGame(selected)
+      ? selected
+      : teamProfiles.value.find(matchesGame) ?? {
+          id: crypto.randomUUID(),
+          name: home.name,
+          players: [],
+          coaches: [],
+        }
+    return createGameRosterDraft(game, profile)
+  })
 
   function makeMatchEvent(action: GameAction, type: MatchEventType, link: MatchLink): MatchEvent {
     return {
@@ -613,16 +635,15 @@ export function useGameSession() {
         player.isOnCourt = false
       }
       for (const player of game.players.filter((item) => item.teamId === teamId && !item.isCoach)) {
-        const profilePlayerId = player.id.startsWith(`${teamId}-`)
-          ? player.id.slice(teamId.length + 1)
-          : player.id
-        const profilePlayer = profile.players.find((item) => item.id === profilePlayerId)
+        const profilePlayer = profile.players.find((item) => item.id === player.id)
+          ?? profile.players.find((item) => `${teamId}-${item.id}` === player.id)
+        const profilePlayerId = profilePlayer?.id ?? player.id
         const updatedPlayer: TeamProfile['players'][number] = {
           id: profilePlayerId,
           name: player.name.trim(),
           jerseyNumber: player.jerseyNumber,
           ...(profilePlayer?.catalogName ? { catalogName: profilePlayer.catalogName } : {}),
-          isParticipating: true,
+          isParticipating: player.isParticipating !== false,
           isOnCourt: player.isOnCourt,
         }
         if (profilePlayer) Object.assign(profilePlayer, updatedPlayer)
@@ -641,6 +662,35 @@ export function useGameSession() {
       storageErrorKey.value = 'errors.saveTeams'
       return false
     }
+  }
+
+  function saveGameRoster(profile: TeamProfile) {
+    const nextPlayers = applyGameRoster(game, profile)
+    const homeId = game.teams[0].id
+    const onCourt = nextPlayers.filter((player) => player.teamId === homeId && !player.isCoach && player.isOnCourt)
+    if ((game.period ?? 0) > 0 && onCourt.length < 2) {
+      storageErrorKey.value = 'errors.minOnCourt'
+      return false
+    }
+    const profiles = teamProfiles.value.some((item) => item.id === profile.id)
+      ? teamProfiles.value.map((item) => item.id === profile.id ? profile : item)
+      : [...teamProfiles.value, profile]
+    const profileIds: [string, string] = [profile.id, selectedTeamProfileIds.value[1]]
+    try {
+      saveTeamProfiles(profiles)
+      if (profile.id !== selectedTeamProfileIds.value[0]) saveTeamProfileSelection(profileIds)
+    } catch (error) {
+      console.error('Failed to save team roster.', error)
+      storageErrorKey.value = 'errors.saveTeams'
+      return false
+    }
+    selectedTeamId.value = homeId
+    if ((game.period ?? 0) > 0) recordLineupChanges(onCourt.map((player) => player.id), Date.now())
+    game.players = nextPlayers
+    teamProfiles.value = profiles
+    selectedTeamProfileIds.value = profileIds
+    storageErrorKey.value = ''
+    return true
   }
 
   function openTeamSetup() {
@@ -1063,6 +1113,7 @@ export function useGameSession() {
     startingPeriod,
     draftCourtPlayerIds,
     teamProfiles,
+    rosterEditProfile,
     selectedTeamProfileIds,
     teamSetupOpen,
     teamSetupInitializing,
@@ -1098,6 +1149,7 @@ export function useGameSession() {
     toggleGame,
     toggleClock,
     applyTeamSetup,
+    saveGameRoster,
     openTeamSetup,
     cancelTeamSetup,
     savePlayer,
