@@ -22,8 +22,9 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useLocale()
-const steps = ['selectClubTeam', 'participants', 'chooseMatch'] as const
+const steps = ['stepTeam', 'stepPlayers', 'stepOpponent'] as const
 const step = ref(0)
+const furthestStep = ref(0)
 const draftProfiles = ref(props.profiles.map((profile) => ({
   ...profile,
   players: profile.players.map((player) => ({ ...player, isParticipating: player.isParticipating ?? true })),
@@ -176,11 +177,6 @@ function addPlayer() {
   })
 }
 
-function removePlayer(playerId: string) {
-  if (!currentProfile.value) return
-  currentProfile.value.players = currentProfile.value.players.filter((player) => player.id !== playerId)
-}
-
 function addCoach() {
   if (!currentProfile.value) return
   const name = newCoachName.value.trim()
@@ -192,11 +188,6 @@ function addCoach() {
     isParticipating: true,
   })
   newCoachName.value = ''
-}
-
-function removeCoach(coachId: string) {
-  if (!currentProfile.value) return
-  currentProfile.value.coaches = currentProfile.value.coaches.filter((coach) => coach.id !== coachId)
 }
 
 function toggleCoachParticipation(coach: TeamProfileCoach) {
@@ -222,8 +213,9 @@ function participantError(profile: TeamProfile | undefined) {
 }
 
 const currentStepError = computed(() => step.value === 1 ? participantError(currentProfile.value ?? undefined) : '')
+const validTeam = computed(() => !props.catalogError && !!props.catalogTeams.find((team) => team.id === selectedCatalogTeamId.value))
 const canAdvance = computed(() => {
-  if (step.value === 0) return !props.catalogError && !!props.catalogTeams.find((team) => team.id === selectedCatalogTeamId.value)
+  if (step.value === 0) return validTeam.value
   if (step.value === 1) return !currentStepError.value
   return hasMatchSelection.value
 })
@@ -249,11 +241,23 @@ function save() {
 function advance() {
   if (!canAdvance.value) return
   if (step.value === steps.length - 1) save()
-  else step.value++
+  else navigateTo(step.value + 1)
 }
 
 function canNavigateTo(index: number) {
   return index <= step.value || (index === step.value + 1 && canAdvance.value)
+}
+
+function navigateTo(index: number) {
+  if (!canNavigateTo(index)) return
+  step.value = index
+  furthestStep.value = Math.max(furthestStep.value, index)
+}
+
+function stepCompleted(index: number) {
+  if (index >= furthestStep.value) return false
+  if (index === 0) return validTeam.value
+  return validTeam.value && !participantError(currentProfile.value ?? undefined)
 }
 </script>
 
@@ -267,18 +271,14 @@ function canNavigateTo(index: number) {
       :class="{ 'team-setup-home-card': home }"
       :role="home ? 'region' : 'dialog'"
       :aria-modal="home ? undefined : true"
-      aria-labelledby="team-setup-title"
+      :aria-label="t('teamSetup.title')"
     >
-      <header class="team-setup-header">
-        <div>
-          <p class="eyebrow">{{ t('teamSetup.eyebrow') }}</p>
-          <h2 id="team-setup-title">{{ t('teamSetup.title') }}</h2>
-        </div>
-        <button v-if="canCancel" class="team-setup-close" type="button" :aria-label="t('teamSetup.cancel')" @click="emit('cancel')">×</button>
+      <header v-if="canCancel" class="team-setup-header">
+        <button class="team-setup-close" type="button" :aria-label="t('teamSetup.cancel')" @click="emit('cancel')">×</button>
       </header>
       <p v-if="error || catalogError" class="notice team-setup-notice" role="alert">{{ error || catalogError }}</p>
 
-      <div class="team-setup-steps" :class="{ 'team-setup-home-steps': home }" role="tablist" :aria-label="t('teamSetup.title')">
+      <div class="team-setup-steps" role="tablist" :aria-label="t('teamSetup.title')">
         <button
           v-for="(wizardStep, index) in steps"
           :key="wizardStep"
@@ -286,9 +286,10 @@ function canNavigateTo(index: number) {
           :disabled="!canNavigateTo(index)"
           role="tab"
           :aria-selected="step === index"
-          :class="{ selected: step === index }"
-          @click="step = index"
-        >{{ t(`teamSetup.${wizardStep}`) }}</button>
+          :aria-current="step === index ? 'step' : undefined"
+          :class="{ selected: step === index, completed: stepCompleted(index) && step !== index }"
+          @click="navigateTo(index)"
+        ><span class="team-setup-step-number" aria-hidden="true">{{ stepCompleted(index) && step !== index ? '✓' : index + 1 }}</span><span class="team-setup-step-label">{{ index === 0 && validTeam ? currentProfile?.name : t(`teamSetup.${wizardStep}`) }}</span></button>
       </div>
 
       <div class="team-setup-team">
@@ -355,24 +356,26 @@ function canNavigateTo(index: number) {
         </section>
 
         <template v-if="step === 1 && currentProfile">
-        <p class="team-setup-club-name">{{ currentProfile.name }}</p>
         <div class="team-setup-roster-heading">
           <h3>{{ t('teamSetup.players') }}</h3>
           <span>{{ t('teamSetup.participantCount', { count: participatingMembersCount }) }}</span>
         </div>
         <p class="team-setup-hint">{{ t('teamSetup.participantHint') }}</p>
+        <div class="team-setup-player team-setup-column-heading" aria-hidden="true">
+          <span>#</span><span>{{ t('teamSetup.name') }}</span><span>{{ t('teamSetup.present') }}</span>
+        </div>
         <div class="team-setup-roster">
           <div v-for="player in currentProfile.players" :key="player.id" class="team-setup-player">
+            <input v-model="player.jerseyNumber" class="team-setup-jersey-input" type="text" inputmode="numeric" maxlength="2" :aria-label="t('teamSetup.jerseyNumber')" placeholder="#" @input="player.jerseyNumber = player.jerseyNumber.replace(/\D/g, '').slice(0, 2)">
+            <input v-model="player.name" type="text" :aria-label="t('teamSetup.playerName')" :placeholder="t('teamSetup.playerName')" maxlength="60">
             <button
               class="team-setup-court-toggle"
               type="button"
               :aria-pressed="player.isParticipating"
               :aria-label="t('teamSetup.participation', { name: player.name || t('teamSetup.playerName') })"
+              :title="t(player.isParticipating ? 'teamSetup.present' : 'teamSetup.absent')"
               @click="toggleParticipation(player)"
-            ><span aria-hidden="true">×</span><span>{{ t('teamSetup.participates') }}</span></button>
-            <input v-model="player.name" type="text" :aria-label="t('teamSetup.playerName')" :placeholder="t('teamSetup.playerName')" maxlength="60">
-            <input v-model="player.jerseyNumber" type="text" inputmode="numeric" maxlength="2" :aria-label="t('teamSetup.jerseyNumber')" placeholder="#" @input="player.jerseyNumber = player.jerseyNumber.replace(/\D/g, '').slice(0, 2)">
-            <button class="team-setup-remove-player" type="button" :aria-label="t('teamSetup.removePlayer')" @click="removePlayer(player.id)">×</button>
+            ><span aria-hidden="true">{{ t('teamSetup.no') }}</span><span aria-hidden="true">{{ t('teamSetup.yes') }}</span></button>
           </div>
         </div>
         <button class="team-setup-add-player" type="button" @click="addPlayer">+ {{ t('teamSetup.addPlayer') }}</button>
@@ -381,23 +384,20 @@ function canNavigateTo(index: number) {
             <h3>{{ t('teamSetup.coaches') }}</h3>
             <span>{{ t('teamSetup.coachesSelected', { count: currentProfile?.coaches.filter((coach) => coach.isParticipating).length ?? 0 }) }}</span>
           </div>
+          <div v-if="currentProfile.coaches.length" class="team-setup-player team-setup-column-heading" aria-hidden="true">
+            <span class="team-setup-coach-name">{{ t('teamSetup.name') }}</span><span>{{ t('teamSetup.present') }}</span>
+          </div>
           <div class="team-setup-roster">
             <div v-for="coach in currentProfile?.coaches ?? []" :key="coach.id" class="team-setup-player team-setup-coach">
+              <span class="team-setup-coach-name">{{ coach.name }} <small>{{ t(coach.role === 'assistant' ? 'teamSetup.assistantCoach' : 'teamSetup.coach') }}</small></span>
               <button
                 class="team-setup-court-toggle"
                 type="button"
                 :aria-pressed="coach.isParticipating"
                 :aria-label="t('teamSetup.participation', { name: coach.name })"
+                :title="t(coach.isParticipating ? 'teamSetup.present' : 'teamSetup.absent')"
                 @click="toggleCoachParticipation(coach)"
-              ><span aria-hidden="true">×</span><span>{{ t('teamSetup.participates') }}</span></button>
-              <span class="team-setup-coach-name">{{ coach.name }} <small>{{ t(coach.role === 'assistant' ? 'teamSetup.assistantCoach' : 'teamSetup.coach') }}</small></span>
-              <button
-                v-if="!props.catalogTeams.find((team) => team.id === currentProfile?.catalogTeamId)?.staff.some((member) => member.name === coach.name)"
-                class="team-setup-remove-player"
-                type="button"
-                :aria-label="t('teamSetup.removeCoach', { name: coach.name })"
-                @click="removeCoach(coach.id)"
-              >×</button>
+              ><span aria-hidden="true">{{ t('teamSetup.no') }}</span><span aria-hidden="true">{{ t('teamSetup.yes') }}</span></button>
             </div>
           </div>
           <form class="team-setup-add-coach" @submit.prevent="addCoach">

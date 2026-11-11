@@ -13,6 +13,7 @@ import type { GameAction } from './domain/game'
 import { regulationPeriods } from './domain/gameClock'
 import type { TeamProfile } from './services/teamProfiles'
 import { loadUserProfile, saveUserProfile as persistUserProfile, type UserProfile } from './services/userProfile'
+import { resetLocalData } from './services/resetLocalData'
 import type { ZoebasMatch } from './services/zoebasMatches'
 import { useGameSession } from './composables/useGameSession'
 import { isAppLocale, saveLocale, useLocale } from './i18n/useLocale'
@@ -146,7 +147,7 @@ const nextPeriodLabel = computed(() => {
   const limit = regulationPeriods(game.youth ?? false)
   return period > limit
     ? t('scoreboard.overtime', { count: period - limit })
-    : t(game.youth ? 'scoreboard.period' : 'scoreboard.quarter', { count: period })
+    : t(game.youth ? 'scoreboard.period' : 'lineup.quarter', { count: period })
 })
 
 async function createMatch(displayName: string) {
@@ -201,6 +202,18 @@ function cancelUserProfileEdit() {
   previewTheme(savedTheme)
 }
 
+function resetApp() {
+  if (!window.confirm(t('userProfile.resetConfirm'))) return
+  try {
+    resetLocalData(window.localStorage)
+    resetLocalData(window.sessionStorage)
+    window.location.reload()
+  } catch (error) {
+    console.error('Failed to reset local app data.', error)
+    userProfileError.value = t('userProfile.resetError')
+  }
+}
+
 watch(locale, (value) => {
   const activeLocale = isAppLocale(value) ? value : 'nl'
   document.documentElement.lang = activeLocale
@@ -246,6 +259,7 @@ watch(locale, (value) => {
       @save="saveUserPreferences"
       @locale-change="previewProfileLocale"
       @theme-change="previewTheme"
+      @reset="resetApp"
     />
 
     <TeamSetupDialog

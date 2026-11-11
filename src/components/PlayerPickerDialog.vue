@@ -4,12 +4,12 @@ import { getActionTranslation } from '../i18n/actionLabel'
 import { isAppLocale, useLocale } from '../i18n/useLocale'
 import { turnoverTypes, type FoulType, type Player, type ShotLocation, type StatType, type TurnoverType } from '../domain/game'
 import ShotLocationPicker from './ShotLocationPicker.vue'
-import FoulMarker from './FoulMarker.vue'
+import PlayerChoiceButton from './PlayerChoiceButton.vue'
 
 type PendingAction = { type: StatType; value: number }
 type AssistConnector = { width: number; height: number; path: string }
 
-const { t, locale, displayPlayerName } = useLocale()
+const { t, locale } = useLocale()
 
 const props = defineProps<{
   action: PendingAction
@@ -131,18 +131,15 @@ function actionLabel(action: PendingAction) {
         <section class="scoring-player-list scorer-player-list" :aria-label="t('picker.chooseScorer')">
           <h3>{{ t('picker.scorer') }}</h3>
           <div class="player-picker-grid">
-            <button
+            <PlayerChoiceButton
               v-for="player in players"
               :key="player.id"
-              class="player-choice picker-player"
+              :player="player"
+              :foul-count="playerFouls[player.id] ?? 0"
               :class="{ selected: scorerId === player.id }"
               :aria-pressed="scorerId === player.id"
               @click="emit('select-scorer', player.id)"
-            >
-              <span class="jersey-number">{{ player.jerseyNumber || '—' }}</span>
-              <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
-              <FoulMarker :count="playerFouls[player.id] ?? 0" />
-            </button>
+            />
           </div>
         </section>
         <section
@@ -152,10 +149,12 @@ function actionLabel(action: PendingAction) {
         >
           <h3>{{ t('picker.assister') }}</h3>
           <div class="player-picker-grid">
-            <button
+            <PlayerChoiceButton
               v-for="player in players"
               :key="player.id"
-              class="player-choice picker-player"
+              :player="player"
+              :foul-count="playerFouls[player.id] ?? 0"
+              :no-assist="player.id === scorerId"
               :class="{
                 selected: player.id === scorerId ? assistPlayerId === 'none' : assistPlayerId === player.id,
                 'no-assist-button': player.id === scorerId,
@@ -163,82 +162,66 @@ function actionLabel(action: PendingAction) {
               :aria-pressed="player.id === scorerId ? assistPlayerId === 'none' : assistPlayerId === player.id"
               :disabled="!scorerId"
               @click="emit('update:assistPlayerId', player.id === scorerId ? 'none' : player.id)"
-            >
-              <span v-if="player.id !== scorerId" class="jersey-number">{{ player.jerseyNumber || '—' }}</span>
-              <span class="player-choice-name">{{ player.id === scorerId ? t('picker.noAssist') : displayPlayerName(player.name) }}</span>
-              <FoulMarker v-if="player.id !== scorerId" :count="playerFouls[player.id] ?? 0" />
-            </button>
+            />
           </div>
         </section>
       </div>
       <section v-if="action.type === 'missed_shot'" class="scoring-player-list missed-shot-player-list">
         <h3>{{ t('picker.missedBy') }}</h3>
         <div class="player-picker-grid">
-          <button
+          <PlayerChoiceButton
             v-for="player in players"
             :key="player.id"
-            class="player-choice picker-player"
+            :player="player"
+            :foul-count="playerFouls[player.id] ?? 0"
             :class="{ selected: action.value > 1 ? scorerId === player.id : editing && scorerId === player.id }"
             :aria-pressed="action.value > 1 ? scorerId === player.id : editing ? scorerId === player.id : undefined"
             @click="emit('select-player', player.id)"
-          >
-            <span class="jersey-number">{{ player.jerseyNumber || '—' }}</span>
-            <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
-            <FoulMarker :count="playerFouls[player.id] ?? 0" />
-          </button>
+          />
         </div>
       </section>
       <template v-if="action.type === 'foul'">
         <section class="scoring-player-list standard-player-list" :aria-label="t('picker.fieldPlayers')">
           <h3>{{ t('picker.fieldPlayers') }}</h3>
           <div class="player-picker-grid">
-            <button
+            <PlayerChoiceButton
               v-for="player in players.filter((item) => item.isOnCourt && !item.isCoach)"
               :key="player.id"
-              class="player-choice picker-player"
+              :player="player"
+              :foul-count="playerFouls[player.id] ?? 0"
               :class="{ selected: scorerId === player.id }"
               :aria-pressed="scorerId === player.id"
               @click="emit('select-player', player.id)"
-            >
-              <span class="jersey-number">{{ player.jerseyNumber || '—' }}</span>
-              <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
-              <FoulMarker :count="playerFouls[player.id] ?? 0" />
-            </button>
+            />
           </div>
         </section>
         <section class="scoring-player-list standard-player-list" :aria-label="t('picker.benchAndCoaches')">
           <h3>{{ t('picker.benchAndCoaches') }}</h3>
           <div class="player-picker-grid">
-            <button
+            <PlayerChoiceButton
               v-for="player in players.filter((item) => !item.isOnCourt)"
               :key="player.id"
-              class="player-choice picker-player"
-              :class="{ selected: scorerId === player.id, 'coach-choice': player.isCoach }"
+              :player="player"
+              :foul-count="playerFouls[player.id] ?? 0"
+              :class="{ selected: scorerId === player.id }"
               :aria-pressed="scorerId === player.id"
               @click="emit('select-player', player.id)"
-            >
-              <span class="jersey-number">{{ player.isCoach ? t(player.coachRole === 'assistant' ? 'picker.assistantCoach' : 'picker.coach') : player.jerseyNumber || '—' }}</span>
-              <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
-              <FoulMarker v-if="!player.isCoach" :count="playerFouls[player.id] ?? 0" />
-            </button>
+            />
           </div>
         </section>
       </template>
       <section v-else-if="action.type !== 'score' && action.type !== 'missed_shot'" class="scoring-player-list standard-player-list" :aria-label="t('picker.choosePlayerLabel')">
         <h3>{{ editing ? t('picker.changePlayer') : t('picker.choosePlayerLabel') }}</h3>
         <div class="player-picker-grid">
-          <button
+          <PlayerChoiceButton
             v-for="player in players"
             :key="player.id"
-            class="player-choice picker-player"
+            :player="player"
+            :foul-count="playerFouls[player.id] ?? 0"
             :class="{ selected: (editing || action.type === 'turnover') && scorerId === player.id }"
             :aria-pressed="editing || action.type === 'turnover' ? scorerId === player.id : undefined"
             @click="emit('select-player', player.id)"
-          >
-            <span class="jersey-number">{{ player.jerseyNumber || '—' }}</span>
-            <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
-            <FoulMarker :count="playerFouls[player.id] ?? 0" />
-          </button>
+          />
         </div>
       </section>
       <section v-if="action.type === 'foul' && scorerId" class="foul-type-picker" :aria-label="t('picker.foulType')">

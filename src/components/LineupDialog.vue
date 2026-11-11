@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useLocale } from '../i18n/useLocale'
 import type { Player } from '../domain/game'
+import PlayerChoiceButton from './PlayerChoiceButton.vue'
 
-const { t, displayPlayerName } = useLocale()
+const { t } = useLocale()
 
 defineProps<{
   teamName: string
@@ -42,19 +43,16 @@ const emit = defineEmits<{
       <p class="lineup-count">{{ t('lineup.selectedCount', { count: selectedPlayerIds.length }) }}</p>
       <p v-if="error" class="form-error" role="alert">{{ error }}</p>
       <div class="lineup-player-grid">
-        <button
+        <PlayerChoiceButton
           v-for="player in players"
           :key="player.id"
-          class="player-choice picker-player"
+          :player="player"
+          :foul-count="playerFouls[player.id] ?? 0"
           :class="{ selected: selectedPlayerIds.includes(player.id) }"
           :aria-pressed="selectedPlayerIds.includes(player.id)"
           :disabled="!selectedPlayerIds.includes(player.id) && selectedPlayerIds.length === 5"
           @click="emit('toggle', player.id)"
-        >
-          <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
-          <span v-if="(playerFouls[player.id] ?? 0) >= 5" class="foul-marker" role="img" :aria-label="t('scoreboard.playerFoulLimit')" :title="t('scoreboard.playerFoulLimit')"></span>
-          <span class="jersey-number">{{ player.jerseyNumber || '—' }}</span>
-        </button>
+        />
       </div>
       <div class="scoring-picker-footer">
         <button class="picker-cancel" @click="emit('cancel')">{{ t('lineup.cancel') }}</button>

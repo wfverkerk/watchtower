@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useLocale } from '../i18n/useLocale'
 import type { Player, StatType } from '../domain/game'
+import PlayerChoiceButton from './PlayerChoiceButton.vue'
 
 const { t, displayPlayerName } = useLocale()
 
@@ -57,16 +58,14 @@ function updateInput(event: Event, field: 'name' | 'number') {
       </div>
       <div v-if="teamPlayers.length" class="roster-list">
         <div v-for="player in teamPlayers" :key="player.id" class="roster-row">
-          <button
-            class="player-choice"
+          <PlayerChoiceButton
+            :player="player"
+            :foul-count="playerFouls[player.id] ?? 0"
             :class="{ selected: selectedPlayerId === player.id }"
             @click="emit('update:selectedPlayerId', player.id)"
           >
-            <span class="jersey-number">{{ player.jerseyNumber || '—' }}</span>
-            <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
-            <span v-if="(playerFouls[player.id] ?? 0) >= 5" class="foul-marker" role="img" :aria-label="t('scoreboard.playerFoulLimit')" :title="t('scoreboard.playerFoulLimit')"></span>
             <span class="court-status">{{ player.isOnCourt ? t('controls.court') : t('controls.bench') }}</span>
-          </button>
+          </PlayerChoiceButton>
           <button
             class="court-toggle"
             :class="{ active: player.isOnCourt }"

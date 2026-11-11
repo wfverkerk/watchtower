@@ -310,15 +310,18 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .team-setup-page { min-height: calc(100dvh - 74px); display: grid; place-items: start center; padding: 28px 0; }
 .team-setup-loading { margin: 28px auto; padding: 24px; color: #77756e; text-align: center; }
 .team-setup-home-card { width: min(100%, 760px); max-height: min(780px, calc(100dvh - 170px)); padding: 30px; }
-.team-setup-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.team-setup-header .eyebrow { margin-bottom: 5px; }
-.team-setup-header h2 { margin: 0; font-size: 20px; }
+.team-setup-header { display: flex; justify-content: flex-end; margin-bottom: 14px; }
 .team-setup-notice { margin: 0 0 12px; }
 .team-setup-close { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 50%; color: #716f68; background: white; font-size: 20px; }
-.team-setup-steps { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; margin-bottom: 16px; }
-.team-setup-home-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.team-setup-steps button { min-height: 38px; border: 1px solid var(--line); border-radius: 7px; color: #77756e; background: #faf9f7; font-size: 12px; font-weight: 600; }
+.team-setup-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-bottom: 16px; }
+.team-setup-steps button { min-width: 0; min-height: 42px; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 5px 3px; border: 1px solid var(--line); border-bottom: 3px solid var(--line); border-radius: 7px; color: #77756e; background: #faf9f7; font-size: 11px; font-weight: 600; }
+.team-setup-step-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-setup-step-number { width: 20px; height: 20px; flex: 0 0 20px; display: grid; place-items: center; border-radius: 50%; color: #77756e; background: #e8e6e1; font-size: 10px; }
 .team-setup-steps button.selected { border-color: var(--orange); color: #984b2c; background: #fff3ec; }
+.team-setup-steps button.selected .team-setup-step-number { color: white; background: var(--orange); }
+.team-setup-steps button.completed { border-bottom-color: #478c59; color: #397f4c; }
+.team-setup-steps button.completed .team-setup-step-number { color: white; background: #478c59; }
+.team-setup-steps button:disabled { opacity: .6; }
 .team-setup-team { min-height: 0; overflow-y: auto; }
 .team-setup-team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .team-setup-team-grid button { min-height: 48px; padding: 8px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); background: var(--panel); font-weight: 600; }
@@ -338,23 +341,21 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .team-setup-roster-heading span, .team-setup-hint { color: #85827b; font-size: 10px; }
 .team-setup-hint { margin: 4px 0 9px; line-height: 1.4; }
 .team-setup-roster { display: grid; gap: 6px; }
-.team-setup-player { display: grid; grid-template-columns: 108px minmax(0, 1fr) 54px 30px; gap: 6px; }
+.team-setup-player { display: grid; grid-template-columns: 54px minmax(0, 1fr) 76px; gap: 6px; }
+.team-setup-column-heading { margin-bottom: 5px; color: var(--muted); font-size: 10px; font-weight: 600; }
+.team-setup-column-heading span:first-child, .team-setup-column-heading span:last-child { text-align: center; }
 .team-setup-player input { width: 100%; }
-.team-setup-player input:last-of-type { text-align: center; }
-.team-setup-court-toggle, .team-setup-remove-player { min-height: 36px; border: 1px solid var(--line); border-radius: 6px; color: #716f68; background: white; }
-.team-setup-court-toggle { display: flex; align-items: stretch; padding: 2px; font-size: 10px; white-space: nowrap; }
-.team-setup-court-toggle span { display: flex; align-items: center; justify-content: center; padding: 0 5px; border-radius: 4px; }
-.team-setup-court-toggle span:first-child { width: 28px; font-size: 15px; }
-.team-setup-court-toggle span:last-child { flex: 1; }
-.team-setup-court-toggle[aria-pressed='false'] span:first-child { color: #834a43; background: #f9eae8; }
-.team-setup-court-toggle[aria-pressed='true'] span:last-child { color: #397f4c; background: #e4f3e7; }
-.team-setup-remove-player { width: 30px; }
-.team-setup-remove-player { color: #9c6257; font-size: 16px; }
+.team-setup-player input.team-setup-jersey-input { text-align: center; }
+.team-setup-court-toggle { width: 76px; min-height: 36px; justify-self: center; display: flex; align-items: stretch; padding: 2px; border: 1px solid var(--line); border-radius: 6px; color: #77756e; background: white; font-size: 10px; }
+.team-setup-court-toggle span { flex: 1; display: grid; place-items: center; border-radius: 4px; }
+.team-setup-court-toggle[aria-pressed='false'] span:first-child { color: #4f514f; background: #e8e9e7; font-weight: 700; }
+.team-setup-court-toggle[aria-pressed='true'] span:last-child { color: #397f4c; background: #e4f3e7; font-weight: 700; }
+.team-setup-court-toggle:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
 .team-setup-add-player { width: 100%; margin-top: 8px; }
 .team-setup-coaches { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); }
-.team-setup-coach-name { min-width: 0; flex: 1; padding-left: 9px; color: var(--ink); font-size: 12px; }
+.team-setup-coach-name { grid-column: 2; min-width: 0; align-self: center; padding-left: 9px; color: var(--ink); font-size: 12px; }
+.team-setup-column-heading .team-setup-coach-name { color: inherit; font-size: inherit; text-align: left; }
 .team-setup-coach-name small { margin-left: 5px; color: var(--muted); font-size: 10px; }
-.team-setup-player.team-setup-coach { grid-template-columns: 108px minmax(0, 1fr) 30px; }
 .team-setup-add-coach { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 7px; margin-top: 8px; }
 .team-setup-add-coach input { min-width: 0; min-height: 37px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--panel); font-size: 12px; }
 .team-setup-add-coach select { min-width: 110px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--panel); font-size: 11px; }
@@ -392,6 +393,7 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .profile-language-flag { font-size: 16px; }
 .profile-theme-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
 .user-profile-footer { display: flex; justify-content: flex-end; gap: 8px; }
+.user-profile-reset { align-self: flex-start; padding: 6px 0; border: 0; color: var(--muted); background: transparent; font-size: 11px; text-decoration: underline; text-underline-offset: 2px; }
 .team-setup-primary, .team-setup-secondary { min-height: 42px; padding: 0 15px; border: 0; border-radius: 7px; font-size: 12px; font-weight: 700; }
 .team-setup-primary { color: white; background: var(--orange); }
 .team-setup-primary:disabled { cursor: not-allowed; color: #aaa79f; background: #e8e6e1; }
@@ -497,7 +499,6 @@ h2 { margin-bottom: 0; font-size: 16px; }
   .user-profile-onboarding { padding: 18px 15px 14px; }
   .team-setup-header { margin-bottom: 10px; }
   .team-setup-steps { margin-bottom: 10px; }
-  .team-setup-home-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .player-form { flex-wrap: wrap; }
   .add-player-button, .cancel-edit { flex: 1; }
 }
@@ -513,9 +514,7 @@ h2 { margin-bottom: 0; font-size: 16px; }
   .team-name { width: 100%; padding-inline: 1px; font-size: 12px; }
   .start-button { width: 104px; }
   .stat-values { gap: 5px 7px; }
-  .team-setup-player { grid-template-columns: 100px minmax(0, 1fr) 44px 28px; gap: 4px; }
-  .team-setup-player.team-setup-coach { grid-template-columns: 100px minmax(0, 1fr) 28px; }
-  .team-setup-remove-player { width: 28px; }
+  .team-setup-player { grid-template-columns: 44px minmax(0, 1fr) 76px; gap: 4px; }
 }
 
 @media (max-width: 700px) {
@@ -697,12 +696,15 @@ h2 { margin-bottom: 0; font-size: 16px; }
   :root[data-theme='dark'] .team-setup-add-team,
   :root[data-theme='dark'] .team-setup-add-player,
   :root[data-theme='dark'] .team-setup-player input,
-  :root[data-theme='dark'] .team-setup-court-toggle,
-  :root[data-theme='dark'] .team-setup-remove-player,
   :root[data-theme='dark'] .team-setup-field input,
   :root[data-theme='dark'] .team-setup-field select { border-color: var(--line); color: var(--ink); background: var(--control); }
   :root[data-theme='dark'] .team-setup-steps button.selected { border-color: #684536; color: #ffc0a3; background: #422d28; }
-  :root[data-theme='dark'] .team-setup-court-toggle[aria-pressed='false'] span:first-child { color: #f0c4c0; background: #513432; }
+  :root[data-theme='dark'] .team-setup-step-number { color: #c5c9d1; background: #424751; }
+  :root[data-theme='dark'] .team-setup-steps button.selected .team-setup-step-number { color: white; background: #c65a31; }
+  :root[data-theme='dark'] .team-setup-steps button.completed { border-bottom-color: #78bb8b; color: #a9deb4; }
+  :root[data-theme='dark'] .team-setup-steps button.completed .team-setup-step-number { color: white; background: #39784b; }
+  :root[data-theme='dark'] .team-setup-court-toggle { border-color: var(--line); color: #a8adb6; background: var(--control); }
+  :root[data-theme='dark'] .team-setup-court-toggle[aria-pressed='false'] span:first-child { color: #e1e3e7; background: #4a4e56; }
   :root[data-theme='dark'] .team-setup-court-toggle[aria-pressed='true'] span:last-child { color: #a9deb4; background: #34523d; }
   :root[data-theme='dark'] .team-setup-primary:disabled { color: #8d929c; background: #30343c; }
   :root[data-theme='dark'] .team-setup-secondary { border-color: var(--line); color: var(--ink); background: var(--control); }
