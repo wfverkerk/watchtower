@@ -211,22 +211,6 @@ watch(locale, (value) => {
             <path d="m8.7 10.7 6.6-4.4m-6.6 7 6.6 4.4" />
           </svg>
         </button>
-        <button
-          class="theme-toggle"
-          type="button"
-          :aria-label="theme === 'dark' ? t('app.switchToLight') : t('app.switchToDark')"
-          :title="theme === 'dark' ? t('app.switchToLight') : t('app.switchToDark')"
-          :aria-pressed="theme === 'dark'"
-          @click="toggleTheme"
-        >
-          <svg v-if="theme === 'dark'" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="4" />
-            <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
-          </svg>
-          <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z" />
-          </svg>
-        </button>
         <button class="avatar" type="button" :aria-label="userProfile?.name ? `${t('app.profile')}: ${userProfile.name}` : t('app.profile')" :title="t('app.profile')" @click="userProfileOpen = true">
           {{ userProfile?.name.trim().charAt(0).toLocaleUpperCase() || '?' }}
         </button>
@@ -241,9 +225,11 @@ watch(locale, (value) => {
       :profile="userProfile"
       :teams="teamCatalog"
       :error="userProfileError"
+      :theme="theme"
       @cancel="cancelUserProfileEdit"
       @save="saveUserPreferences"
       @locale-change="previewProfileLocale"
+      @toggle-theme="toggleTheme"
     />
 
     <TeamSetupDialog
@@ -351,7 +337,7 @@ watch(locale, (value) => {
     />
     </template>
 
-    <footer>
+    <footer class="app-footer">
       <div class="footer-copy"><span class="footer-ball">◉</span> {{ t('app.footer') }} <span>·</span> Watchtower</div>
     </footer>
   </main>

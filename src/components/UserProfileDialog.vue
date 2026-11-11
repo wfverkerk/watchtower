@@ -9,12 +9,14 @@ const props = defineProps<{
   profile: UserProfile | null
   teams: ZoebasTeam[]
   error: string
+  theme: 'light' | 'dark'
 }>()
 
 const emit = defineEmits<{
   cancel: []
   save: [profile: UserProfile]
   localeChange: [locale: AppLocale]
+  toggleTheme: []
 }>()
 
 const { t, locale } = useLocale()
@@ -88,6 +90,10 @@ function save() {
             <span>{{ localeLabels[language] }}</span>
           </label>
         </fieldset>
+
+        <button class="match-sync-secondary profile-theme-toggle" type="button" @click="emit('toggleTheme')">
+          {{ theme === 'dark' ? t('app.switchToLight') : t('app.switchToDark') }}
+        </button>
 
         <p v-if="error" class="match-sync-error" role="alert">{{ error }}</p>
         <footer class="user-profile-footer">
