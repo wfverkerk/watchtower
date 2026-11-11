@@ -16,4 +16,12 @@ describe('messages', () => {
       expect(flattenKeys(messages[locale]).sort(), locale).toEqual(reference)
     }
   })
+
+  it('uses single-word foul labels in the picker', () => {
+    for (const locale of appLocales) {
+      for (const label of Object.values(messages[locale].picker.foulTypes)) {
+        expect(label).toMatch(/^\S+$/u)
+      }
+    }
+  })
 })

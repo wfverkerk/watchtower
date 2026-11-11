@@ -1,17 +1,16 @@
 <script setup lang="ts">
 import { useLocale } from '../i18n/useLocale'
-import type { Player, StatType, Team } from '../domain/game'
+import type { Player, StatType } from '../domain/game'
+import PlayerChoiceButton from './PlayerChoiceButton.vue'
 
-const { t, displayTeamName, displayPlayerName } = useLocale()
+const { t, displayPlayerName } = useLocale()
 
 defineProps<{
-  teams: Team[]
   teamId: string
-  selectedTeam: Team
   teamPlayers: Player[]
-  onCourtPlayers: Player[]
   gameStarted: boolean
   canStart: boolean
+  awaitingFirstPeriod: boolean
   selectedPlayerId: string
   newPlayerName: string
   newPlayerNumber: string
@@ -19,10 +18,10 @@ defineProps<{
   playerFormError: string
   lineupError: string
   playerHasActions: (playerId: string) => boolean
+  playerFouls: Record<string, number>
 }>()
 
 const emit = defineEmits<{
-  'update:teamId': [teamId: string]
   'update:selectedPlayerId': [playerId: string]
   'update:newPlayerName': [name: string]
   'update:newPlayerNumber': [number: string]
@@ -32,7 +31,7 @@ const emit = defineEmits<{
   'remove-player': [playerId: string]
   'toggle-pregame-player': [player: Player]
   'add-action': [type: StatType, value?: number]
-  'open-lineup-editor': []
+  'opponent-score': [value: 1 | 2 | 3]
 }>()
 
 function updateInput(event: Event, field: 'name' | 'number') {
@@ -52,18 +51,6 @@ function updateInput(event: Event, field: 'name' | 'number') {
       <span class="step-number">01</span>
     </div>
 
-    <div v-if="!gameStarted" class="team-switch" role="group" :aria-label="t('controls.chooseTeam')">
-      <button
-        v-for="team in teams"
-        :key="team.id"
-        :class="{ selected: teamId === team.id }"
-        @click="emit('update:teamId', team.id)"
-      >
-        <span class="team-dot" :class="team.id === 'home' ? 'orange' : 'blue'"></span>
-        {{ displayTeamName(team) }}
-      </button>
-    </div>
-
     <template v-if="!gameStarted">
       <div class="roster-heading">
         <p class="field-label">{{ t('controls.roster', { side: t(teamId === 'home' ? 'controls.homeSide' : 'controls.awaySide') }) }}</p>
@@ -71,15 +58,14 @@ function updateInput(event: Event, field: 'name' | 'number') {
       </div>
       <div v-if="teamPlayers.length" class="roster-list">
         <div v-for="player in teamPlayers" :key="player.id" class="roster-row">
-          <button
-            class="player-choice"
+          <PlayerChoiceButton
+            :player="player"
+            :foul-count="playerFouls[player.id] ?? 0"
             :class="{ selected: selectedPlayerId === player.id }"
             @click="emit('update:selectedPlayerId', player.id)"
           >
-            <span class="jersey-number">{{ player.jerseyNumber || '—' }}</span>
-            <span class="player-choice-name">{{ displayPlayerName(player.name) }}</span>
             <span class="court-status">{{ player.isOnCourt ? t('controls.court') : t('controls.bench') }}</span>
-          </button>
+          </PlayerChoiceButton>
           <button
             class="court-toggle"
             :class="{ active: player.isOnCourt }"
@@ -127,18 +113,11 @@ function updateInput(event: Event, field: 'name' | 'number') {
       <p v-if="playerFormError" class="form-error" role="alert">{{ playerFormError }}</p>
       <p v-if="lineupError" class="form-error" role="alert">{{ lineupError }}</p>
       <p class="roster-requirement">
-        {{ canStart ? t('controls.startReady') : t('controls.startRequirement') }}
+        {{ awaitingFirstPeriod ? t('controls.firstPeriodRequirement') : canStart ? t('controls.startReady') : t('controls.startRequirement') }}
       </p>
     </template>
 
     <template v-else>
-      <div class="live-team-label">
-        <span class="team-dot" :class="teamId === 'home' ? 'orange' : 'blue'"></span>
-        {{ displayTeamName(selectedTeam) }} · {{ t('controls.playersOnCourt', { count: onCourtPlayers.length }) }}
-        <button class="lineup-change-button" @click="emit('open-lineup-editor')">{{ t('controls.substitutions') }}</button>
-      </div>
-
-      <div class="divider"></div>
       <div class="action-group">
         <p class="field-label action-label">{{ t('controls.shots') }}</p>
         <div class="action-grid">
@@ -160,6 +139,19 @@ function updateInput(event: Event, field: 'name' | 'number') {
           <button class="action-card missed-shot" :aria-label="t('controls.threePointMissed')" @click="emit('add-action', 'missed_shot', 3)">
             <span class="action-icon missed-score-label">3</span>
           </button>
+        </div>
+      </div>
+      <div class="action-group">
+        <p class="field-label action-label">{{ t('scoreboard.opponentScore') }}</p>
+        <div class="action-grid" role="group" :aria-label="t('scoreboard.opponentScore')">
+          <button
+            v-for="value in ([1, 2, 3] as const)"
+            :key="value"
+            class="action-card opponent-scoring"
+            type="button"
+            :aria-label="t(value === 1 ? 'scoreboard.addOpponentPoint' : 'scoreboard.addOpponentPoints', { count: value })"
+            @click="emit('opponent-score', value)"
+          ><span class="action-icon">+{{ value }}</span></button>
         </div>
       </div>
       <div class="action-group">

@@ -17,6 +17,7 @@ const emit = defineEmits<{
   save: [profile: UserProfile]
   localeChange: [locale: AppLocale]
   themeChange: [theme: 'light' | 'dark']
+  reset: []
 }>()
 
 const { t, locale } = useLocale()
@@ -112,6 +113,7 @@ function save() {
         </fieldset>
 
         <p v-if="error" class="match-sync-error" role="alert">{{ error }}</p>
+        <button v-if="profile" class="user-profile-reset" type="button" @click="emit('reset')">{{ t('userProfile.reset') }}</button>
         <footer class="user-profile-footer">
           <button v-if="profile" class="match-sync-secondary" type="button" @click="emit('cancel')">{{ t('userProfile.cancel') }}</button>
           <button class="match-sync-primary" type="submit" :disabled="!canSave">

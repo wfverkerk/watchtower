@@ -3,10 +3,13 @@ import {
   canStartGame as isReadyToStart,
   createInitialGameState,
   getPlayerName,
+  getPlayerFouls,
+  getPeriodTeamFouls,
   getRecentActions,
   getScore,
   getTeamStats,
   parseGameState,
+  startNextPeriod,
   undoLastAction as undoActions,
   updateActionPlayer,
   updateScoringPlay,
@@ -17,7 +20,9 @@ import {
   type Player,
   type ShotLocation,
   type StatType,
+  type TurnoverType,
 } from '../domain/game'
+import { clockRemaining, formatClock, isYouthTeam, newPeriodClock, pauseClock, reconcileClock, startClock } from '../domain/gameClock'
 import { loadGameState, saveGameState } from '../services/gameStorage'
 import {
   createDefaultTeamProfiles,
@@ -58,8 +63,12 @@ export function useGameSession() {
   const pendingAssistId = ref<string | 'none' | null>(null)
   const pendingShotLocation = ref<ShotLocation | null>(null)
   const pendingFoulType = ref<FoulType | null>(null)
+  const pendingTurnoverType = ref<TurnoverType>('turnover')
   const editingActionId = ref<string | null>(null)
+  const scoreNotification = ref<{ id: number; teamId: string; value: 1 | 2 | 3 } | null>(null)
+  let scoreNotificationId = 0
   const lineupEditorOpen = ref(false)
+  const startingPeriod = ref(false)
   const draftCourtPlayerIds = ref<string[]>([])
   const teamProfiles = ref(createDefaultTeamProfiles())
   const selectedTeamProfileIds = ref<[string, string]>(['zoebas-x12-1', 'opponent-default'])
@@ -85,6 +94,8 @@ export function useGameSession() {
   let syncInProgress = false
   let syncRequested = false
   let syncTimer: number | undefined
+  let clockTimer: number | undefined
+  const clockNow = ref(Date.now())
 
   const selectedTeam = computed(() =>
     game.teams.find((team) => team.id === selectedTeamId.value) ?? game.teams[0],
@@ -96,11 +107,16 @@ export function useGameSession() {
     if (pendingAction.value?.type === 'foul') return teamPeople.value
     return editingActionId.value ? teamPlayers.value : onCourtPlayers.value
   })
-  const canStart = computed(() => teamSetupComplete.value && isReadyToStart(game))
-  const canCancelTeamSetup = computed(() => game.gameStarted || game.actions.length > 0)
-  const canStartNewMatch = computed(() => !game.gameStarted && game.actions.length > 0)
+  const canStart = computed(() => teamSetupComplete.value && (game.period === 0
+    ? game.players.filter((player) => player.teamId === game.teams[0].id && !player.isCoach).length >= 2
+    : isReadyToStart(game)))
+  const canCancelTeamSetup = computed(() => game.period !== undefined || game.gameStarted || game.actions.length > 0)
+  const canStartNewMatch = computed(() => !game.gameStarted && (game.period !== undefined || game.actions.length > 0))
   const scores = computed(() => getScore(game))
   const teamStats = computed(() => getTeamStats(game))
+  const playerFouls = computed(() => getPlayerFouls(game.actions))
+  const periodTeamFouls = computed(() => getPeriodTeamFouls(game))
+  const clockDisplay = computed(() => formatClock(game.clock ? clockRemaining(game.clock, clockNow.value) : 0))
   const recentActions = computed(() => getRecentActions(game, 8, t('app.unknownPlayer')))
   const playerFormError = computed(() => playerFormErrorKey.value ? t(playerFormErrorKey.value) : '')
   const lineupError = computed(() => lineupErrorKey.value ? t(lineupErrorKey.value) : '')
@@ -198,6 +214,10 @@ export function useGameSession() {
         players: game.players.map((player) => ({ ...player })),
         actions: game.actions.map((action) => ({ ...action })),
         gameStarted: game.gameStarted,
+        ...(game.matchInfo ? { matchInfo: { ...game.matchInfo } } : {}),
+        ...(game.period !== undefined ? { period: game.period } : {}),
+        ...(game.youth !== undefined ? { youth: game.youth } : {}),
+        ...(game.clock ? { clock: { ...game.clock } } : {}),
       }
       const created = await createSharedMatchRecord(gameData, displayName)
       saveMatchLink(created.link)
@@ -230,6 +250,11 @@ export function useGameSession() {
       game.players = sharedGame.players
       game.actions = sharedGame.actions
       game.gameStarted = sharedGame.gameStarted
+      game.period = sharedGame.period
+      game.matchInfo = sharedGame.matchInfo
+      game.youth = sharedGame.youth
+      game.clock = sharedGame.clock
+      initializeClock()
       saveMatchLink(joined.link)
       discardMatchEventsExcept(joined.link.matchId)
       matchLink.value = joined.link
@@ -261,25 +286,50 @@ export function useGameSession() {
     pendingAssistId.value = null
     pendingShotLocation.value = null
     pendingFoulType.value = null
+    pendingTurnoverType.value = 'turnover'
     editingActionId.value = null
-    if (game.gameStarted) selectedTeamId.value = 'home'
+    selectedTeamId.value = game.teams[0].id
   }
 
   function addAction(type: StatType, value = 1) {
     if (!game.gameStarted) return
-    selectedTeamId.value = 'home'
+    selectedTeamId.value = game.teams[0].id
     editingActionId.value = null
     pendingAction.value = { type, value }
     pendingScorerId.value = ''
     pendingAssistId.value = type === 'score' && value > 1 ? 'none' : null
     pendingShotLocation.value = null
-    pendingFoulType.value = null
+    pendingFoulType.value = type === 'foul' ? 'P' : null
+    pendingTurnoverType.value = 'turnover'
+  }
+
+  function notifyScore(teamId: string, value: 1 | 2 | 3) {
+    scoreNotification.value = { id: ++scoreNotificationId, teamId, value }
+  }
+
+  function addOpponentScore(value: 1 | 2 | 3) {
+    if (!game.gameStarted) return
+    game.actions.push({
+      id: crypto.randomUUID(),
+      playerId: null,
+      teamId: game.teams[1].id,
+      type: 'score',
+      value,
+      createdAt: Date.now(),
+      period: Math.max(1, game.period ?? 1),
+    })
+    notifyScore(game.teams[1].id, value)
+  }
+
+  function removeOpponentScore(action: GameAction) {
+    if (action.type !== 'score' || action.teamId !== game.teams[1].id || action.playerId !== null) return
+    game.actions = game.actions.filter((item) => item.id !== action.id)
   }
 
   function selectPlayer(playerId: string) {
     const action = pendingAction.value
     if (!action || !game.gameStarted) return
-    if (action.type === 'foul') {
+    if (action.type === 'foul' || action.type === 'turnover') {
       pendingScorerId.value = playerId
       return
     }
@@ -324,6 +374,27 @@ export function useGameSession() {
         value: action.value,
         createdAt: Date.now(),
         foulType: pendingFoulType.value,
+        period: Math.max(1, game.period ?? 1),
+      })
+    }
+    cancelPendingAction()
+  }
+
+  function finishTurnoverAction() {
+    if (pendingAction.value?.type !== 'turnover' || !pendingScorerId.value) return
+    if (editingActionId.value) {
+      game.actions = game.actions.map((item) => item.id === editingActionId.value
+        ? { ...item, playerId: pendingScorerId.value, turnoverType: pendingTurnoverType.value }
+        : item)
+    } else {
+      game.actions.push({
+        id: crypto.randomUUID(),
+        playerId: pendingScorerId.value,
+        teamId: selectedTeamId.value,
+        type: 'turnover',
+        value: pendingAction.value.value,
+        createdAt: Date.now(),
+        turnoverType: pendingTurnoverType.value,
       })
     }
     cancelPendingAction()
@@ -344,6 +415,7 @@ export function useGameSession() {
           value: action.value,
           createdAt: Date.now(),
         })
+        notifyScore(selectedTeamId.value, 1)
       }
       cancelPendingAction()
       return
@@ -374,6 +446,9 @@ export function useGameSession() {
         createdAt: Date.now(),
         createId: () => crypto.randomUUID(),
       })
+      if (!editingActionId.value && (action.value === 2 || action.value === 3)) {
+        notifyScore(selectedTeamId.value, action.value)
+      }
     } else if (editingActionId.value) {
       game.actions = game.actions.map((item) => {
         if (item.id !== editingActionId.value) return item
@@ -396,6 +471,7 @@ export function useGameSession() {
   }
 
   function editAction(action: GameAction) {
+    if (action.playerId === null) return
     selectedTeamId.value = action.teamId
     pendingAction.value = { type: action.type, value: action.value }
     editingActionId.value = action.id
@@ -410,6 +486,7 @@ export function useGameSession() {
       ? action.shotLocation ?? null
       : null
     pendingFoulType.value = action.type === 'foul' ? action.foulType ?? null : null
+    pendingTurnoverType.value = action.type === 'turnover' ? action.turnoverType ?? 'turnover' : 'turnover'
   }
 
   function undoLastAction() {
@@ -424,7 +501,10 @@ export function useGameSession() {
   ) {
     const homeProfile = profiles.find((profile) => profile.id === profileIds[0])
     const awayProfile = profiles.find((profile) => profile.id === profileIds[1])
-    if (!homeProfile?.catalogTeamId || !awayProfile || profileIds[0] === profileIds[1]) return false
+    if (!homeProfile?.catalogTeamId || !awayProfile || profileIds[0] === profileIds[1]) {
+      storageErrorKey.value = 'errors.invalidTeamSetup'
+      return false
+    }
 
     const matchHomeName = selectedMatch?.homeTeamName.toLocaleLowerCase() ?? ''
     const selectedTeamName = homeProfile.name.toLocaleLowerCase()
@@ -438,13 +518,13 @@ export function useGameSession() {
       { id: 'home', name: homeProfile.name.trim(), color: '#f26a36' },
       { id: 'away', name: opponentName, color: '#5d72d9' },
     ]
-    const players = [homeProfile, awayProfile].flatMap((profile, index) => [
+    const players = [homeProfile, awayProfile].flatMap<Player>((profile, index) => [
       ...profile.players.filter((player) => player.isParticipating).map((player) => ({
         id: `${teams[index].id}-${player.id}`,
         name: player.name.trim(),
         teamId: teams[index].id,
         jerseyNumber: player.jerseyNumber,
-        isOnCourt: player.isOnCourt,
+        isOnCourt: index === 1,
       })),
       ...(profile.coaches ?? []).filter((coach) => coach.isParticipating).map((coach) => ({
         id: `${teams[index].id}-coach-${coach.id}`,
@@ -468,16 +548,25 @@ export function useGameSession() {
       teams,
       players,
       actions: [],
-      gameStarted: true,
+      gameStarted: false,
+      period: 0,
+      youth: isYouthTeam(homeProfile.catalogTeamId) || isYouthTeam(homeProfile.name),
       ...(matchInfo ? { matchInfo } : {}),
     }
-    if (!isReadyToStart(nextGame)) return false
+    const homePlayers = players.filter((player) => player.teamId === 'home' && !player.isCoach)
+    if (homePlayers.length < 2
+      || homePlayers.some((player) => !player.name || !/^\d{1,2}$/.test(player.jerseyNumber))
+      || new Set(homePlayers.map((player) => Number(player.jerseyNumber))).size !== homePlayers.length
+      || !opponentName) {
+      storageErrorKey.value = 'errors.invalidTeamSetup'
+      return false
+    }
 
     try {
       saveTeamProfiles(profiles)
       saveTeamProfileSelection(profileIds)
       saveMatchLink(null)
-      if (storageErrorKey.value === 'errors.loadTeams' || storageErrorKey.value === 'errors.saveTeams') {
+      if (storageErrorKey.value === 'errors.loadTeams' || storageErrorKey.value === 'errors.saveTeams' || storageErrorKey.value === 'errors.invalidTeamSetup') {
         storageErrorKey.value = ''
       }
     } catch (error) {
@@ -496,9 +585,10 @@ export function useGameSession() {
     matchLink.value = null
     matchSyncStatus.value = 'local'
     matchSyncError.value = ''
-    Object.assign(game, nextGame)
+    Object.assign(game, nextGame, { matchInfo, clock: undefined })
     selectedTeamId.value = 'home'
-    selectedPlayerId.value = players.find((player) => player.teamId === 'home' && player.isOnCourt)?.id ?? ''
+    selectedPlayerId.value = ''
+    beginPeriod()
     return true
   }
 
@@ -516,7 +606,7 @@ export function useGameSession() {
         player.isParticipating = false
         player.isOnCourt = false
       }
-      for (const player of game.players.filter((item) => item.teamId === teamId)) {
+      for (const player of game.players.filter((item) => item.teamId === teamId && !item.isCoach)) {
         const profilePlayerId = player.id.startsWith(`${teamId}-`)
           ? player.id.slice(teamId.length + 1)
           : player.id
@@ -557,8 +647,16 @@ export function useGameSession() {
   function toggleGame() {
     if (!game.gameStarted) {
       if (!canStart.value) return
+      if (game.period === 0) {
+        beginPeriod()
+        return
+      }
       if (!updateSelectedProfilesFromGame()) return
       selectedTeamId.value = 'home'
+    }
+    if (game.gameStarted && game.clock) {
+      updateClock()
+      game.clock = pauseClock(game.clock, Date.now())
     }
     game.gameStarted = !game.gameStarted
   }
@@ -617,7 +715,13 @@ export function useGameSession() {
 
   function removePlayer(playerId: string) {
     if (game.actions.some((action) => action.playerId === playerId)) return
+    const player = game.players.find((item) => item.id === playerId)
+    if (game.period !== 0 && player?.isOnCourt && teamPlayers.value.filter((item) => item.isOnCourt).length <= 2) {
+      lineupErrorKey.value = 'errors.minOnCourt'
+      return
+    }
     game.players = game.players.filter((player) => player.id !== playerId)
+    lineupErrorKey.value = ''
     if (selectedPlayerId.value === playerId) selectedPlayerId.value = ''
     if (editingPlayerId.value === playerId) cancelPlayerEdit()
   }
@@ -626,6 +730,10 @@ export function useGameSession() {
     const activeCount = teamPlayers.value.filter((item) => item.isOnCourt).length
     if (!player.isOnCourt && activeCount >= 5) {
       lineupErrorKey.value = 'errors.maxOnCourt'
+      return
+    }
+    if (player.isOnCourt && activeCount <= 2 && game.period !== 0) {
+      lineupErrorKey.value = 'errors.minOnCourt'
       return
     }
     player.isOnCourt = !player.isOnCourt
@@ -637,11 +745,24 @@ export function useGameSession() {
   }
 
   function openLineupEditor() {
+    selectedTeamId.value = game.teams[0].id
+    startingPeriod.value = false
+    lineupErrorKey.value = ''
+    draftCourtPlayerIds.value = onCourtPlayers.value.map((player) => player.id)
+    lineupEditorOpen.value = true
+  }
+
+  function beginPeriod() {
+    updateClock()
+    selectedTeamId.value = game.teams[0].id
+    startingPeriod.value = true
+    lineupErrorKey.value = ''
     draftCourtPlayerIds.value = onCourtPlayers.value.map((player) => player.id)
     lineupEditorOpen.value = true
   }
 
   function toggleDraftCourtPlayer(playerId: string) {
+    lineupErrorKey.value = ''
     if (draftCourtPlayerIds.value.includes(playerId)) {
       draftCourtPlayerIds.value = draftCourtPlayerIds.value.filter((id) => id !== playerId)
     } else if (draftCourtPlayerIds.value.length < 5) {
@@ -650,9 +771,19 @@ export function useGameSession() {
   }
 
   function saveLineup() {
-    if (draftCourtPlayerIds.value.length !== 5) return
-    for (const player of teamPlayers.value) {
-      player.isOnCourt = draftCourtPlayerIds.value.includes(player.id)
+    if (draftCourtPlayerIds.value.length < 2 || draftCourtPlayerIds.value.length > 5) return
+    if (startingPeriod.value) {
+      if (!startNextPeriod(game, draftCourtPlayerIds.value)) {
+        lineupErrorKey.value = 'errors.invalidPeriodLineup'
+        return
+      }
+      game.clock = newPeriodClock(game.period ?? 1, game.youth ?? false)
+      clockNow.value = Date.now()
+      startingPeriod.value = false
+    } else {
+      for (const player of teamPlayers.value) {
+        player.isOnCourt = draftCourtPlayerIds.value.includes(player.id)
+      }
     }
     if (pendingScorerId.value && !draftCourtPlayerIds.value.includes(pendingScorerId.value)) {
       cancelPendingAction()
@@ -662,7 +793,38 @@ export function useGameSession() {
 
   function cancelLineupEdit() {
     lineupEditorOpen.value = false
+    startingPeriod.value = false
     draftCourtPlayerIds.value = []
+  }
+
+  function initializeClock() {
+    const period = Math.max(1, game.period ?? 1)
+    if (game.youth === undefined) {
+      const profile = teamProfiles.value.find((item) => item.id === selectedTeamProfileIds.value[0]
+        && item.name.trim().toLocaleLowerCase() === game.teams[0].name.trim().toLocaleLowerCase())
+      game.youth = isYouthTeam(profile?.catalogTeamId ?? '') || isYouthTeam(game.teams[0].name)
+    }
+    game.actions = game.actions.map((action) => action.type === 'foul' && action.period === undefined
+      ? { ...action, period }
+      : action)
+    if (!game.clock && game.period !== 0) game.clock = newPeriodClock(period, game.youth)
+    updateClock()
+  }
+
+  function updateClock() {
+    const now = Date.now()
+    clockNow.value = now
+    if (!game.clock) return
+    const next = reconcileClock(game.clock, game.period ?? 1, game.youth ?? false, now)
+    if (next !== game.clock) game.clock = next
+  }
+
+  function toggleClock() {
+    updateClock()
+    if (!game.clock || !game.gameStarted) return
+    game.clock = game.clock.deadline === null
+      ? startClock(game.clock, clockNow.value)
+      : pauseClock(game.clock, clockNow.value)
   }
 
   onMounted(async () => {
@@ -723,7 +885,7 @@ export function useGameSession() {
       }
       if (!needsLegacyMigration) {
         teamSetupComplete.value = hasSavedTeamProfiles() && hasSavedSelection
-        const hasExistingGame = !!loadedGame && (loadedGame.gameStarted || loadedGame.actions.length > 0)
+        const hasExistingGame = !!loadedGame && (loadedGame.period !== undefined || loadedGame.gameStarted || loadedGame.actions.length > 0)
         teamSetupOpen.value = !hasExistingGame
       }
     } catch (error) {
@@ -733,6 +895,7 @@ export function useGameSession() {
       teamSetupComplete.value = false
       teamSetupOpen.value = true
     }
+    if (loadedGame) initializeClock()
 
     try {
       matchLink.value = loadMatchLink()
@@ -747,6 +910,7 @@ export function useGameSession() {
     initializing = false
     if (matchLink.value && matchSyncConfigured && navigator.onLine) scheduleMatchSync()
     teamSetupInitializing.value = false
+    clockTimer = window.setInterval(updateClock, 250)
 
     try {
       teamCatalog.value = await loadZoebasTeams()
@@ -832,6 +996,7 @@ export function useGameSession() {
   onUnmounted(() => {
     window.removeEventListener('online', handleOnline)
     if (syncTimer !== undefined) window.clearTimeout(syncTimer)
+    if (clockTimer !== undefined) window.clearInterval(clockTimer)
   })
 
   return {
@@ -845,7 +1010,11 @@ export function useGameSession() {
     canStart,
     canStartNewMatch,
     scores,
+    scoreNotification,
     teamStats,
+    playerFouls,
+    periodTeamFouls,
+    clockDisplay,
     recentActions,
     pendingAction,
     pendingScorerId,
@@ -853,6 +1022,7 @@ export function useGameSession() {
     pendingShotLocation,
     editingActionId,
     lineupEditorOpen,
+    startingPeriod,
     draftCourtPlayerIds,
     teamProfiles,
     selectedTeamProfileIds,
@@ -875,15 +1045,20 @@ export function useGameSession() {
     matchSyncConfigured,
     playerName,
     addAction,
+    addOpponentScore,
+    removeOpponentScore,
     selectPlayer,
     pendingFoulType,
+    pendingTurnoverType,
     finishFoulAction,
+    finishTurnoverAction,
     selectScorer,
     finishShotAction,
     cancelPendingAction,
     editAction,
     undoLastAction,
     toggleGame,
+    toggleClock,
     applyTeamSetup,
     openTeamSetup,
     cancelTeamSetup,
@@ -894,6 +1069,7 @@ export function useGameSession() {
     togglePregamePlayer,
     playerHasActions,
     openLineupEditor,
+    beginPeriod,
     toggleDraftCourtPlayer,
     saveLineup,
     cancelLineupEdit,

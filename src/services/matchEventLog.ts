@@ -1,4 +1,4 @@
-import type { GameAction, ShotLocation } from '../domain/game'
+import { isTurnoverType, type GameAction, type ShotLocation } from '../domain/game'
 
 export const matchLinkStorageKey = 'watchtower-shared-match-v1'
 export const matchEventsStorageKey = 'watchtower-match-events-v1'
@@ -61,7 +61,7 @@ function isShotLocation(value: unknown): value is ShotLocation {
 function isGameAction(value: unknown): value is GameAction {
   return isRecord(value)
     && typeof value.id === 'string'
-    && typeof value.playerId === 'string'
+    && (typeof value.playerId === 'string' || (value.playerId === null && value.type === 'score'))
     && typeof value.teamId === 'string'
     && typeof value.type === 'string'
     && statTypes.has(value.type)
@@ -71,6 +71,8 @@ function isGameAction(value: unknown): value is GameAction {
     && Number.isFinite(value.createdAt)
     && (value.groupId === undefined || typeof value.groupId === 'string')
     && (value.shotLocation === undefined || isShotLocation(value.shotLocation))
+    && (value.period === undefined || (typeof value.period === 'number' && Number.isSafeInteger(value.period) && value.period >= 1))
+    && (value.turnoverType === undefined || (value.type === 'turnover' && isTurnoverType(value.turnoverType)))
 }
 
 function isMatchEvent(value: unknown): value is MatchEvent {
