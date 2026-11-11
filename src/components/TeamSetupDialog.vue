@@ -48,7 +48,6 @@ const matches = ref<ZoebasMatch[]>([])
 const matchLoading = ref(false)
 const matchError = ref('')
 const selectedMatchId = ref('')
-const manualMatchSelected = ref(false)
 const manualOpponentName = ref('')
 const newCoachName = ref('')
 const newCoachRole = ref<TeamProfileCoach['role']>('coach')
@@ -67,7 +66,7 @@ const upcomingMatches = computed(() => matches.value.filter((match) =>
 const pastMatches = computed(() => matches.value.filter((match) =>
   new Date(`${match.date}T${match.startTime}:00`).getTime() < Date.now(),
 ))
-const hasMatchSelection = computed(() => !!selectedMatch.value || (manualMatchSelected.value && !!manualOpponentName.value.trim()))
+const hasMatchSelection = computed(() => !!selectedMatch.value || !!manualOpponentName.value.trim())
 
 watch([draftProfiles, selected, selectedCatalogTeamId], () => {
   if (!selectedCatalogTeamId.value || draftLoadFailed) return
@@ -146,13 +145,11 @@ function selectCatalogTeam(teamId: string) {
 function selectMatch(match: ZoebasMatch) {
   if (match.status === 'Cancelled') return
   selectedMatchId.value = match.id
-  manualMatchSelected.value = false
   manualOpponentName.value = ''
 }
 
-function chooseManualMatch() {
+function selectManualMatch() {
   selectedMatchId.value = ''
-  manualMatchSelected.value = true
 }
 
 function formatMatchDate(match: ZoebasMatch) {
@@ -161,12 +158,13 @@ function formatMatchDate(match: ZoebasMatch) {
 }
 
 let matchRequest = 0
-watch([selectedCatalogTeamId, () => props.catalogTeams], async ([teamId]) => {
+watch([selectedCatalogTeamId, () => props.catalogTeams], async ([teamId], previous) => {
   const request = ++matchRequest
   matches.value = []
-  selectedMatchId.value = ''
-  manualMatchSelected.value = false
-  manualOpponentName.value = ''
+  if (!previous || teamId !== previous[0]) {
+    selectedMatchId.value = ''
+    manualOpponentName.value = ''
+  }
   matchError.value = ''
   matchLoading.value = false
   if (!props.catalogTeams.length) return
@@ -180,8 +178,6 @@ watch([selectedCatalogTeamId, () => props.catalogTeams], async ([teamId]) => {
     const fetchedMatches = await loadZoebasMatches(team.sourceTeamId)
     if (request !== matchRequest) return
     matches.value = fetchedMatches
-    const suggested = getRecommendedMatch(fetchedMatches)
-    if (suggested && !manualMatchSelected.value) selectedMatchId.value = suggested.id
   } catch (error) {
     console.error('Failed to load the Zoebas match schedule.', error)
     if (request === matchRequest) matchError.value = t('errors.loadMatchSchedule')
@@ -328,6 +324,10 @@ function stepCompleted(index: number) {
         </template>
         <section v-if="step === 2" class="team-setup-matches" aria-labelledby="team-match-heading">
           <h3 id="team-match-heading">{{ t('teamSetup.chooseMatch') }}</h3>
+          <label class="team-setup-field">
+            <span>{{ t('teamSetup.manualOpponent') }}</span>
+            <input v-model="manualOpponentName" type="text" maxlength="60" :placeholder="t('teamSetup.manualOpponent')" @input="selectManualMatch">
+          </label>
           <p v-if="matchLoading" class="team-setup-hint" role="status">{{ t('teamSetup.loadingMatches') }}</p>
           <p v-if="matchError" class="team-setup-error" role="alert">{{ matchError }}</p>
           <template v-else-if="!matchLoading && matches.length">
@@ -369,13 +369,6 @@ function stepCompleted(index: number) {
             </button>
           </template>
           <p v-else-if="!matchLoading && !matchError" class="team-setup-hint">{{ t('teamSetup.noMatches') }}</p>
-          <button class="team-setup-manual-match" type="button" :aria-pressed="manualMatchSelected" @click="chooseManualMatch">
-            {{ t('teamSetup.manualMatch') }}
-          </button>
-          <label v-if="manualMatchSelected" class="team-setup-field">
-            <span>{{ t('teamSetup.manualOpponent') }}</span>
-            <input v-model="manualOpponentName" type="text" maxlength="60" :placeholder="t('teamSetup.manualOpponent')">
-          </label>
           <p v-if="!hasMatchSelection" class="team-setup-error">{{ t('teamSetup.chooseMatchRequired') }}</p>
         </section>
 
