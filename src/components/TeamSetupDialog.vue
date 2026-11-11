@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useLocale } from '../i18n/useLocale'
 import { loadTeamSetupDraft, saveTeamSetupDraft, type TeamProfile, type TeamProfileCoach, type TeamProfilePlayer, type TeamSetupDraft } from '../services/teamProfiles'
 import { loadJerseyNumbers, reconcileJerseyNumbers, saveJerseyNumbers, type JerseyChange, type JerseyNumber } from '../services/jerseyNumbers'
@@ -26,6 +26,7 @@ const { t } = useLocale()
 const steps = ['stepTeam', 'stepPlayers', 'stepOpponent'] as const
 const step = ref(0)
 const furthestStep = ref(0)
+const stepContent = ref<HTMLElement | null>(null)
 const draftStorageError = ref('')
 let draftLoadFailed = false
 let restoredDraft: TeamSetupDraft | null = null
@@ -59,6 +60,7 @@ const catalogPlayerIds = ref<string[]>([])
 const initializedTeams = new Set<string>()
 const newCoachName = ref('')
 const newCoachRole = ref<TeamProfileCoach['role']>('coach')
+const availableTeams = computed(() => props.catalogTeams.filter((team) => team.playerNames.length > 0))
 const currentProfile = computed(() =>
   draftProfiles.value.find((profile) => profile.id === selected.value[0]) ?? null,
 )
@@ -300,7 +302,7 @@ function participantError(profile: TeamProfile | undefined) {
 }
 
 const currentStepError = computed(() => step.value === 1 ? participantError(currentProfile.value ?? undefined) : '')
-const validTeam = computed(() => !props.catalogError && !jerseyLoading.value && !jerseyError.value && !!props.catalogTeams.find((team) => team.id === selectedCatalogTeamId.value))
+const validTeam = computed(() => !props.catalogError && !jerseyLoading.value && !jerseyError.value && !!availableTeams.value.find((team) => team.id === selectedCatalogTeamId.value))
 const canAdvance = computed(() => {
   if (step.value === 0) return validTeam.value
   if (step.value === 1) return validTeam.value && !currentStepError.value
@@ -337,6 +339,7 @@ function canNavigateTo(index: number) {
 
 async function navigateTo(index: number) {
   if (!canNavigateTo(index)) return
+  const movingForward = index > step.value
   if (step.value === 1 && index === 2) {
     const team = props.catalogTeams.find((item) => item.id === selectedCatalogTeamId.value)
     if (!team || !currentProfile.value) return
@@ -367,6 +370,11 @@ async function navigateTo(index: number) {
   }
   step.value = index
   furthestStep.value = Math.max(furthestStep.value, index)
+  if (movingForward) {
+    await nextTick()
+    if (stepContent.value) stepContent.value.scrollTop = 0
+    if (props.home) window.scrollTo(0, 0)
+  }
 }
 
 function stepCompleted(index: number) {
@@ -411,12 +419,13 @@ function stepCompleted(index: number) {
         ><span class="team-setup-step-number" aria-hidden="true">{{ stepCompleted(index) && step !== index ? '✓' : index + 1 }}</span><span class="team-setup-step-label">{{ index === 0 && validTeam ? currentProfile?.name : t(`teamSetup.${wizardStep}`) }}</span></button>
       </div>
 
-      <div class="team-setup-team">
+      <div ref="stepContent" class="team-setup-team">
         <template v-if="step === 0">
           <h3>{{ t('teamSetup.chooseClubTeam') }}</h3>
           <p v-if="catalogLoading" class="team-setup-hint" role="status">{{ t('teamSetup.loadingClubTeams') }}</p>
+          <p v-else-if="!catalogError && !availableTeams.length" class="team-setup-hint" role="status">{{ t('teamSetup.noTeamsWithPlayers') }}</p>
           <div class="team-setup-team-grid" role="group" :aria-label="t('teamSetup.chooseClubTeam')">
-            <button v-for="team in catalogTeams" :key="team.id" type="button"
+            <button v-for="team in availableTeams" :key="team.id" type="button"
               :aria-pressed="selectedCatalogTeamId === team.id" :disabled="jerseySaving"
               @click="selectedCatalogTeamId = team.id">{{ team.name }}</button>
           </div>

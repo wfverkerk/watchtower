@@ -26,6 +26,12 @@ export type Player = {
   isCoach?: boolean
   coachRole?: 'coach' | 'assistant'
 }
+
+export function getCoachMarker(player: Player | undefined, playerId: string): 'C' | 'AC' | null {
+  if (player?.isCoach) return player.coachRole === 'assistant' ? 'AC' : 'C'
+  return !player && playerId.startsWith('coach-') ? 'C' : null
+}
+
 export type ShotLocation =
   | { area: 'opponent'; x: number; y: number }
   | { area: 'own' }

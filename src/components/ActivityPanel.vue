@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { getActionTranslation } from '../i18n/actionLabel'
 import { getIntlLocale, isAppLocale, useLocale } from '../i18n/useLocale'
-import type { GameAction, RecentAction, Team, TeamStats } from '../domain/game'
+import { getCoachMarker, type GameAction, type Player, type RecentAction, type Team, type TeamStats } from '../domain/game'
 import type { MatchTimelineEvent, TimelinePlayer } from '../domain/matchTimeline'
 import { regulationPeriods } from '../domain/gameClock'
 import FoulMarker from './FoulMarker.vue'
@@ -15,10 +15,10 @@ const props = defineProps<{
   timeline: MatchTimelineEvent[]
   youth: boolean
   teamStats: TeamStats[]
+  players: Player[]
   playerName: (playerId: string) => string
   canUndo: boolean
   playerFouls: Record<string, number>
-  playerIsCoach: (playerId: string) => boolean
 }>()
 
 const emit = defineEmits<{
@@ -56,6 +56,11 @@ function actionPlayer(action: GameAction) {
   if (action.playerId !== null) return props.playerName(action.playerId)
   const team = props.teams.find((item) => item.id === action.teamId)
   return team ? displayTeamName(team) : t('teamSetup.away')
+}
+
+function actionCoachMarker(action: GameAction) {
+  if (action.playerId === null) return null
+  return getCoachMarker(props.players.find((player) => player.id === action.playerId), action.playerId)
 }
 
 function actionLabel(action: GameAction) {
@@ -103,7 +108,8 @@ function actionIcon(action: GameAction) {
         <span class="activity-action-icon" :class="`activity-action-icon-${item.action.type}`" aria-hidden="true">{{ actionIcon(item.action) }}</span>
         <div class="activity-description">
           <strong>
-            {{ actionPlayer(item.action) }} <FoulMarker v-if="item.action.playerId !== null && !playerIsCoach(item.action.playerId)" :count="playerFouls[item.action.playerId] ?? 0" /><template v-if="item.assistName">&nbsp;<span class="assist-attribution">{{ t('activity.assistAttribution', { name: displayPlayerName(item.assistName) }) }}</span></template>
+            <span v-if="actionCoachMarker(item.action)" class="activity-coach-marker" :title="t(actionCoachMarker(item.action) === 'AC' ? 'picker.assistantCoach' : 'picker.coach')">{{ actionCoachMarker(item.action) }}</span>
+            {{ actionPlayer(item.action) }} <FoulMarker v-if="item.action.playerId !== null && !actionCoachMarker(item.action)" :count="playerFouls[item.action.playerId] ?? 0" /><template v-if="item.assistName">&nbsp;<span class="assist-attribution">{{ t('activity.assistAttribution', { name: displayPlayerName(item.assistName) }) }}</span></template>
           </strong>
           <span>{{ actionLabel(item.action) }}</span>
         </div>
