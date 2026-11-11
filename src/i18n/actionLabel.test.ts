@@ -33,6 +33,20 @@ describe('localization', () => {
     expect(getActionTranslation({ type: 'score', value: 5 }, 'cs').key).toBe('actions.scoreOther')
   })
 
+  it('labels each foul type in the activity feed', () => {
+    const expected = {
+      P: 'actions.personalFoul',
+      TF: 'actions.technicalFoul',
+      U: 'actions.unsportsmanlikeFoul',
+      D: 'actions.disqualifyingFoul',
+    } as const
+
+    for (const [foulType, key] of Object.entries(expected)) {
+      expect(getActionTranslation({ type: 'foul', value: 1, foulType: foulType as keyof typeof expected }, 'nl').key).toBe(key)
+    }
+    expect(getActionTranslation({ type: 'foul', value: 1 }, 'nl').key).toBe('actions.foul')
+  })
+
   it('creates default team and player names in the selected language', () => {
     expect(createInitialGameState('en').teams.map((team) => team.name)).toEqual(['Home', 'Away'])
     expect(createInitialGameState('cs').players[0].name).toBe('Hráč 1')

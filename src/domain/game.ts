@@ -11,6 +11,7 @@ export type StatType =
   | 'foul'
   | 'block'
   | 'steal'
+export type FoulType = 'P' | 'TF' | 'U' | 'D'
 
 export type Team = { id: string; name: string; color: string }
 export type Player = {
@@ -19,6 +20,8 @@ export type Player = {
   teamId: string
   jerseyNumber: string
   isOnCourt: boolean
+  isCoach?: boolean
+  coachRole?: 'coach' | 'assistant'
 }
 export type ShotLocation =
   | { area: 'opponent'; x: number; y: number }
@@ -32,12 +35,20 @@ export type GameAction = {
   createdAt: number
   groupId?: string
   shotLocation?: ShotLocation
+  foulType?: FoulType
+}
+export type GameMatchInfo = {
+  id: string
+  date: string
+  startTime: string
+  venue: string
 }
 export type GameState = {
   teams: Team[]
   players: Player[]
   actions: GameAction[]
   gameStarted: boolean
+  matchInfo?: GameMatchInfo
 }
 export type TeamStats = {
   teamId: string
@@ -65,6 +76,7 @@ const statTypes: StatType[] = [
   'block',
   'steal',
 ]
+const foulTypes: FoulType[] = ['P', 'TF', 'U', 'D']
 
 export function createInitialGameState(locale: AppLocale = 'nl'): GameState {
   const names = {
@@ -111,6 +123,10 @@ function isShotLocation(value: unknown): value is ShotLocation {
     && value.y <= 100
 }
 
+function isFoulType(value: unknown): value is FoulType {
+  return typeof value === 'string' && foulTypes.includes(value as FoulType)
+}
+
 function isUnusedLegacyDemoRoster(players: unknown[], actions: unknown[]) {
   return actions.length === 0
     && players.length === 10
@@ -146,7 +162,12 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
   const rawPlayers = value.players
   const rawActions = value.actions
   if (isUnusedLegacyDemoRoster(rawPlayers, rawActions)) {
-    return { ...createInitialGameState(locale), teams, gameStarted: value.gameStarted }
+    return {
+      ...createInitialGameState(locale),
+      teams,
+      gameStarted: value.gameStarted,
+      ...(isGameMatchInfo(value.matchInfo) ? { matchInfo: value.matchInfo } : {}),
+    }
   }
 
   const courtCounts = new Map<string, number>()
@@ -170,6 +191,8 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       teamId: player.teamId,
       jerseyNumber: typeof player.jerseyNumber === 'string' ? player.jerseyNumber : '',
       isOnCourt,
+      ...(player.isCoach === true ? { isCoach: true } : {}),
+      ...(player.coachRole === 'coach' || player.coachRole === 'assistant' ? { coachRole: player.coachRole } : {}),
     }
   })
 
@@ -185,7 +208,8 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       || typeof action.createdAt !== 'number'
       || !Number.isFinite(action.createdAt)
       || (action.groupId !== undefined && typeof action.groupId !== 'string')
-      || (action.shotLocation !== undefined && !isShotLocation(action.shotLocation))) {
+      || (action.shotLocation !== undefined && !isShotLocation(action.shotLocation))
+      || (action.foulType !== undefined && (action.type !== 'foul' || !isFoulType(action.foulType)))) {
       throw new Error('Opgeslagen wedstrijdacties zijn ongeldig.')
     }
 
@@ -198,15 +222,35 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       createdAt: action.createdAt,
       ...(typeof action.groupId === 'string' ? { groupId: action.groupId } : {}),
       ...(isShotLocation(action.shotLocation) ? { shotLocation: action.shotLocation } : {}),
+      ...(isFoulType(action.foulType) ? { foulType: action.foulType } : {}),
     }
   })
 
-  return { teams, players, actions, gameStarted: value.gameStarted }
+  if (value.matchInfo !== undefined && !isGameMatchInfo(value.matchInfo)) {
+    throw new Error('Opgeslagen wedstrijdinformatie is ongeldig.')
+  }
+  return {
+    teams,
+    players,
+    actions,
+    gameStarted: value.gameStarted,
+    ...(isGameMatchInfo(value.matchInfo) ? { matchInfo: value.matchInfo } : {}),
+  }
+}
+
+function isGameMatchInfo(value: unknown): value is GameMatchInfo {
+  if (!isRecord(value)) return false
+  return typeof value.id === 'string'
+    && typeof value.date === 'string'
+    && /^\d{4}-\d{2}-\d{2}$/.test(value.date)
+    && typeof value.startTime === 'string'
+    && /^\d{2}:\d{2}$/.test(value.startTime)
+    && typeof value.venue === 'string'
 }
 
 export function canStartGame(game: GameState) {
   return game.teams.every((team) => {
-    const teamPlayers = game.players.filter((player) => player.teamId === team.id)
+    const teamPlayers = game.players.filter((player) => player.teamId === team.id && !player.isCoach)
     return teamPlayers.filter((player) => player.isOnCourt).length === 5
       && teamPlayers.every((player) => player.jerseyNumber !== '')
   })
@@ -287,7 +331,7 @@ export function updateScoringPlay(
     scorerId: string
     value: number
     assistPlayerId: string | null
-    shotLocation: ShotLocation
+    shotLocation?: ShotLocation
     createdAt: number
     createId: () => string
   },
@@ -308,11 +352,12 @@ export function updateScoringPlay(
       if (action.id !== existingScore.id) return action
       const score = { ...action }
       delete score.groupId
+      delete score.shotLocation
       return {
         ...score,
         playerId: input.scorerId,
         value: input.value,
-        shotLocation: input.shotLocation,
+        ...(input.shotLocation ? { shotLocation: input.shotLocation } : {}),
         ...(groupId ? { groupId } : {}),
       }
     })
@@ -324,7 +369,7 @@ export function updateScoringPlay(
       type: 'score',
       value: input.value,
       createdAt: input.createdAt,
-      shotLocation: input.shotLocation,
+      ...(input.shotLocation ? { shotLocation: input.shotLocation } : {}),
       ...(groupId ? { groupId } : {}),
     })
   }

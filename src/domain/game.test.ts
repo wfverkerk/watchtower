@@ -111,6 +111,37 @@ describe('game domain rules', () => {
     expect(withoutAssist[0]).not.toHaveProperty('groupId')
   })
 
+  it('records a score without a shot location and clears a previous location when omitted', () => {
+    const actions = updateScoringPlay([], {
+      teamId: 'home',
+      scorerId: 'home-1',
+      value: 2,
+      assistPlayerId: null,
+      createdAt: 50,
+      createId: () => 'new-score',
+    })
+    expect(actions[0]).not.toHaveProperty('shotLocation')
+
+    const updated = updateScoringPlay([
+      makeAction({
+        id: 'existing-score',
+        type: 'score',
+        teamId: 'home',
+        playerId: 'home-1',
+        shotLocation: { area: 'own' },
+      }),
+    ], {
+      actionId: 'existing-score',
+      teamId: 'home',
+      scorerId: 'home-2',
+      value: 2,
+      assistPlayerId: null,
+      createdAt: 60,
+      createId: () => 'unused',
+    })
+    expect(updated[0]).not.toHaveProperty('shotLocation')
+  })
+
   it('undoes a linked score-and-assist play as one action', () => {
     const actions = [
       makeAction({ id: 'prior', type: 'foul', teamId: 'home', playerId: 'home-1' }),
@@ -129,6 +160,27 @@ describe('game domain rules', () => {
     expect(canStartGame(game)).toBe(false)
   })
 
+  it('does not count selected coaches as roster players when starting a game', () => {
+    const game = createInitialGameState()
+    game.players.push({
+      id: 'home-coach-1',
+      name: 'Willem',
+      teamId: 'home',
+      jerseyNumber: '',
+      isOnCourt: false,
+      isCoach: true,
+      coachRole: 'assistant',
+    })
+
+    expect(canStartGame(game)).toBe(true)
+    expect(parseGameState(game).players[parseGameState(game).players.length - 1]).toMatchObject({
+      id: 'home-coach-1',
+      name: 'Willem',
+      isCoach: true,
+      coachRole: 'assistant',
+    })
+  })
+
   it('normalizes older saved rosters and rejects malformed game data', () => {
     const legacy = createInitialGameState()
     const oldState = {
@@ -138,6 +190,19 @@ describe('game domain rules', () => {
 
     expect(parseGameState(oldState).players.filter((player) => player.isOnCourt)).toHaveLength(10)
     expect(() => parseGameState({ ...oldState, teams: [] })).toThrow('precies twee')
+  })
+
+  it('preserves selected schedule match details in saved game state', () => {
+    const game = createInitialGameState()
+    game.matchInfo = {
+      id: 'match-42',
+      date: '2026-11-11',
+      startTime: '18:15',
+      venue: 'Sporthal',
+    }
+
+    expect(parseGameState(game).matchInfo).toEqual(game.matchInfo)
+    expect(() => parseGameState({ ...game, matchInfo: { ...game.matchInfo, date: 'tomorrow' } })).toThrow('wedstrijdinformatie')
   })
 
   it('preserves shot locations and rejects invalid court coordinates when loading', () => {
@@ -154,6 +219,28 @@ describe('game domain rules', () => {
     expect(() => parseGameState({
       ...game,
       actions: [{ ...game.actions[0], shotLocation: { area: 'opponent', x: 101, y: 50 } }],
+    })).toThrow('Opgeslagen wedstrijdacties zijn ongeldig.')
+  })
+
+  it('preserves foul types and remains compatible with older foul actions', () => {
+    const game = createInitialGameState()
+    game.actions.push(makeAction({
+      type: 'foul',
+      teamId: 'home',
+      playerId: 'coach-home',
+      foulType: 'TF',
+    }))
+
+    expect(parseGameState(game).actions[0]).toMatchObject({
+      type: 'foul',
+      playerId: 'coach-home',
+      foulType: 'TF',
+    })
+    const legacy = { ...game, actions: [{ ...game.actions[0], foulType: undefined }] }
+    expect(parseGameState(legacy).actions[0]).not.toHaveProperty('foulType')
+    expect(() => parseGameState({
+      ...game,
+      actions: [{ ...game.actions[0], foulType: 'invalid' }],
     })).toThrow('Opgeslagen wedstrijdacties zijn ongeldig.')
   })
 

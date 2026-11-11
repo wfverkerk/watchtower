@@ -9,11 +9,13 @@ defineProps<{
   scores: { id: string; points: number }[]
   gameStarted: boolean
   canStart: boolean
+  canStartNewMatch: boolean
 }>()
 
 const emit = defineEmits<{
   'team-name-change': [teamId: string, name: string]
   'toggle-game': []
+  'new-match': []
 }>()
 </script>
 
@@ -42,6 +44,9 @@ const emit = defineEmits<{
       >
         {{ gameStarted ? t('scoreboard.pause') : t('scoreboard.start') }}
         <span aria-hidden="true">{{ gameStarted ? 'Ⅱ' : '▶' }}</span>
+      </button>
+      <button v-if="canStartNewMatch" class="new-match-button" type="button" @click="emit('new-match')">
+        {{ t('teamSetup.newGame') }}
       </button>
     </div>
     <div class="team-score away-score">
