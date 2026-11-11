@@ -6,13 +6,30 @@ import LineupDialog from './components/LineupDialog.vue'
 import MatchSyncDialog from './components/MatchSyncDialog.vue'
 import PlayerPickerDialog from './components/PlayerPickerDialog.vue'
 import Scoreboard from './components/Scoreboard.vue'
+import TeamSetupDialog from './components/TeamSetupDialog.vue'
+import UserProfileDialog from './components/UserProfileDialog.vue'
 import type { GameAction } from './domain/game'
+import type { TeamProfile } from './services/teamProfiles'
+import { loadUserProfile, saveUserProfile as persistUserProfile, type UserProfile } from './services/userProfile'
+import type { ZoebasMatch } from './services/zoebasMatches'
 import { useGameSession } from './composables/useGameSession'
-import { appLocales, isAppLocale, localeLabels, saveLocale, useLocale } from './i18n/useLocale'
+import { isAppLocale, saveLocale, useLocale } from './i18n/useLocale'
 
 const { t, locale, displayTeamName } = useLocale()
 const localeSaveError = ref(false)
 const matchSyncOpen = ref(false)
+const userProfile = ref<UserProfile | null>(null)
+const userProfileOpen = ref(false)
+const userProfileError = ref('')
+try {
+  userProfile.value = loadUserProfile()
+  userProfileOpen.value = userProfile.value === null
+  if (userProfile.value) locale.value = userProfile.value.locale
+} catch (error) {
+  console.error('Failed to load user preferences.', error)
+  userProfileError.value = t('errors.loadUserProfile')
+  userProfileOpen.value = true
+}
 
 type Theme = 'light' | 'dark'
 
@@ -44,6 +61,7 @@ const {
   onCourtPlayers,
   pickerPlayers,
   canStart,
+  canStartNewMatch,
   scores,
   teamStats,
   recentActions,
@@ -51,6 +69,7 @@ const {
   pendingScorerId,
   pendingAssistId,
   pendingShotLocation,
+  pendingFoulType,
   editingActionId,
   lineupEditorOpen,
   draftCourtPlayerIds,
@@ -64,15 +83,27 @@ const {
   matchSyncStatus,
   matchSyncError,
   matchSyncConfigured,
+  teamProfiles,
+  selectedTeamProfileIds,
+  teamSetupOpen,
+  teamSetupInitializing,
+  canCancelTeamSetup,
+  teamCatalog,
+  teamCatalogLoading,
+  teamCatalogError,
   playerName,
   addAction,
   selectPlayer,
   selectScorer,
   finishShotAction,
+  finishFoulAction,
   cancelPendingAction,
   editAction,
   undoLastAction,
   toggleGame,
+  applyTeamSetup,
+  openTeamSetup,
+  cancelTeamSetup,
   savePlayer,
   editPlayer,
   cancelPlayerEdit,
@@ -104,18 +135,38 @@ function handleEditAction(action: GameAction) {
   editAction(action)
 }
 
-function changeLocale(event: Event) {
-  const value = (event.target as HTMLSelectElement).value
-  if (!isAppLocale(value)) return
+function saveTeamSetup(
+  profiles: TeamProfile[],
+  profileIds: [string, string],
+  match: ZoebasMatch | null,
+  manualOpponentName: string,
+) {
+  applyTeamSetup(profiles, profileIds, match, manualOpponentName)
+}
 
+function saveUserPreferences(profile: UserProfile) {
+  try {
+    saveLocale(profile.locale)
+    persistUserProfile(profile)
+    userProfile.value = profile
+    locale.value = profile.locale
+    userProfileOpen.value = false
+    userProfileError.value = ''
+    localeSaveError.value = false
+  } catch (error) {
+    console.error('Failed to save user preferences.', error)
+    userProfileError.value = t('errors.saveUserProfile')
+  }
+}
+
+function previewProfileLocale(value: UserProfile['locale']) {
   locale.value = value
   localeSaveError.value = false
-  try {
-    saveLocale(value)
-  } catch (error) {
-    console.error('Failed to save language preference.', error)
-    localeSaveError.value = true
-  }
+}
+
+function cancelUserProfileEdit() {
+  userProfileOpen.value = false
+  if (userProfile.value) locale.value = userProfile.value.locale
 }
 
 watch(locale, (value) => {
@@ -134,11 +185,11 @@ watch(locale, (value) => {
         <span>watchtower<span class="brand-dot">.</span></span>
       </a>
       <div class="topbar-right">
-        <span class="offline-indicator">
+        <span v-if="!teamSetupOpen" class="offline-indicator">
           <span :class="matchLink ? `sync-dot-${matchSyncStatus}` : ''"></span>
           {{ matchLink ? t(`sync.status.${matchSyncStatus}`) : t('app.savedLocally') }}
         </span>
-        <button class="share-match-button" type="button" :aria-label="t('sync.open')" :title="t('sync.open')" @click="matchSyncOpen = true">
+        <button v-if="!teamSetupOpen" class="share-match-button" type="button" :aria-label="t('sync.open')" :title="t('sync.open')" @click="matchSyncOpen = true">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="18" cy="5" r="3" />
             <circle cx="6" cy="12" r="3" />
@@ -162,21 +213,54 @@ watch(locale, (value) => {
             <path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z" />
           </svg>
         </button>
-        <span class="avatar" :aria-label="t('app.profile')">J</span>
+        <button class="avatar" type="button" :aria-label="userProfile?.name ? `${t('app.profile')}: ${userProfile.name}` : t('app.profile')" :title="t('app.profile')" @click="userProfileOpen = true">
+          {{ userProfile?.name.trim().charAt(0).toLocaleUpperCase() || '?' }}
+        </button>
       </div>
     </header>
 
     <div v-if="storageError" class="notice" role="alert">{{ storageError }}</div>
     <div v-if="localeSaveError" class="notice" role="alert">{{ t('errors.saveLanguage') }}</div>
 
-    <Scoreboard
-      :teams="game.teams"
-      :scores="scores"
-      :game-started="game.gameStarted"
-      :can-start="canStart"
-      @team-name-change="updateTeamName"
-      @toggle-game="toggleGame"
+    <UserProfileDialog
+      v-if="userProfileOpen"
+      :profile="userProfile"
+      :teams="teamCatalog"
+      :error="userProfileError"
+      @cancel="cancelUserProfileEdit"
+      @save="saveUserPreferences"
+      @locale-change="previewProfileLocale"
     />
+
+    <TeamSetupDialog
+      v-if="userProfile && teamSetupOpen && !teamSetupInitializing"
+      :profiles="teamProfiles"
+      :selected-profile-ids="selectedTeamProfileIds"
+      :catalog-teams="teamCatalog"
+      :catalog-loading="teamCatalogLoading"
+      :catalog-error="teamCatalogError"
+      :can-cancel="canCancelTeamSetup"
+      :error="storageError"
+      home
+      @cancel="cancelTeamSetup"
+      @save="saveTeamSetup"
+    />
+
+    <div v-else-if="teamSetupInitializing" class="team-setup-loading panel" role="status">
+      {{ t('teamSetup.preparing') }}
+    </div>
+
+    <template v-else-if="!userProfileOpen">
+      <Scoreboard
+        :teams="game.teams"
+        :scores="scores"
+        :game-started="game.gameStarted"
+        :can-start="canStart"
+        :can-start-new-match="canStartNewMatch"
+        @team-name-change="updateTeamName"
+        @toggle-game="toggleGame"
+        @new-match="openTeamSetup"
+      />
 
     <div class="content-grid">
       <GameControls
@@ -223,10 +307,13 @@ watch(locale, (value) => {
       :players="pickerPlayers"
       :scorer-id="pendingScorerId"
       :editing="editingActionId !== null"
+      :foul-type="pendingFoulType"
       @cancel="cancelPendingAction"
       @select-player="selectPlayer"
       @select-scorer="selectScorer"
+      @update:foul-type="pendingFoulType = $event"
       @finish-shot="finishShotAction"
+      @finish-foul="finishFoulAction"
     />
     <LineupDialog
       v-if="lineupEditorOpen"
@@ -240,6 +327,7 @@ watch(locale, (value) => {
     <MatchSyncDialog
       v-if="matchSyncOpen"
       :configured="matchSyncConfigured"
+      :default-display-name="userProfile?.name"
       :match-link="matchLink"
       :status="matchSyncStatus"
       :error="matchSyncError"
@@ -247,15 +335,10 @@ watch(locale, (value) => {
       @create="createMatch"
       @join="joinMatch"
     />
+    </template>
 
     <footer>
       <div class="footer-copy"><span class="footer-ball">◉</span> {{ t('app.footer') }} <span>·</span> Watchtower</div>
-      <label class="language-picker">
-        <span class="visually-hidden">{{ t('app.language') }}</span>
-        <select :value="locale" :aria-label="t('app.language')" @change="changeLocale">
-          <option v-for="language in appLocales" :key="language" :value="language">{{ localeLabels[language] }}</option>
-        </select>
-      </label>
     </footer>
   </main>
 </template>

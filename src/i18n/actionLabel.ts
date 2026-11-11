@@ -1,4 +1,4 @@
-import type { GameAction, StatType } from '../domain/game'
+import type { FoulType, GameAction, StatType } from '../domain/game'
 import type { AppLocale } from './types'
 
 type TranslationKey =
@@ -14,6 +14,10 @@ type TranslationKey =
   | 'actions.assist'
   | 'actions.turnover'
   | 'actions.foul'
+  | 'actions.personalFoul'
+  | 'actions.technicalFoul'
+  | 'actions.unsportsmanlikeFoul'
+  | 'actions.disqualifyingFoul'
   | 'actions.block'
   | 'actions.steal'
 
@@ -40,12 +44,22 @@ const actionKeys: Partial<Record<StatType, TranslationKey>> = {
   steal: 'actions.steal',
 }
 
-export function getActionTranslation(action: Pick<GameAction, 'type' | 'value'>, locale: AppLocale) {
+const foulTypeKeys: Record<FoulType, TranslationKey> = {
+  P: 'actions.personalFoul',
+  TF: 'actions.technicalFoul',
+  U: 'actions.unsportsmanlikeFoul',
+  D: 'actions.disqualifyingFoul',
+}
+
+export function getActionTranslation(action: Pick<GameAction, 'type' | 'value' | 'foulType'>, locale: AppLocale) {
   if (action.type === 'score') {
     return { key: pointsKey('score', action.value, locale), params: { value: action.value } }
   }
   if (action.type === 'missed_shot') {
     return { key: pointsKey('missed', action.value, locale), params: { value: action.value } }
+  }
+  if (action.type === 'foul' && action.foulType) {
+    return { key: foulTypeKeys[action.foulType], params: undefined }
   }
 
   return { key: actionKeys[action.type] ?? 'actions.rebound', params: undefined }

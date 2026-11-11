@@ -11,12 +11,23 @@ import {
   updateActionPlayer,
   updateScoringPlay,
   type GameAction,
+  type FoulType,
+  type GameMatchInfo,
   type GameState,
   type Player,
   type ShotLocation,
   type StatType,
 } from '../domain/game'
 import { loadGameState, saveGameState } from '../services/gameStorage'
+import {
+  createDefaultTeamProfiles,
+  hasSavedTeamProfiles,
+  loadTeamProfileSelection,
+  loadTeamProfiles,
+  saveTeamProfileSelection,
+  saveTeamProfiles,
+  type TeamProfile,
+} from '../services/teamProfiles'
 import {
   appendMatchEvents,
   loadMatchEvents,
@@ -29,6 +40,8 @@ import {
 } from '../services/matchEventLog'
 import { createSharedMatch as createSharedMatchRecord, joinSharedMatch as joinSharedMatchRecord, uploadMatchEvents } from '../services/sharedMatch'
 import { ensureAnonymousUser, isSupabaseConfigured } from '../services/supabaseClient'
+import { loadZoebasTeams, type ZoebasTeam } from '../services/zoebasTeams'
+import type { ZoebasMatch } from '../services/zoebasMatches'
 import { isAppLocale, useLocale } from '../i18n/useLocale'
 
 type PendingAction = { type: StatType; value: number }
@@ -43,9 +56,18 @@ export function useGameSession() {
   const pendingScorerId = ref('')
   const pendingAssistId = ref<string | 'none' | null>(null)
   const pendingShotLocation = ref<ShotLocation | null>(null)
+  const pendingFoulType = ref<FoulType | null>(null)
   const editingActionId = ref<string | null>(null)
   const lineupEditorOpen = ref(false)
   const draftCourtPlayerIds = ref<string[]>([])
+  const teamProfiles = ref(createDefaultTeamProfiles())
+  const selectedTeamProfileIds = ref<[string, string]>(['zoebas-x12-1', 'opponent-default'])
+  const teamSetupOpen = ref(false)
+  const teamSetupInitializing = ref(true)
+  const teamSetupComplete = ref(false)
+  const teamCatalog = ref<ZoebasTeam[]>([])
+  const teamCatalogLoading = ref(true)
+  const teamCatalogError = ref('')
   const newPlayerName = ref('')
   const newPlayerNumber = ref('')
   const playerFormErrorKey = ref('')
@@ -66,10 +88,16 @@ export function useGameSession() {
   const selectedTeam = computed(() =>
     game.teams.find((team) => team.id === selectedTeamId.value) ?? game.teams[0],
   )
-  const teamPlayers = computed(() => game.players.filter((player) => player.teamId === selectedTeamId.value))
+  const teamPeople = computed(() => game.players.filter((player) => player.teamId === selectedTeamId.value))
+  const teamPlayers = computed(() => teamPeople.value.filter((player) => !player.isCoach))
   const onCourtPlayers = computed(() => teamPlayers.value.filter((player) => player.isOnCourt))
-  const pickerPlayers = computed(() => editingActionId.value ? teamPlayers.value : onCourtPlayers.value)
-  const canStart = computed(() => isReadyToStart(game))
+  const pickerPlayers = computed(() => {
+    if (pendingAction.value?.type === 'foul') return teamPeople.value
+    return editingActionId.value ? teamPlayers.value : onCourtPlayers.value
+  })
+  const canStart = computed(() => teamSetupComplete.value && isReadyToStart(game))
+  const canCancelTeamSetup = computed(() => game.gameStarted || game.actions.length > 0)
+  const canStartNewMatch = computed(() => !game.gameStarted && game.actions.length > 0)
   const scores = computed(() => getScore(game))
   const teamStats = computed(() => getTeamStats(game))
   const recentActions = computed(() => getRecentActions(game, 8, t('app.unknownPlayer')))
@@ -208,6 +236,9 @@ export function useGameSession() {
   }
 
   function playerName(playerId: string) {
+    if (playerId.startsWith('coach-') && !game.players.some((player) => player.id === playerId)) {
+      return t('controls.coach')
+    }
     return displayPlayerName(getPlayerName(game, playerId, t('app.unknownPlayer')))
   }
 
@@ -216,6 +247,7 @@ export function useGameSession() {
     pendingScorerId.value = ''
     pendingAssistId.value = null
     pendingShotLocation.value = null
+    pendingFoulType.value = null
     editingActionId.value = null
     if (game.gameStarted) selectedTeamId.value = 'home'
   }
@@ -228,11 +260,16 @@ export function useGameSession() {
     pendingScorerId.value = ''
     pendingAssistId.value = type === 'score' && value > 1 ? 'none' : null
     pendingShotLocation.value = null
+    pendingFoulType.value = null
   }
 
   function selectPlayer(playerId: string) {
     const action = pendingAction.value
     if (!action || !game.gameStarted) return
+    if (action.type === 'foul') {
+      pendingScorerId.value = playerId
+      return
+    }
     if (action.type === 'score') {
       selectScorer(playerId)
       return
@@ -252,6 +289,28 @@ export function useGameSession() {
         type: action.type,
         value: action.value,
         createdAt: Date.now(),
+      })
+    }
+    cancelPendingAction()
+  }
+
+  function finishFoulAction() {
+    const action = pendingAction.value
+    if (action?.type !== 'foul' || !pendingScorerId.value || !pendingFoulType.value) return
+
+    if (editingActionId.value) {
+      game.actions = game.actions.map((item) => item.id === editingActionId.value
+        ? { ...item, playerId: pendingScorerId.value, foulType: pendingFoulType.value ?? undefined }
+        : item)
+    } else {
+      game.actions.push({
+        id: crypto.randomUUID(),
+        playerId: pendingScorerId.value,
+        teamId: selectedTeamId.value,
+        type: action.type,
+        value: action.value,
+        createdAt: Date.now(),
+        foulType: pendingFoulType.value,
       })
     }
     cancelPendingAction()
@@ -287,11 +346,10 @@ export function useGameSession() {
       || (action.type !== 'score' && action.type !== 'missed_shot')
       || action.value <= 1
       || !pendingScorerId.value
-      || !pendingShotLocation.value
       || (action.type === 'score' && pendingAssistId.value === null)
     ) return
 
-    const shotLocation = pendingShotLocation.value
+    const shotLocation = pendingShotLocation.value ?? undefined
     if (action.type === 'score') {
       game.actions = updateScoringPlay(game.actions, {
         actionId: editingActionId.value ?? undefined,
@@ -299,14 +357,17 @@ export function useGameSession() {
         scorerId: pendingScorerId.value,
         value: action.value,
         assistPlayerId: pendingAssistId.value === 'none' ? null : pendingAssistId.value,
-        shotLocation,
+        ...(shotLocation ? { shotLocation } : {}),
         createdAt: Date.now(),
         createId: () => crypto.randomUUID(),
       })
     } else if (editingActionId.value) {
-      game.actions = game.actions.map((item) => item.id === editingActionId.value
-        ? { ...item, playerId: pendingScorerId.value, shotLocation }
-        : item)
+      game.actions = game.actions.map((item) => {
+        if (item.id !== editingActionId.value) return item
+        const updated = { ...item, playerId: pendingScorerId.value }
+        delete updated.shotLocation
+        return { ...updated, ...(shotLocation ? { shotLocation } : {}) }
+      })
     } else {
       game.actions.push({
         id: crypto.randomUUID(),
@@ -335,15 +396,157 @@ export function useGameSession() {
     pendingShotLocation.value = (action.type === 'score' || action.type === 'missed_shot') && action.value > 1
       ? action.shotLocation ?? null
       : null
+    pendingFoulType.value = action.type === 'foul' ? action.foulType ?? null : null
   }
 
   function undoLastAction() {
     game.actions = undoActions(game.actions)
   }
 
+  function applyTeamSetup(
+    profiles: TeamProfile[],
+    profileIds: [string, string],
+    selectedMatch: ZoebasMatch | null = null,
+    manualOpponentName = '',
+  ) {
+    const homeProfile = profiles.find((profile) => profile.id === profileIds[0])
+    const awayProfile = profiles.find((profile) => profile.id === profileIds[1])
+    if (!homeProfile?.catalogTeamId || !awayProfile || profileIds[0] === profileIds[1]) return false
+
+    const matchHomeName = selectedMatch?.homeTeamName.toLocaleLowerCase() ?? ''
+    const selectedTeamName = homeProfile.name.toLocaleLowerCase()
+    const matchOwnTeamIsHome = !selectedMatch
+      || matchHomeName.includes(selectedTeamName)
+      || selectedTeamName.includes(matchHomeName)
+    const opponentName = selectedMatch
+      ? matchOwnTeamIsHome ? selectedMatch.awayTeamName : selectedMatch.homeTeamName
+      : manualOpponentName.trim() || awayProfile.name.trim()
+    const teams = [
+      { id: 'home', name: homeProfile.name.trim(), color: '#f26a36' },
+      { id: 'away', name: opponentName, color: '#5d72d9' },
+    ]
+    const players = [homeProfile, awayProfile].flatMap((profile, index) => [
+      ...profile.players.filter((player) => player.isParticipating).map((player) => ({
+        id: `${teams[index].id}-${player.id}`,
+        name: player.name.trim(),
+        teamId: teams[index].id,
+        jerseyNumber: player.jerseyNumber,
+        isOnCourt: player.isOnCourt,
+      })),
+      ...(profile.coaches ?? []).filter((coach) => coach.isParticipating).map((coach) => ({
+        id: `${teams[index].id}-coach-${coach.id}`,
+        name: coach.name.trim(),
+        teamId: teams[index].id,
+        jerseyNumber: '',
+        isOnCourt: false,
+        isCoach: true,
+        coachRole: coach.role,
+      })),
+    ])
+    const matchInfo: GameMatchInfo | undefined = selectedMatch
+      ? {
+          id: selectedMatch.id,
+          date: selectedMatch.date,
+          startTime: selectedMatch.startTime,
+          venue: selectedMatch.venue,
+        }
+      : undefined
+    const nextGame: GameState = {
+      teams,
+      players,
+      actions: [],
+      gameStarted: true,
+      ...(matchInfo ? { matchInfo } : {}),
+    }
+    if (!isReadyToStart(nextGame)) return false
+
+    try {
+      saveTeamProfiles(profiles)
+      saveTeamProfileSelection(profileIds)
+      saveMatchLink(null)
+      if (storageErrorKey.value === 'errors.loadTeams' || storageErrorKey.value === 'errors.saveTeams') {
+        storageErrorKey.value = ''
+      }
+    } catch (error) {
+      console.error('Failed to save team setup.', error)
+      storageErrorKey.value = 'errors.saveTeams'
+      return false
+    }
+
+    teamProfiles.value = profiles.map((profile) => ({
+      ...profile,
+      players: profile.players.map((player) => ({ ...player })),
+    }))
+    selectedTeamProfileIds.value = [...profileIds]
+    teamSetupComplete.value = true
+    teamSetupOpen.value = false
+    matchLink.value = null
+    matchSyncStatus.value = 'local'
+    matchSyncError.value = ''
+    Object.assign(game, nextGame)
+    selectedTeamId.value = 'home'
+    selectedPlayerId.value = players.find((player) => player.teamId === 'home' && player.isOnCourt)?.id ?? ''
+    return true
+  }
+
+  function updateSelectedProfilesFromGame() {
+    const profiles = teamProfiles.value.map((profile) => ({
+      ...profile,
+      players: profile.players.map((player) => ({ ...player })),
+    }))
+    for (const [index, teamId] of ['home', 'away'].entries()) {
+      const profile = profiles.find((item) => item.id === selectedTeamProfileIds.value[index])
+      const team = game.teams.find((item) => item.id === teamId)
+      if (!profile || !team) continue
+      profile.name = team.name.trim()
+      for (const player of profile.players) {
+        player.isParticipating = false
+        player.isOnCourt = false
+      }
+      for (const player of game.players.filter((item) => item.teamId === teamId)) {
+        const profilePlayerId = player.id.startsWith(`${teamId}-`)
+          ? player.id.slice(teamId.length + 1)
+          : player.id
+        const profilePlayer = profile.players.find((item) => item.id === profilePlayerId)
+        const updatedPlayer: TeamProfile['players'][number] = {
+          id: profilePlayerId,
+          name: player.name.trim(),
+          jerseyNumber: player.jerseyNumber,
+          isParticipating: true,
+          isOnCourt: player.isOnCourt,
+        }
+        if (profilePlayer) Object.assign(profilePlayer, updatedPlayer)
+        else profile.players.push(updatedPlayer)
+      }
+    }
+    try {
+      saveTeamProfiles(profiles)
+      teamProfiles.value = profiles
+      if (storageErrorKey.value === 'errors.loadTeams' || storageErrorKey.value === 'errors.saveTeams') {
+        storageErrorKey.value = ''
+      }
+      return true
+    } catch (error) {
+      console.error('Failed to save team profiles.', error)
+      storageErrorKey.value = 'errors.saveTeams'
+      return false
+    }
+  }
+
+  function openTeamSetup() {
+    if (!game.gameStarted) teamSetupOpen.value = true
+  }
+
+  function cancelTeamSetup() {
+    if (canCancelTeamSetup.value) teamSetupOpen.value = false
+  }
+
   function toggleGame() {
-    if (!game.gameStarted && !canStart.value) return
-    if (!game.gameStarted) selectedTeamId.value = 'home'
+    if (!game.gameStarted) {
+      if (!canStart.value) return
+      if (!updateSelectedProfilesFromGame()) return
+      selectedTeamId.value = 'home'
+    }
     game.gameStarted = !game.gameStarted
   }
 
@@ -449,16 +652,73 @@ export function useGameSession() {
     draftCourtPlayerIds.value = []
   }
 
-  onMounted(() => {
+  onMounted(async () => {
+    let hasSavedSelection = false
+    let loadedGame: GameState | null = null
     try {
       const savedState = loadGameState(currentLocale.value)
       if (savedState) {
+        loadedGame = savedState
         Object.assign(game, savedState)
         selectedTeamId.value = game.teams[0].id
       }
     } catch (error) {
       console.error('Failed to load saved game state.', error)
       storageErrorKey.value = 'errors.loadGame'
+    }
+
+    try {
+      teamProfiles.value = loadTeamProfiles()
+      const savedSelection = loadTeamProfileSelection()
+      const validSelection = savedSelection?.every((id) => teamProfiles.value.some((profile) => profile.id === id))
+      const needsLegacyMigration = !hasSavedTeamProfiles()
+        && loadedGame !== null
+        && (loadedGame.gameStarted || loadedGame.actions.length > 0)
+      if (needsLegacyMigration && loadedGame) {
+        teamProfiles.value = loadedGame.teams.map((team) => ({
+          id: `migrated-${team.id}`,
+          name: team.name,
+          players: loadedGame.players
+            .filter((player) => player.teamId === team.id)
+            .map((player) => ({
+              id: player.id,
+              name: player.name,
+              jerseyNumber: player.jerseyNumber,
+              isParticipating: true,
+              isOnCourt: player.isOnCourt,
+            })),
+          coaches: [],
+        }))
+        selectedTeamProfileIds.value = [teamProfiles.value[0].id, teamProfiles.value[1].id]
+        try {
+          saveTeamProfiles(teamProfiles.value)
+          saveTeamProfileSelection(selectedTeamProfileIds.value)
+        } catch (error) {
+          console.error('Failed to migrate the active game to team profiles.', error)
+          storageErrorKey.value = 'errors.saveTeams'
+        }
+        teamSetupComplete.value = true
+        teamSetupOpen.value = false
+      } else if (savedSelection && validSelection) {
+        selectedTeamProfileIds.value = savedSelection
+        hasSavedSelection = true
+      } else {
+        selectedTeamProfileIds.value = [
+          teamProfiles.value[0].id,
+          teamProfiles.value[1]?.id ?? teamProfiles.value[0].id,
+        ]
+      }
+      if (!needsLegacyMigration) {
+        teamSetupComplete.value = hasSavedTeamProfiles() && hasSavedSelection
+        const hasExistingGame = !!loadedGame && (loadedGame.gameStarted || loadedGame.actions.length > 0)
+        teamSetupOpen.value = !hasExistingGame
+      }
+    } catch (error) {
+      console.error('Failed to load team profiles.', error)
+      storageErrorKey.value = 'errors.loadTeams'
+      teamProfiles.value = createDefaultTeamProfiles()
+      teamSetupComplete.value = false
+      teamSetupOpen.value = true
     }
 
     try {
@@ -473,6 +733,16 @@ export function useGameSession() {
     previousActions = JSON.parse(JSON.stringify(game.actions)) as GameAction[]
     initializing = false
     if (matchLink.value && matchSyncConfigured && navigator.onLine) scheduleMatchSync()
+    teamSetupInitializing.value = false
+
+    try {
+      teamCatalog.value = await loadZoebasTeams()
+    } catch (error) {
+      console.error('Failed to load the Zoebas team catalog.', error)
+      teamCatalogError.value = t('errors.loadTeamCatalog')
+    } finally {
+      teamCatalogLoading.value = false
+    }
   })
 
   watch(
@@ -556,6 +826,7 @@ export function useGameSession() {
     onCourtPlayers,
     pickerPlayers,
     canStart,
+    canStartNewMatch,
     scores,
     teamStats,
     recentActions,
@@ -566,6 +837,15 @@ export function useGameSession() {
     editingActionId,
     lineupEditorOpen,
     draftCourtPlayerIds,
+    teamProfiles,
+    selectedTeamProfileIds,
+    teamSetupOpen,
+    teamSetupInitializing,
+    teamSetupComplete,
+    canCancelTeamSetup,
+    teamCatalog,
+    teamCatalogLoading,
+    teamCatalogError,
     newPlayerName,
     newPlayerNumber,
     playerFormError,
@@ -579,12 +859,17 @@ export function useGameSession() {
     playerName,
     addAction,
     selectPlayer,
+    pendingFoulType,
+    finishFoulAction,
     selectScorer,
     finishShotAction,
     cancelPendingAction,
     editAction,
     undoLastAction,
     toggleGame,
+    applyTeamSetup,
+    openTeamSetup,
+    cancelTeamSetup,
     savePlayer,
     editPlayer,
     cancelPlayerEdit,
