@@ -346,6 +346,7 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .user-profile-modal { max-height: min(90vh, 700px); }
 .user-profile-onboarding { width: min(100%, 760px); padding: 30px; }
 .user-profile-form { display: flex; flex-direction: column; gap: 12px; }
+.user-profile-form .match-sync-field small { color: var(--muted); font-style: italic; font-weight: 400; }
 .user-profile-form select { min-height: 39px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); background: var(--panel); font-size: 13px; }
 .profile-language-options { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; border: 0; }
 .profile-language-options legend { margin-bottom: 6px; color: var(--ink); font-size: 11px; font-weight: 600; }
@@ -353,7 +354,7 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .profile-language-option:has(input:checked) { border-color: var(--orange); background: color-mix(in srgb, var(--orange) 8%, var(--panel)); }
 .profile-language-option:has(input:focus-visible) { outline: 3px solid #f26a3655; outline-offset: 2px; }
 .profile-language-flag { font-size: 16px; }
-.profile-theme-toggle { align-self: flex-start; }
+.profile-theme-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
 .user-profile-footer { display: flex; justify-content: flex-end; gap: 8px; }
 .team-setup-primary, .team-setup-secondary { min-height: 42px; padding: 0 15px; border: 0; border-radius: 7px; font-size: 12px; font-weight: 700; }
 .team-setup-primary { color: white; background: var(--orange); }

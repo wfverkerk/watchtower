@@ -45,6 +45,7 @@ function loadTheme(): Theme {
 }
 
 const theme = ref<Theme>(loadTheme())
+let savedTheme = theme.value
 
 function applyTheme() {
   document.documentElement.dataset.theme = theme.value
@@ -56,14 +57,9 @@ function applyTheme() {
 
 applyTheme()
 
-function toggleTheme() {
-  theme.value = theme.value === 'dark' ? 'light' : 'dark'
+function previewTheme(value: Theme) {
+  theme.value = value
   applyTheme()
-  try {
-    window.localStorage.setItem(themeStorageKey, theme.value)
-  } catch (error) {
-    console.error('Failed to save theme preference.', error)
-  }
 }
 
 const {
@@ -162,6 +158,8 @@ function saveUserPreferences(profile: UserProfile) {
   try {
     saveLocale(profile.locale)
     persistUserProfile(profile)
+    window.localStorage.setItem(themeStorageKey, theme.value)
+    savedTheme = theme.value
     userProfile.value = profile
     locale.value = profile.locale
     userProfileOpen.value = false
@@ -181,6 +179,7 @@ function previewProfileLocale(value: UserProfile['locale']) {
 function cancelUserProfileEdit() {
   userProfileOpen.value = false
   if (userProfile.value) locale.value = userProfile.value.locale
+  previewTheme(savedTheme)
 }
 
 watch(locale, (value) => {
@@ -229,7 +228,7 @@ watch(locale, (value) => {
       @cancel="cancelUserProfileEdit"
       @save="saveUserPreferences"
       @locale-change="previewProfileLocale"
-      @toggle-theme="toggleTheme"
+      @theme-change="previewTheme"
     />
 
     <TeamSetupDialog
