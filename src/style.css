@@ -825,3 +825,10 @@ h2 { margin-bottom: 0; font-size: 16px; }
   .game-live .scoring-player-lists { gap: 9px; column-gap: 40px; }
   .game-live .scoring-player-list .picker-player { gap: 0; padding: 0 5px 0 0; }
 }
+
+/* iOS zooms into form controls with text smaller than 16px. */
+@media (max-width: 700px), (pointer: coarse) {
+  #app input:not([type='checkbox']):not([type='radio']),
+  #app select,
+  #app textarea { font-size: 16px; }
+}

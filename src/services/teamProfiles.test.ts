@@ -26,7 +26,9 @@ describe('team profile storage', () => {
   it('starts with the visible Zoebas roster and a blank opponent roster', () => {
     const [home, away] = loadTeamProfiles(createStorage())
     expect(home.name).toBe('Zoebas X12-1')
-    expect(home.players[0]).toMatchObject({ name: 'Marley', jerseyNumber: '', isParticipating: false, isOnCourt: false })
+    expect(home.players[0]).toMatchObject({ name: 'Marley', jerseyNumber: '', isParticipating: true, isOnCourt: false })
+    expect(home.players.slice(0, 9).every((player) => player.isParticipating)).toBe(true)
+    expect(home.players[9].isParticipating).toBe(false)
     expect(home.players.slice(0, 9).map((player) => player.name)).toEqual([
       'Marley', 'Stef', 'Mees', 'Maciej', 'Tim', 'Morris', 'Noud', 'Milan', 'Viggo',
     ])
@@ -91,7 +93,7 @@ describe('team profile storage', () => {
     const profiles = createDefaultTeamProfiles()
     profiles[0].players[0].jerseyNumber = '23'
     profiles[0].coaches.push({ id: 'custom-coach', name: 'Coach', role: 'assistant', isParticipating: false })
-    const draft = { profiles, selectedProfileIds: [profiles[0].id, profiles[1].id] as [string, string], catalogTeamId: 'x12-1' }
+    const draft = { profiles, selectedProfileIds: [profiles[0].id, profiles[1].id] as [string, string], catalogTeamId: 'x12-1', jerseyBaselines: { 'x12-1': [{ position: 1, name: 'Marley', number: '23' }] } }
     saveTeamSetupDraft(draft, storage)
     expect(loadTeamSetupDraft(storage)).toEqual(draft)
     clearTeamSetupDraft(storage)

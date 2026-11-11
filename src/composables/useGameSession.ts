@@ -621,6 +621,7 @@ export function useGameSession() {
           id: profilePlayerId,
           name: player.name.trim(),
           jerseyNumber: player.jerseyNumber,
+          ...(profilePlayer?.catalogName ? { catalogName: profilePlayer.catalogName } : {}),
           isParticipating: true,
           isOnCourt: player.isOnCourt,
         }

@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useLocale } from '../i18n/useLocale'
 import { loadTeamSetupDraft, saveTeamSetupDraft, type TeamProfile, type TeamProfileCoach, type TeamProfilePlayer, type TeamSetupDraft } from '../services/teamProfiles'
+import { loadJerseyNumbers, reconcileJerseyNumbers, saveJerseyNumbers, type JerseyChange, type JerseyNumber } from '../services/jerseyNumbers'
 import { getRecommendedMatch, loadZoebasMatches, type ZoebasMatch } from '../services/zoebasMatches'
 import type { ZoebasTeam } from '../services/zoebasTeams'
 
@@ -37,7 +38,7 @@ try {
 }
 const draftProfiles = ref((restoredDraft?.profiles ?? props.profiles).map((profile) => ({
   ...profile,
-  players: profile.players.map((player) => ({ ...player, isParticipating: player.isParticipating ?? true })),
+  players: profile.players.map((player) => ({ ...player, isParticipating: restoredDraft ? player.isParticipating : !!player.name.trim() })),
   coaches: (profile.coaches ?? []).map((coach) => ({ ...coach, isParticipating: coach.isParticipating ?? true })),
 })))
 const selected = ref<[string, string]>([...(restoredDraft?.selectedProfileIds ?? props.selectedProfileIds)])
@@ -49,6 +50,13 @@ const matchLoading = ref(false)
 const matchError = ref('')
 const selectedMatchId = ref('')
 const manualOpponentName = ref('')
+const jerseyLoading = ref(false)
+const jerseySaving = ref(false)
+const jerseyError = ref('')
+const jerseyNumbers = ref<JerseyNumber[]>([])
+const jerseyBaselines = ref<Record<string, JerseyNumber[]>>(restoredDraft?.jerseyBaselines ?? {})
+const catalogPlayerIds = ref<string[]>([])
+const initializedTeams = new Set<string>()
 const newCoachName = ref('')
 const newCoachRole = ref<TeamProfileCoach['role']>('coach')
 const currentProfile = computed(() =>
@@ -68,13 +76,14 @@ const pastMatches = computed(() => matches.value.filter((match) =>
 ))
 const hasMatchSelection = computed(() => !!selectedMatch.value || !!manualOpponentName.value.trim())
 
-watch([draftProfiles, selected, selectedCatalogTeamId], () => {
+watch([draftProfiles, selected, selectedCatalogTeamId, jerseyBaselines], () => {
   if (!selectedCatalogTeamId.value || draftLoadFailed) return
   try {
     saveTeamSetupDraft({
       profiles: draftProfiles.value,
       selectedProfileIds: selected.value,
       catalogTeamId: selectedCatalogTeamId.value,
+      jerseyBaselines: jerseyBaselines.value,
     })
     draftStorageError.value = ''
   } catch (error) {
@@ -96,16 +105,22 @@ function selectCatalogTeam(teamId: string) {
       || item.name === `Zoebas ${team.name}`,
     )
   const usedPlayerIds = new Set<string>()
-  const players = (team.playerNames.length ? team.playerNames : Array.from({ length: 5 }, () => '')).map((name, index): TeamProfilePlayer => {
-      const saved = legacyProfile?.players.find((player) => !usedPlayerIds.has(player.id) && player.id === `${team.id}-player-${index + 1}`)
-        ?? legacyProfile?.players.find((player) => !usedPlayerIds.has(player.id) && player.name.toLocaleLowerCase() === name.toLocaleLowerCase())
-        ?? legacyProfile?.players.find((player, savedIndex) => savedIndex === index && !usedPlayerIds.has(player.id))
+  const players = (team.playerNames.length ? team.playerNames : legacyProfile?.players.map(() => '') ?? Array.from({ length: 5 }, () => '')).map((name, index): TeamProfilePlayer => {
+      const matchesName = (player: TeamProfilePlayer) => (player.catalogName ?? player.name).toLocaleLowerCase() === name.toLocaleLowerCase()
+      const saved = team.playerNames.length
+        ? legacyProfile?.players.find((player) => !usedPlayerIds.has(player.id) && player.id === `${team.id}-player-${index + 1}` && matchesName(player))
+          ?? legacyProfile?.players.find((player) => !usedPlayerIds.has(player.id) && matchesName(player))
+        : legacyProfile?.players[index]
       if (saved) usedPlayerIds.add(saved.id)
+      const defaultId = `${team.id}-player-${index + 1}`
+      const id = saved?.id ?? (legacyProfile?.players.some((player) => player.id === defaultId) ? crypto.randomUUID() : defaultId)
+      usedPlayerIds.add(id)
       return {
-        id: saved?.id ?? `${team.id}-player-${index + 1}`,
+        id,
         name: saved?.name || name,
         jerseyNumber: saved?.jerseyNumber ?? '',
-        isParticipating: saved?.isParticipating ?? false,
+        ...(team.playerNames.length ? { catalogName: name } : {}),
+        isParticipating: saved?.isParticipating ?? !!name.trim(),
         isOnCourt: saved?.isOnCourt ?? false,
       }
     })
@@ -140,6 +155,52 @@ function selectCatalogTeam(teamId: string) {
   if (profileIndex >= 0) draftProfiles.value.splice(profileIndex, 1, profile)
   else draftProfiles.value.push(profile)
   selected.value[0] = profile.id
+  catalogPlayerIds.value = players.slice(0, team.playerNames.length).map((player) => player.id)
+}
+
+function applySharedJerseyNumbers(team: ZoebasTeam, numbers: JerseyNumber[], clearMissing: boolean) {
+  for (const [index, playerId] of catalogPlayerIds.value.entries()) {
+    const shared = numbers.find((item) => item.position === index + 1 && item.name === team.playerNames[index])
+    const player = currentProfile.value?.players.find((item) => item.id === playerId)
+    if (player && (shared || clearMissing)) player.jerseyNumber = shared?.number ?? ''
+  }
+}
+
+async function refreshJerseyNumbers(team: ZoebasTeam, replaceLocal: boolean) {
+  const request = ++jerseyRequest
+  jerseyLoading.value = true
+  jerseyError.value = ''
+  try {
+    const numbers = await loadJerseyNumbers(team.id)
+    if (request !== jerseyRequest) return
+    jerseyNumbers.value = numbers
+    if (replaceLocal) {
+      applySharedJerseyNumbers(team, numbers, true)
+    } else {
+      const local = catalogPlayerIds.value.map((id) => currentProfile.value?.players.find((player) => player.id === id)?.jerseyNumber ?? '')
+      const reconciled = reconcileJerseyNumbers(team.playerNames, local, numbers, jerseyBaselines.value[team.id], !!restoredDraft || initializedTeams.has(team.id))
+      if (reconciled.conflict) {
+        jerseyError.value = t('teamSetup.jerseySaveError')
+        return
+      }
+      for (const [index, playerId] of catalogPlayerIds.value.entries()) {
+        const player = currentProfile.value?.players.find((item) => item.id === playerId)
+        if (player) player.jerseyNumber = reconciled.numbers[index] ?? ''
+      }
+    }
+    jerseyBaselines.value[team.id] = numbers
+    initializedTeams.add(team.id)
+  } catch (error) {
+    console.error('Failed to load shared jersey numbers.', error)
+    if (request === jerseyRequest) jerseyError.value = t('teamSetup.jerseyLoadError')
+  } finally {
+    if (request === jerseyRequest) jerseyLoading.value = false
+  }
+}
+
+function retryJerseyNumbers() {
+  const team = props.catalogTeams.find((item) => item.id === selectedCatalogTeamId.value)
+  if (team) void refreshJerseyNumbers(team, true)
 }
 
 function selectMatch(match: ZoebasMatch) {
@@ -158,8 +219,10 @@ function formatMatchDate(match: ZoebasMatch) {
 }
 
 let matchRequest = 0
+let jerseyRequest = 0
 watch([selectedCatalogTeamId, () => props.catalogTeams], async ([teamId], previous) => {
   const request = ++matchRequest
+  ++jerseyRequest
   matches.value = []
   if (!previous || teamId !== previous[0]) {
     selectedMatchId.value = ''
@@ -167,12 +230,16 @@ watch([selectedCatalogTeamId, () => props.catalogTeams], async ([teamId], previo
   }
   matchError.value = ''
   matchLoading.value = false
+  jerseyError.value = ''
+  jerseyNumbers.value = []
+  jerseyLoading.value = false
   if (!props.catalogTeams.length) return
   if (!teamId) return
 
   const team = props.catalogTeams.find((item) => item.id === teamId)
   if (!team) return
   selectCatalogTeam(teamId)
+  void refreshJerseyNumbers(team, false)
   matchLoading.value = true
   try {
     const fetchedMatches = await loadZoebasMatches(team.sourceTeamId)
@@ -192,7 +259,7 @@ function addPlayer() {
     id: crypto.randomUUID(),
     name: '',
     jerseyNumber: '',
-    isParticipating: false,
+    isParticipating: true,
     isOnCourt: false,
   })
 }
@@ -233,10 +300,10 @@ function participantError(profile: TeamProfile | undefined) {
 }
 
 const currentStepError = computed(() => step.value === 1 ? participantError(currentProfile.value ?? undefined) : '')
-const validTeam = computed(() => !props.catalogError && !!props.catalogTeams.find((team) => team.id === selectedCatalogTeamId.value))
+const validTeam = computed(() => !props.catalogError && !jerseyLoading.value && !jerseyError.value && !!props.catalogTeams.find((team) => team.id === selectedCatalogTeamId.value))
 const canAdvance = computed(() => {
   if (step.value === 0) return validTeam.value
-  if (step.value === 1) return !currentStepError.value
+  if (step.value === 1) return validTeam.value && !currentStepError.value
   return hasMatchSelection.value
 })
 
@@ -261,15 +328,43 @@ function save() {
 function advance() {
   if (!canAdvance.value) return
   if (step.value === steps.length - 1) save()
-  else navigateTo(step.value + 1)
+  else void navigateTo(step.value + 1)
 }
 
 function canNavigateTo(index: number) {
-  return index <= step.value || (index === step.value + 1 && canAdvance.value)
+  return !jerseySaving.value && (index <= step.value || (index === step.value + 1 && canAdvance.value))
 }
 
-function navigateTo(index: number) {
+async function navigateTo(index: number) {
   if (!canNavigateTo(index)) return
+  if (step.value === 1 && index === 2) {
+    const team = props.catalogTeams.find((item) => item.id === selectedCatalogTeamId.value)
+    if (!team || !currentProfile.value) return
+    const changes: JerseyChange[] = catalogPlayerIds.value.flatMap((id, index) => {
+      const player = currentProfile.value?.players.find((item) => item.id === id)
+      const name = team.playerNames[index]
+      if (!player || !name) return []
+      const expected = jerseyNumbers.value.find((item) => item.position === index + 1 && item.name === name)?.number ?? null
+      const number = player.jerseyNumber || null
+      return number === expected ? [] : [{ position: index + 1, name, expected, number }]
+    })
+    jerseySaving.value = true
+    jerseyError.value = ''
+    try {
+      await saveJerseyNumbers(team.id, changes)
+      for (const change of changes) {
+        jerseyNumbers.value = jerseyNumbers.value.filter((item) => item.position !== change.position)
+        if (change.number !== null) jerseyNumbers.value.push({ position: change.position, name: change.name, number: change.number })
+      }
+      jerseyBaselines.value[team.id] = jerseyNumbers.value
+    } catch (error) {
+      console.error('Failed to save shared jersey numbers.', error)
+      jerseyError.value = t('teamSetup.jerseySaveError')
+      return
+    } finally {
+      jerseySaving.value = false
+    }
+  }
   step.value = index
   furthestStep.value = Math.max(furthestStep.value, index)
 }
@@ -284,7 +379,7 @@ function stepCompleted(index: number) {
 <template>
   <div
     :class="home ? 'team-setup-page' : 'team-setup-backdrop'"
-    @keydown.esc.window="canCancel && emit('cancel')"
+    @keydown.esc.window="canCancel && !jerseySaving && emit('cancel')"
   >
     <section
       class="team-setup-dialog panel"
@@ -294,9 +389,13 @@ function stepCompleted(index: number) {
       :aria-label="t('teamSetup.title')"
     >
       <header v-if="canCancel" class="team-setup-header">
-        <button class="team-setup-close" type="button" :aria-label="t('teamSetup.cancel')" @click="emit('cancel')">×</button>
+        <button class="team-setup-close" type="button" :disabled="jerseySaving" :aria-label="t('teamSetup.cancel')" @click="emit('cancel')">×</button>
       </header>
       <p v-if="error || catalogError || draftStorageError" class="notice team-setup-notice" role="alert">{{ error || catalogError || t(draftStorageError) }}</p>
+      <div v-if="jerseyError" class="notice team-setup-notice" role="alert">
+        <p>{{ jerseyError }}</p>
+        <button type="button" :disabled="jerseyLoading || jerseySaving" @click="retryJerseyNumbers">{{ t('teamSetup.reloadJerseys') }}</button>
+      </div>
 
       <div class="team-setup-steps" role="tablist" :aria-label="t('teamSetup.title')">
         <button
@@ -318,7 +417,7 @@ function stepCompleted(index: number) {
           <p v-if="catalogLoading" class="team-setup-hint" role="status">{{ t('teamSetup.loadingClubTeams') }}</p>
           <div class="team-setup-team-grid" role="group" :aria-label="t('teamSetup.chooseClubTeam')">
             <button v-for="team in catalogTeams" :key="team.id" type="button"
-              :aria-pressed="selectedCatalogTeamId === team.id"
+              :aria-pressed="selectedCatalogTeamId === team.id" :disabled="jerseySaving"
               @click="selectedCatalogTeamId = team.id">{{ team.name }}</button>
           </div>
         </template>
@@ -378,16 +477,18 @@ function stepCompleted(index: number) {
           <span>{{ t('teamSetup.participantCount', { count: participatingMembersCount }) }}</span>
         </div>
         <p class="team-setup-hint">{{ t('teamSetup.participantHint') }}</p>
+        <p class="team-setup-hint">{{ t('teamSetup.sharedJerseysHint') }}</p>
         <div class="team-setup-player team-setup-column-heading" aria-hidden="true">
           <span>#</span><span>{{ t('teamSetup.name') }}</span><span>{{ t('teamSetup.present') }}</span>
         </div>
         <div class="team-setup-roster">
           <div v-for="player in currentProfile.players" :key="player.id" class="team-setup-player">
-            <input v-model="player.jerseyNumber" class="team-setup-jersey-input" type="text" inputmode="numeric" maxlength="2" :aria-label="t('teamSetup.jerseyNumber')" placeholder="#" @input="player.jerseyNumber = player.jerseyNumber.replace(/\D/g, '').slice(0, 2)">
-            <input v-model="player.name" type="text" :aria-label="t('teamSetup.playerName')" :placeholder="t('teamSetup.playerName')" maxlength="60">
+            <input v-model="player.jerseyNumber" class="team-setup-jersey-input" type="text" inputmode="numeric" maxlength="2" :disabled="jerseySaving" :aria-label="t('teamSetup.jerseyNumber')" placeholder="#" @input="player.jerseyNumber = player.jerseyNumber.replace(/\D/g, '').slice(0, 2)">
+            <input v-model="player.name" type="text" :disabled="jerseySaving" :aria-label="t('teamSetup.playerName')" :placeholder="t('teamSetup.playerName')" maxlength="60">
             <button
               class="team-setup-court-toggle"
               type="button"
+              :disabled="jerseySaving"
               :aria-pressed="player.isParticipating"
               :aria-label="t('teamSetup.participation', { name: player.name || t('teamSetup.playerName') })"
               :title="t(player.isParticipating ? 'teamSetup.present' : 'teamSetup.absent')"
@@ -395,7 +496,7 @@ function stepCompleted(index: number) {
             ><span aria-hidden="true">{{ t('teamSetup.no') }}</span><span aria-hidden="true">{{ t('teamSetup.yes') }}</span></button>
           </div>
         </div>
-        <button class="team-setup-add-player" type="button" @click="addPlayer">+ {{ t('teamSetup.addPlayer') }}</button>
+        <button class="team-setup-add-player" type="button" :disabled="jerseySaving" @click="addPlayer">+ {{ t('teamSetup.addPlayer') }}</button>
         <section class="team-setup-coaches" :aria-label="t('teamSetup.coaches')">
           <div class="team-setup-roster-heading">
             <h3>{{ t('teamSetup.coaches') }}</h3>
@@ -410,6 +511,7 @@ function stepCompleted(index: number) {
               <button
                 class="team-setup-court-toggle"
                 type="button"
+                :disabled="jerseySaving"
                 :aria-pressed="coach.isParticipating"
                 :aria-label="t('teamSetup.participation', { name: coach.name })"
                 :title="t(coach.isParticipating ? 'teamSetup.present' : 'teamSetup.absent')"
@@ -418,12 +520,12 @@ function stepCompleted(index: number) {
             </div>
           </div>
           <form class="team-setup-add-coach" @submit.prevent="addCoach">
-            <input v-model="newCoachName" type="text" :aria-label="t('teamSetup.coachName')" :placeholder="t('teamSetup.coachName')" maxlength="60">
-            <select v-model="newCoachRole" :aria-label="t('teamSetup.coachRole')">
+            <input v-model="newCoachName" type="text" :disabled="jerseySaving" :aria-label="t('teamSetup.coachName')" :placeholder="t('teamSetup.coachName')" maxlength="60">
+            <select v-model="newCoachRole" :disabled="jerseySaving" :aria-label="t('teamSetup.coachRole')">
               <option value="coach">{{ t('teamSetup.coach') }}</option>
               <option value="assistant">{{ t('teamSetup.assistantCoach') }}</option>
             </select>
-            <button class="team-setup-add-player" type="submit" :disabled="!newCoachName.trim()">+ {{ t('teamSetup.addCoachButton') }}</button>
+            <button class="team-setup-add-player" type="submit" :disabled="jerseySaving || !newCoachName.trim()">+ {{ t('teamSetup.addCoachButton') }}</button>
           </form>
         </section>
         <p v-if="currentStepError" class="team-setup-error" role="alert">{{ currentStepError }}</p>
@@ -431,8 +533,8 @@ function stepCompleted(index: number) {
       </div>
 
       <footer class="team-setup-footer">
-        <button v-if="step > 0" class="team-setup-secondary" type="button" @click="step--">{{ t('teamSetup.back') }}</button>
-        <button class="team-setup-primary" type="button" :disabled="!canAdvance" @click="advance">{{ t(step === steps.length - 1 ? 'teamSetup.saveAndContinue' : 'teamSetup.next') }}</button>
+        <button v-if="step > 0" class="team-setup-secondary" type="button" :disabled="jerseySaving" @click="step--">{{ t('teamSetup.back') }}</button>
+        <button class="team-setup-primary" type="button" :disabled="!canAdvance || jerseySaving" @click="advance">{{ t(step === steps.length - 1 ? 'teamSetup.saveAndContinue' : 'teamSetup.next') }}</button>
       </footer>
     </section>
   </div>

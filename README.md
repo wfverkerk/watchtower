@@ -48,6 +48,7 @@ De actieve gedeelde wedstrijd en de niet-gesynchroniseerde eventwachtrij staan o
    - [`20261111000000_zoebas_team_catalog.sql`](./supabase/migrations/20261111000000_zoebas_team_catalog.sql)
    - [`20261111000100_zoebas_team_staff.sql`](./supabase/migrations/20261111000100_zoebas_team_staff.sql)
    - [`20261111000200_zoebas_team_staff_roles.sql`](./supabase/migrations/20261111000200_zoebas_team_staff_roles.sql)
+   - [`20261111000300_shared_jersey_numbers.sql`](./supabase/migrations/20261111000300_shared_jersey_numbers.sql)
 3. Kopieer `.env.example` naar `.env.local` en vul de project-URL en publishable/anon key in. Deze client key is bedoeld voor gebruik in de browser; de database vertrouwt op RLS-beleid en anonieme Supabase Auth-sessies.
 4. Herstart `npm run dev`. Deel vanuit de app de wedstrijdcode met andere scorers.
 
@@ -67,9 +68,9 @@ Het wedstrijdverloop toont acties, wissels (spelers erin en eruit) en het begin 
 
 De app bewaart de actieve wedstrijd en niet-gesynchroniseerde events lokaal. Nieuwe acties, wijzigingen en verwijderingen blijven per anonieme scorer gescheiden in `match_events`; de wedstrijd-roster wordt bij het aanmaken als uitgangspunt gedeeld. Een scorer kan offline blijven registreren nadat die online aan de gedeelde wedstrijd is toegevoegd. Bij herstellen van de verbinding worden events opnieuw geprobeerd te synchroniseren.
 
-De startwizard laadt de Zoebas-teams, spelersvoornamen en bekende coaches en assistent-coaches met hun rol uit `zoebas_teams` in Supabase. De stafmigraties voegen deze informatie toe; rugnummers en selecties van spelers en staf worden per apparaat bij de teamprofielen bewaard. Niet-vermelde coaches of assistent-coaches kun je daar zelf toevoegen.
+De startwizard laadt de Zoebas-teams, spelersvoornamen en bekende coaches en assistent-coaches met hun rol uit `zoebas_teams` in Supabase. Spelers zijn bij een nieuwe wizard standaard aanwezig; een onafgemaakt concept behoudt de gemaakte keuzes. Rugnummers van spelers uit de teamlijst worden bij doorgaan naar de tegenstander in Supabase opgeslagen en op andere apparaten opgehaald. Deze nummers zijn openbaar leesbaar en door iedere bezoeker aanpasbaar. Gelijktijdige wijzigingen worden gecontroleerd; bij een conflict moet je de gedeelde nummers opnieuw laden en controleren. Zelf toegevoegde spelers, coaches en hun gegevens blijven lokaal.
 
-Wijzigingen aan het team in de wizard worden als lokaal concept bewaard, ook als je de pagina herlaadt voordat de wedstrijd is aangemaakt. Teamgegevens zijn browser- en apparaatspecifiek en worden niet tussen de lokale app en de gepubliceerde website uitgewisseld. De resetknop verwijdert ook dit concept.
+Wijzigingen aan het team in de wizard worden als lokaal concept bewaard, ook als je de pagina herlaadt voordat de wedstrijd is aangemaakt. Behalve de gedeelde rugnummers zijn teamgegevens browser- en apparaatspecifiek. De resetknop verwijdert ook dit concept, maar niet de gedeelde rugnummers.
 
 De ruwe registraties zijn in Supabase te vergelijken via de `match_events`-tabel, gefilterd op `match_id` en gesorteerd op `occurred_at`. `tracker_id` is de vaste anonieme apparaatidentiteit; `tracker_name` is de gekozen weergavenaam. De UI voor het naast elkaar vergelijken van registraties volgt later.
 
