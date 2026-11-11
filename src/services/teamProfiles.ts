@@ -1,10 +1,14 @@
+import type { JerseyNumber } from './jerseyNumbers'
+
 export const teamProfilesStorageKey = 'watchtower-team-profiles-v1'
 export const teamProfileSelectionStorageKey = 'watchtower-team-profile-selection-v1'
+export const teamSetupDraftStorageKey = 'watchtower-team-setup-draft-v1'
 
 export type TeamProfilePlayer = {
   id: string
   name: string
   jerseyNumber: string
+  catalogName?: string
   isParticipating: boolean
   isOnCourt: boolean
 }
@@ -60,7 +64,7 @@ export function createDefaultTeamProfiles(): TeamProfile[] {
         id: `zoebas-player-${index + 1}`,
         name,
         jerseyNumber: '',
-        isParticipating: false,
+        isParticipating: Boolean(name),
         isOnCourt: false,
       })),
       coaches: [],
@@ -102,6 +106,7 @@ export function parseTeamProfiles(value: unknown): TeamProfile[] {
           && typeof player.id === 'string'
           && typeof player.name === 'string'
           && typeof player.jerseyNumber === 'string'
+          && (player.catalogName === undefined || typeof player.catalogName === 'string')
           && (player.isParticipating === undefined || typeof player.isParticipating === 'boolean')
           && typeof player.isOnCourt === 'boolean'))) {
     throw new Error('Saved team profiles have an invalid format.')
@@ -146,6 +151,51 @@ export function hasSavedTeamProfiles(storage: StringStorage = window.localStorag
 
 export function saveTeamProfiles(profiles: TeamProfile[], storage: StringStorage = window.localStorage) {
   storage.setItem(teamProfilesStorageKey, JSON.stringify(parseTeamProfiles(profiles)))
+}
+
+export type TeamSetupDraft = {
+  profiles: TeamProfile[]
+  selectedProfileIds: [string, string]
+  catalogTeamId: string
+  jerseyBaselines?: Record<string, JerseyNumber[]>
+}
+
+export function loadTeamSetupDraft(storage: Pick<Storage, 'getItem'> = window.localStorage): TeamSetupDraft | null {
+  const saved = storage.getItem(teamSetupDraftStorageKey)
+  if (saved === null) return null
+  const value: unknown = JSON.parse(saved)
+  if (!isRecord(value) || typeof value.catalogTeamId !== 'string'
+    || !Array.isArray(value.selectedProfileIds) || value.selectedProfileIds.length !== 2
+    || !value.selectedProfileIds.every((id) => typeof id === 'string')
+    || value.selectedProfileIds[0] === value.selectedProfileIds[1]) {
+    throw new Error('Saved team setup draft has an invalid format.')
+  }
+  const profiles = parseTeamProfiles(value.profiles)
+  if (value.jerseyBaselines !== undefined && (!isRecord(value.jerseyBaselines)
+    || !Object.values(value.jerseyBaselines).every((numbers) =>
+      Array.isArray(numbers) && numbers.every((number) =>
+        isRecord(number) && typeof number.position === 'number' && Number.isSafeInteger(number.position) && number.position > 0
+        && typeof number.name === 'string' && typeof number.number === 'string' && /^\d{1,2}$/.test(number.number))
+      && new Set(numbers.map((number) => number.position)).size === numbers.length))) {
+    throw new Error('Saved team setup draft has invalid jersey baselines.')
+  }
+  if (!value.selectedProfileIds.every((id) => profiles.some((profile) => profile.id === id))) {
+    throw new Error('Saved team setup draft references an unknown profile.')
+  }
+  return {
+    profiles,
+    selectedProfileIds: [value.selectedProfileIds[0], value.selectedProfileIds[1]],
+    catalogTeamId: value.catalogTeamId,
+    ...(value.jerseyBaselines === undefined ? {} : { jerseyBaselines: value.jerseyBaselines as Record<string, JerseyNumber[]> }),
+  }
+}
+
+export function saveTeamSetupDraft(draft: TeamSetupDraft, storage: Pick<Storage, 'setItem'> = window.localStorage) {
+  storage.setItem(teamSetupDraftStorageKey, JSON.stringify(draft))
+}
+
+export function clearTeamSetupDraft(storage: Pick<Storage, 'removeItem'> = window.localStorage) {
+  storage.removeItem(teamSetupDraftStorageKey)
 }
 
 export function loadTeamProfileSelection(storage: StringStorage = window.localStorage): [string, string] | null {

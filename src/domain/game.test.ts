@@ -3,6 +3,7 @@ import {
   canStartGame,
   createInitialGameState,
   getRecentActions,
+  getCoachMarker,
   getScore,
   getPlayerFouls,
   getPeriodTeamFouls,
@@ -25,6 +26,16 @@ function makeAction(overrides: Partial<GameAction> & Pick<GameAction, 'type' | '
 }
 
 describe('game domain rules', () => {
+  it('identifies coaches in the match overview, including legacy coach actions', () => {
+    const player = { id: 'p1', name: 'Alex', teamId: 'home', jerseyNumber: '5', isOnCourt: false }
+    expect(getCoachMarker({ ...player, isCoach: true, coachRole: 'coach' }, 'p1')).toBe('C')
+    expect(getCoachMarker({ ...player, isCoach: true, coachRole: 'assistant' }, 'p1')).toBe('AC')
+    expect(getCoachMarker({ ...player, isCoach: true }, 'p1')).toBe('C')
+    expect(getCoachMarker(player, 'p1')).toBeNull()
+    expect(getCoachMarker(undefined, 'coach-home')).toBe('C')
+    expect(getCoachMarker(undefined, 'unknown')).toBeNull()
+  })
+
   it('stores unattributed opponent scores without inventing a player', () => {
     const game = createInitialGameState()
     game.actions = [1, 2, 3].map((value) => makeAction({

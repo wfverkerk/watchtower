@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   createDefaultTeamProfiles,
+  clearTeamSetupDraft,
   loadTeamProfileSelection,
   loadTeamProfiles,
+  loadTeamSetupDraft,
   parseTeamProfiles,
   saveTeamProfileSelection,
   saveTeamProfiles,
+  saveTeamSetupDraft,
   teamProfileSelectionStorageKey,
   teamProfilesStorageKey,
 } from './teamProfiles'
@@ -15,6 +18,7 @@ function createStorage() {
   return {
     getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => values.set(key, value),
+    removeItem: (key: string) => { values.delete(key) },
   }
 }
 
@@ -22,7 +26,9 @@ describe('team profile storage', () => {
   it('starts with the visible Zoebas roster and a blank opponent roster', () => {
     const [home, away] = loadTeamProfiles(createStorage())
     expect(home.name).toBe('Zoebas X12-1')
-    expect(home.players[0]).toMatchObject({ name: 'Marley', jerseyNumber: '', isParticipating: false, isOnCourt: false })
+    expect(home.players[0]).toMatchObject({ name: 'Marley', jerseyNumber: '', isParticipating: true, isOnCourt: false })
+    expect(home.players.slice(0, 9).every((player) => player.isParticipating)).toBe(true)
+    expect(home.players[9].isParticipating).toBe(false)
     expect(home.players.slice(0, 9).map((player) => player.name)).toEqual([
       'Marley', 'Stef', 'Mees', 'Maciej', 'Tim', 'Morris', 'Noud', 'Milan', 'Viggo',
     ])
@@ -80,5 +86,24 @@ describe('team profile storage', () => {
     expect(() => loadTeamProfileSelection(storage)).toThrow('invalid format')
     storage.setItem(teamProfileSelectionStorageKey, JSON.stringify(['same', 'same']))
     expect(() => loadTeamProfileSelection(storage)).toThrow('invalid format')
+  })
+
+  it('preserves and clears an unfinished team setup draft', () => {
+    const storage = createStorage()
+    const profiles = createDefaultTeamProfiles()
+    profiles[0].players[0].jerseyNumber = '23'
+    profiles[0].coaches.push({ id: 'custom-coach', name: 'Coach', role: 'assistant', isParticipating: false })
+    const draft = { profiles, selectedProfileIds: [profiles[0].id, profiles[1].id] as [string, string], catalogTeamId: 'x12-1', jerseyBaselines: { 'x12-1': [{ position: 1, name: 'Marley', number: '23' }] } }
+    saveTeamSetupDraft(draft, storage)
+    expect(loadTeamSetupDraft(storage)).toEqual(draft)
+    clearTeamSetupDraft(storage)
+    expect(loadTeamSetupDraft(storage)).toBeNull()
+  })
+
+  it('rejects drafts with missing selected profiles', () => {
+    const storage = createStorage()
+    const profiles = createDefaultTeamProfiles()
+    saveTeamSetupDraft({ profiles, selectedProfileIds: ['missing', profiles[1].id], catalogTeamId: 'x12-1' }, storage)
+    expect(() => loadTeamSetupDraft(storage)).toThrow('unknown profile')
   })
 })

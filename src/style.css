@@ -356,10 +356,10 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .team-setup-coach-name { grid-column: 2; min-width: 0; align-self: center; padding-left: 9px; color: var(--ink); font-size: 12px; }
 .team-setup-column-heading .team-setup-coach-name { color: inherit; font-size: inherit; text-align: left; }
 .team-setup-coach-name small { margin-left: 5px; color: var(--muted); font-size: 10px; }
-.team-setup-add-coach { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 7px; margin-top: 8px; }
+.team-setup-add-coach { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; margin-top: 8px; }
 .team-setup-add-coach input { min-width: 0; min-height: 37px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--panel); font-size: 12px; }
 .team-setup-add-coach select { min-width: 110px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--panel); font-size: 11px; }
-.team-setup-add-coach .team-setup-add-player { width: auto; margin: 0; }
+.team-setup-add-coach .team-setup-add-player { grid-column: 1 / -1; margin: 0; }
 .team-setup-add-coach .team-setup-add-player:disabled { cursor: not-allowed; opacity: .55; }
 .team-setup-coaches .team-setup-roster-heading { margin-top: 0; margin-bottom: 8px; }
 .team-setup-error { margin: 8px 0 0; color: #b9472c; font-size: 11px; }
@@ -448,7 +448,7 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .helper-text { margin: 10px 0 0; color: #a09e97; font-size: 9px; }
 .activity-mark { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid #eeece7; border-radius: 50%; color: #a4a199; font-size: 12px; }
 .count { display: inline-grid; min-width: 19px; height: 19px; place-items: center; margin-left: 4px; border-radius: 50%; color: #85827b; background: #f2f1ed; font-family: 'DM Sans', sans-serif; font-size: 9px; vertical-align: 2px; }
-.activity-list { min-height: 176px; margin-top: 13px; }
+.activity-list { min-height: 176px; max-height: 400px; overflow-y: auto; margin-top: 13px; }
 .activity-row { min-height: 44px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #f1efeb; }
 .activity-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; }
 .activity-action-icon { width: 22px; height: 22px; flex: 0 0 22px; display: grid; place-items: center; border-radius: 6px; color: #77756f; background: #f2f1ed; font-family: 'Space Grotesk', sans-serif; font-size: 10px; font-weight: 700; }
@@ -459,6 +459,7 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .activity-description strong { overflow: hidden; color: #47453f; font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .activity-description .assist-attribution { color: #8c62a9; font-size: inherit; font-weight: 500; }
 .activity-description span { color: #97958e; font-size: 9px; }
+.activity-description .activity-coach-marker { display: inline-block; min-width: 22px; margin-right: 4px; padding: 3px 4px; border-radius: 5px; color: #c65a31; background: #fff0e8; text-align: center; font-family: 'Space Grotesk', sans-serif; font-size: 10px; font-weight: 700; }
 .activity-row time { color: #aaa8a1; font-size: 9px; }
 .activity-edit { width: 30px; height: 30px; flex: 0 0 30px; border: 1px solid #eeece7; border-radius: 6px; color: #77756e; background: white; font-size: 13px; }
 .activity-edit:hover { border-color: #d7d3cb; color: var(--orange); background: #fffaf6; }
@@ -501,6 +502,12 @@ h2 { margin-bottom: 0; font-size: 16px; }
   .team-setup-steps { margin-bottom: 10px; }
   .player-form { flex-wrap: wrap; }
   .add-player-button, .cancel-edit { flex: 1; }
+}
+
+@media (max-width: 700px), (pointer: coarse) and (max-height: 500px) {
+  .team-setup-page, .user-profile-page { min-height: 0; }
+  .team-setup-home-card, .user-profile-onboarding { max-height: none; overflow: visible; }
+  .team-setup-home-card .team-setup-team { overflow: visible; }
 }
 
 @media (max-width: 390px) {
@@ -731,6 +738,7 @@ h2 { margin-bottom: 0; font-size: 16px; }
   :root[data-theme='dark'] .activity-row,
   :root[data-theme='dark'] .team-stat-row { border-color: #30343c; }
   :root[data-theme='dark'] .activity-description .assist-attribution { color: #c7a6df; }
+  :root[data-theme='dark'] .activity-description .activity-coach-marker { color: #ffad86; background: #422d28; }
   :root[data-theme='dark'] .empty-icon,
   :root[data-theme='dark'] .count { color: #a0a6b2; background: #2b303a; }
   :root[data-theme='dark'] .notice { border-color: #684536; color: #ffb18d; background: #33251f; }
@@ -824,4 +832,11 @@ h2 { margin-bottom: 0; font-size: 16px; }
   .game-live .picker-player .player-choice-name { font-size: 10px; }
   .game-live .scoring-player-lists { gap: 9px; column-gap: 40px; }
   .game-live .scoring-player-list .picker-player { gap: 0; padding: 0 5px 0 0; }
+}
+
+/* iOS zooms into form controls with text smaller than 16px. */
+@media (max-width: 700px), (pointer: coarse) {
+  #app input:not([type='checkbox']):not([type='radio']),
+  #app select,
+  #app textarea { font-size: 16px; }
 }

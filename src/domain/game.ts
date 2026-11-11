@@ -1,5 +1,6 @@
 import type { AppLocale } from '../i18n/types'
 import { foulPeriodGroup, type GameClock } from './gameClock'
+import { parseMatchTimeline, type MatchTimelineEvent } from './matchTimeline'
 
 export type StatType =
   | 'score'
@@ -25,6 +26,12 @@ export type Player = {
   isCoach?: boolean
   coachRole?: 'coach' | 'assistant'
 }
+
+export function getCoachMarker(player: Player | undefined, playerId: string): 'C' | 'AC' | null {
+  if (player?.isCoach) return player.coachRole === 'assistant' ? 'AC' : 'C'
+  return !player && playerId.startsWith('coach-') ? 'C' : null
+}
+
 export type ShotLocation =
   | { area: 'opponent'; x: number; y: number }
   | { area: 'own' }
@@ -56,6 +63,7 @@ export type GameState = {
   period?: number
   youth?: boolean
   clock?: GameClock
+  timeline?: MatchTimelineEvent[]
 }
 export type TeamStats = {
   teamId: string
@@ -266,6 +274,7 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
     ...(typeof value.period === 'number' ? { period: value.period } : {}),
     ...(typeof value.youth === 'boolean' ? { youth: value.youth } : {}),
     ...(isRecord(value.clock) ? { clock: value.clock as GameClock } : {}),
+    ...(value.timeline !== undefined ? { timeline: parseMatchTimeline(value.timeline) } : {}),
   }
 }
 

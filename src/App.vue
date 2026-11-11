@@ -339,13 +339,14 @@ watch(locale, (value) => {
       />
       <ActivityPanel
         :teams="game.teams"
-        :actions="game.actions"
         :recent-actions="recentActions"
+        :timeline="game.timeline ?? []"
+        :youth="game.youth ?? false"
         :team-stats="teamStats"
+        :players="game.players"
         :player-name="playerName"
         :can-undo="game.actions.length > 0"
         :player-fouls="playerFouls"
-        :player-is-coach="(id) => !!game.players.find((player) => player.id === id)?.isCoach"
         @edit-action="handleEditAction"
         @remove-opponent-score="removeOpponentScore"
         @undo="undoLastAction"
