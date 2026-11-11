@@ -1,4 +1,5 @@
 import type { AppLocale } from '../i18n/types'
+import { foulPeriodGroup, type GameClock } from './gameClock'
 
 export type StatType =
   | 'score'
@@ -12,6 +13,7 @@ export type StatType =
   | 'block'
   | 'steal'
 export type FoulType = 'P' | 'TF' | 'U' | 'D'
+export type TurnoverType = 'turnover' | 'second_dribble' | 'travel'
 
 export type Team = { id: string; name: string; color: string }
 export type Player = {
@@ -28,7 +30,7 @@ export type ShotLocation =
   | { area: 'own' }
 export type GameAction = {
   id: string
-  playerId: string
+  playerId: string | null
   teamId: string
   type: StatType
   value: number
@@ -36,6 +38,8 @@ export type GameAction = {
   groupId?: string
   shotLocation?: ShotLocation
   foulType?: FoulType
+  turnoverType?: TurnoverType
+  period?: number
 }
 export type GameMatchInfo = {
   id: string
@@ -49,6 +53,9 @@ export type GameState = {
   actions: GameAction[]
   gameStarted: boolean
   matchInfo?: GameMatchInfo
+  period?: number
+  youth?: boolean
+  clock?: GameClock
 }
 export type TeamStats = {
   teamId: string
@@ -77,6 +84,7 @@ const statTypes: StatType[] = [
   'steal',
 ]
 const foulTypes: FoulType[] = ['P', 'TF', 'U', 'D']
+export const turnoverTypes = ['turnover', 'second_dribble', 'travel'] as const satisfies readonly TurnoverType[]
 
 export function createInitialGameState(locale: AppLocale = 'nl'): GameState {
   const names = {
@@ -127,6 +135,10 @@ function isFoulType(value: unknown): value is FoulType {
   return typeof value === 'string' && foulTypes.includes(value as FoulType)
 }
 
+export function isTurnoverType(value: unknown): value is TurnoverType {
+  return value === 'turnover' || value === 'second_dribble' || value === 'travel'
+}
+
 function isUnusedLegacyDemoRoster(players: unknown[], actions: unknown[]) {
   return actions.length === 0
     && players.length === 10
@@ -161,7 +173,7 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
 
   const rawPlayers = value.players
   const rawActions = value.actions
-  if (isUnusedLegacyDemoRoster(rawPlayers, rawActions)) {
+  if (value.period === undefined && value.youth === undefined && value.clock === undefined && isUnusedLegacyDemoRoster(rawPlayers, rawActions)) {
     return {
       ...createInitialGameState(locale),
       teams,
@@ -199,7 +211,7 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
   const actions = rawActions.map((action): GameAction => {
     if (!isRecord(action)
       || typeof action.id !== 'string'
-      || typeof action.playerId !== 'string'
+      || (typeof action.playerId !== 'string' && !(action.playerId === null && action.type === 'score' && action.teamId === teams[1].id))
       || typeof action.teamId !== 'string'
       || !teams.some((team) => team.id === action.teamId)
       || !isStatType(action.type)
@@ -209,7 +221,9 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       || !Number.isFinite(action.createdAt)
       || (action.groupId !== undefined && typeof action.groupId !== 'string')
       || (action.shotLocation !== undefined && !isShotLocation(action.shotLocation))
-      || (action.foulType !== undefined && (action.type !== 'foul' || !isFoulType(action.foulType)))) {
+      || (action.period !== undefined && (typeof action.period !== 'number' || !Number.isSafeInteger(action.period) || action.period < 1))
+      || (action.foulType !== undefined && (action.type !== 'foul' || !isFoulType(action.foulType)))
+      || (action.turnoverType !== undefined && (action.type !== 'turnover' || !isTurnoverType(action.turnoverType)))) {
       throw new Error('Opgeslagen wedstrijdacties zijn ongeldig.')
     }
 
@@ -223,11 +237,25 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       ...(typeof action.groupId === 'string' ? { groupId: action.groupId } : {}),
       ...(isShotLocation(action.shotLocation) ? { shotLocation: action.shotLocation } : {}),
       ...(isFoulType(action.foulType) ? { foulType: action.foulType } : {}),
+      ...(isTurnoverType(action.turnoverType) ? { turnoverType: action.turnoverType } : {}),
+      ...(typeof action.period === 'number' ? { period: action.period } : {}),
     }
   })
 
   if (value.matchInfo !== undefined && !isGameMatchInfo(value.matchInfo)) {
     throw new Error('Opgeslagen wedstrijdinformatie is ongeldig.')
+  }
+  if (value.period !== undefined && (typeof value.period !== 'number' || !Number.isSafeInteger(value.period) || value.period < 0)) {
+    throw new Error('Opgeslagen periode is ongeldig.')
+  }
+  if (value.youth !== undefined && typeof value.youth !== 'boolean') {
+    throw new Error('Opgeslagen wedstrijdtype is ongeldig.')
+  }
+  if (value.clock !== undefined && (!isRecord(value.clock)
+    || (value.clock.phase !== 'period' && value.clock.phase !== 'halftime')
+    || typeof value.clock.remainingMs !== 'number' || !Number.isFinite(value.clock.remainingMs) || value.clock.remainingMs < 0
+    || (value.clock.deadline !== null && (typeof value.clock.deadline !== 'number' || !Number.isFinite(value.clock.deadline))))) {
+    throw new Error('Opgeslagen wedstrijdklok is ongeldig.')
   }
   return {
     teams,
@@ -235,6 +263,9 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
     actions,
     gameStarted: value.gameStarted,
     ...(isGameMatchInfo(value.matchInfo) ? { matchInfo: value.matchInfo } : {}),
+    ...(typeof value.period === 'number' ? { period: value.period } : {}),
+    ...(typeof value.youth === 'boolean' ? { youth: value.youth } : {}),
+    ...(isRecord(value.clock) ? { clock: value.clock as GameClock } : {}),
   }
 }
 
@@ -251,9 +282,42 @@ function isGameMatchInfo(value: unknown): value is GameMatchInfo {
 export function canStartGame(game: GameState) {
   return game.teams.every((team) => {
     const teamPlayers = game.players.filter((player) => player.teamId === team.id && !player.isCoach)
-    return teamPlayers.filter((player) => player.isOnCourt).length === 5
+    const active = teamPlayers.filter((player) => player.isOnCourt).length
+    return active >= 2 && active <= 5
       && teamPlayers.every((player) => player.jerseyNumber !== '')
   })
+}
+
+export function startNextPeriod(game: GameState, playerIds: string[]) {
+  const players = game.players.filter((player) => player.teamId === game.teams[0].id && !player.isCoach)
+  const selected = new Set(playerIds)
+  if (selected.size < 2 || selected.size > 5 || selected.size !== playerIds.length || !playerIds.every((id) => players.some((player) => player.id === id))) {
+    return false
+  }
+  for (const player of players) player.isOnCourt = selected.has(player.id)
+  game.period = (game.period ?? 1) + 1
+  game.gameStarted = true
+  return true
+}
+
+export function getPlayerFouls(actions: GameAction[]) {
+  const counts: Record<string, number> = Object.create(null)
+  for (const action of actions) {
+    if (action.type === 'foul' && action.playerId !== null) counts[action.playerId] = (counts[action.playerId] ?? 0) + 1
+  }
+  return counts
+}
+
+export function getPeriodTeamFouls(game: GameState) {
+  const period = Math.max(1, game.period ?? 1)
+  const group = foulPeriodGroup(period, game.youth ?? false)
+  const counts: Record<string, number> = Object.create(null)
+  for (const action of game.actions) {
+    if (action.type === 'foul' && foulPeriodGroup(action.period ?? period, game.youth ?? false) === group) {
+      counts[action.teamId] = (counts[action.teamId] ?? 0) + 1
+    }
+  }
+  return counts
 }
 
 export function getScore(game: GameState) {
@@ -312,7 +376,7 @@ export function getRecentActions(game: GameState, limit = 8, unknownPlayerName =
     if (action.type === 'assist' && action.groupId) {
       assistsByGroup.set(
         action.groupId,
-        playerNamesById.get(action.playerId) ?? unknownPlayerName,
+        (action.playerId !== null ? playerNamesById.get(action.playerId) : undefined) ?? unknownPlayerName,
       )
     }
   }

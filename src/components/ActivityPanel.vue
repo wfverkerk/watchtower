@@ -3,20 +3,24 @@ import { computed } from 'vue'
 import { getActionTranslation } from '../i18n/actionLabel'
 import { getIntlLocale, isAppLocale, useLocale } from '../i18n/useLocale'
 import type { GameAction, RecentAction, Team, TeamStats } from '../domain/game'
+import FoulMarker from './FoulMarker.vue'
 
 const { t, locale, displayTeamName, displayPlayerName } = useLocale()
 
-defineProps<{
+const props = defineProps<{
   teams: Team[]
   actions: GameAction[]
   recentActions: RecentAction[]
   teamStats: TeamStats[]
   playerName: (playerId: string) => string
   canUndo: boolean
+  playerFouls: Record<string, number>
+  playerIsCoach: (playerId: string) => boolean
 }>()
 
 const emit = defineEmits<{
   'edit-action': [action: GameAction]
+  'remove-opponent-score': [action: GameAction]
   undo: []
 }>()
 
@@ -27,6 +31,12 @@ const timeFormatter = computed(() => {
 
 function actionTime(timestamp: number) {
   return timeFormatter.value.format(timestamp)
+}
+
+function actionPlayer(action: GameAction) {
+  if (action.playerId !== null) return props.playerName(action.playerId)
+  const team = props.teams.find((item) => item.id === action.teamId)
+  return team ? displayTeamName(team) : t('teamSetup.away')
 }
 
 function actionLabel(action: GameAction) {
@@ -72,17 +82,19 @@ function actionIcon(action: GameAction) {
         <span class="activity-action-icon" :class="`activity-action-icon-${item.action.type}`" aria-hidden="true">{{ actionIcon(item.action) }}</span>
         <div class="activity-description">
           <strong>
-            {{ playerName(item.action.playerId) }}<template v-if="item.assistName">&nbsp;<span class="assist-attribution">{{ t('activity.assistAttribution', { name: displayPlayerName(item.assistName) }) }}</span></template>
+            {{ actionPlayer(item.action) }} <FoulMarker v-if="item.action.playerId !== null && !playerIsCoach(item.action.playerId)" :count="playerFouls[item.action.playerId] ?? 0" /><template v-if="item.assistName">&nbsp;<span class="assist-attribution">{{ t('activity.assistAttribution', { name: displayPlayerName(item.assistName) }) }}</span></template>
           </strong>
           <span>{{ actionLabel(item.action) }}</span>
         </div>
         <time>{{ actionTime(item.action.createdAt) }}</time>
         <button
           class="activity-edit"
-          :aria-label="t('activity.editAction', { player: playerName(item.action.playerId), action: actionLabel(item.action) })"
-          :title="t('activity.editAction', { player: playerName(item.action.playerId), action: actionLabel(item.action) })"
+          v-if="item.action.playerId !== null"
+          :aria-label="t('activity.editAction', { player: actionPlayer(item.action), action: actionLabel(item.action) })"
+          :title="t('activity.editAction', { player: actionPlayer(item.action), action: actionLabel(item.action) })"
           @click="emit('edit-action', item.action)"
         >✎</button>
+        <button v-else class="activity-edit" :aria-label="t(item.action.value === 1 ? 'activity.removeOpponentPoint' : 'activity.removeOpponentScore', { team: actionPlayer(item.action), count: item.action.value })" :title="t(item.action.value === 1 ? 'activity.removeOpponentPoint' : 'activity.removeOpponentScore', { team: actionPlayer(item.action), count: item.action.value })" @click="emit('remove-opponent-score', item.action)">×</button>
       </div>
     </div>
     <div v-else class="empty-state">

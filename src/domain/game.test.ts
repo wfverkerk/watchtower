@@ -4,8 +4,11 @@ import {
   createInitialGameState,
   getRecentActions,
   getScore,
+  getPlayerFouls,
+  getPeriodTeamFouls,
   getTeamStats,
   parseGameState,
+  startNextPeriod,
   undoLastAction,
   updateScoringPlay,
   type GameAction,
@@ -22,6 +25,19 @@ function makeAction(overrides: Partial<GameAction> & Pick<GameAction, 'type' | '
 }
 
 describe('game domain rules', () => {
+  it('stores unattributed opponent scores without inventing a player', () => {
+    const game = createInitialGameState()
+    game.actions = [1, 2, 3].map((value) => makeAction({
+      id: `away-score-${value}`, type: 'score', teamId: 'away', playerId: null, value, period: 1,
+    }))
+    const restored = parseGameState(game)
+    expect(restored.actions).toEqual(game.actions)
+    expect(getScore(restored)[1].points).toBe(6)
+    expect(getScore({ ...restored, actions: undoLastAction(restored.actions) })[1].points).toBe(3)
+    expect(() => parseGameState({ ...game, actions: [{ ...game.actions[0], type: 'foul' }] })).toThrow()
+    expect(() => parseGameState({ ...game, actions: [{ ...game.actions[0], teamId: 'home' }] })).toThrow()
+  })
+
   it('calculates team scores and statistics from recorded actions', () => {
     const game = createInitialGameState()
     game.actions = [
@@ -153,11 +169,85 @@ describe('game domain rules', () => {
     expect(undoLastAction([])).toEqual([])
   })
 
-  it('requires exactly five active players per team to start', () => {
+  it('requires between two and five active players per team to start', () => {
     const game = createInitialGameState()
     expect(canStartGame(game)).toBe(true)
-    game.players[0].isOnCourt = false
+    game.players.slice(0, 3).forEach((player) => { player.isOnCourt = false })
+    expect(canStartGame(game)).toBe(true)
+    game.players[3].isOnCourt = false
     expect(canStartGame(game)).toBe(false)
+  })
+
+  it('starts each period with two to five distinct players of the own team', () => {
+    const game = createInitialGameState()
+    game.period = 0
+    game.players.push({ id: 'home-6', teamId: 'home', name: 'Six', jerseyNumber: '6', isOnCourt: false })
+    const before = structuredClone(game)
+    expect(startNextPeriod(game, ['home-1'])).toBe(false)
+    expect(startNextPeriod(game, ['home-1', 'home-2', 'home-3', 'home-4', 'away-1'])).toBe(false)
+    expect(startNextPeriod(game, ['home-1', 'home-1', 'home-2', 'home-3', 'home-4'])).toBe(false)
+    expect(game).toEqual(before)
+    expect(startNextPeriod(game, ['home-1', 'home-2', 'home-3', 'home-4', 'home-6'])).toBe(true)
+    expect(game.period).toBe(1)
+    expect(game.gameStarted).toBe(true)
+    expect(game.players.find((player) => player.id === 'home-5')?.isOnCourt).toBe(false)
+    expect(game.players.filter((player) => player.teamId === 'away' && player.isOnCourt)).toHaveLength(5)
+    expect(startNextPeriod(game, ['home-1', 'home-2', 'home-3', 'home-4', 'home-5'])).toBe(true)
+    expect(game.period).toBe(2)
+    expect(startNextPeriod(game, ['home-1', 'home-2'])).toBe(true)
+    expect(game.players.filter((player) => player.teamId === 'home' && player.isOnCourt)).toHaveLength(2)
+    expect(parseGameState(game).period).toBe(3)
+    expect(() => parseGameState({ ...game, period: -1 })).toThrow('periode')
+    expect(() => parseGameState({ ...game, period: 1.5 })).toThrow('periode')
+  })
+
+  it('counts fouls per player and by non-overlapping youth period pairs, including overtime', () => {
+    const game = createInitialGameState()
+    game.youth = true
+    game.actions = [1, 1, 2, 2, 3, 7, 8, 9].map((period, index) => makeAction({
+      id: String(index), playerId: 'home-1', teamId: 'home', type: 'foul', period,
+    }))
+    expect(getPlayerFouls(game.actions)['home-1']).toBe(8)
+    game.period = 2
+    expect(getPeriodTeamFouls(game)['home']).toBe(4)
+    game.period = 3
+    expect(getPeriodTeamFouls(game)['home']).toBe(1)
+    game.period = 9
+    expect(getPeriodTeamFouls(game)['home']).toBe(3)
+    game.youth = false
+    game.period = 3
+    expect(getPeriodTeamFouls(game)['home']).toBe(1)
+    game.period = 5
+    expect(getPeriodTeamFouls(game)['home']).toBe(3)
+  })
+
+  it('round-trips period, clock and fouls and rejects invalid stored values', () => {
+    const game = createInitialGameState()
+    game.period = 4
+    game.youth = true
+    game.clock = { phase: 'halftime', remainingMs: 120_000, deadline: 1_700_000_000_000 }
+    game.actions.push(makeAction({ type: 'foul', teamId: 'home', playerId: 'home-1', period: 3 }))
+    expect(parseGameState(game)).toEqual(game)
+    expect(() => parseGameState({ ...game, clock: { ...game.clock, remainingMs: -1 } })).toThrow('wedstrijdklok')
+    expect(() => parseGameState({ ...game, actions: [{ ...game.actions[0], period: 0 }] })).toThrow('wedstrijdacties')
+  })
+
+  it('treats a legacy game as being in the first period when advancing', () => {
+    const game = createInitialGameState()
+    expect(startNextPeriod(game, game.players.slice(0, 5).map((player) => player.id))).toBe(true)
+    expect(game.period).toBe(2)
+  })
+
+  it('preserves a period in an otherwise unused legacy roster', () => {
+    const game = createInitialGameState()
+    game.players = game.players.map((player, index) => ({
+      ...player,
+      id: `${index < 5 ? 'h' : 'a'}${index % 5 + 1}`,
+      name: `Speler ${index % 5 + 1}`,
+    }))
+    game.period = 2
+    expect(parseGameState(game).period).toBe(2)
+    expect(parseGameState(game).players[0].id).toBe('h1')
   })
 
   it('does not count selected coaches as roster players when starting a game', () => {
@@ -242,6 +332,18 @@ describe('game domain rules', () => {
       ...game,
       actions: [{ ...game.actions[0], foulType: 'invalid' }],
     })).toThrow('Opgeslagen wedstrijdacties zijn ongeldig.')
+  })
+
+  it('preserves turnover types, accepts legacy turnovers and rejects invalid types', () => {
+    const game = createInitialGameState()
+    game.actions.push(makeAction({ type: 'turnover', teamId: 'home', playerId: 'home-1', turnoverType: 'second_dribble' }))
+    expect(parseGameState(game).actions[0].turnoverType).toBe('second_dribble')
+    for (const turnoverType of ['turnover', 'travel'] as const) {
+      expect(parseGameState({ ...game, actions: [{ ...game.actions[0], turnoverType }] }).actions[0].turnoverType).toBe(turnoverType)
+    }
+    expect(parseGameState({ ...game, actions: [{ ...game.actions[0], turnoverType: undefined }] }).actions[0]).not.toHaveProperty('turnoverType')
+    expect(() => parseGameState({ ...game, actions: [{ ...game.actions[0], turnoverType: 'invalid' }] })).toThrow()
+    expect(() => parseGameState({ ...game, actions: [{ ...game.actions[0], type: 'foul' }] })).toThrow()
   })
 
   it('loads and saves the existing local-storage key without dropping game data', () => {

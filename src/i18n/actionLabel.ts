@@ -1,4 +1,4 @@
-import type { FoulType, GameAction, StatType } from '../domain/game'
+import type { FoulType, GameAction, StatType, TurnoverType } from '../domain/game'
 import type { AppLocale } from './types'
 
 type TranslationKey =
@@ -13,6 +13,8 @@ type TranslationKey =
   | 'actions.rebound'
   | 'actions.assist'
   | 'actions.turnover'
+  | 'actions.secondDribble'
+  | 'actions.travel'
   | 'actions.foul'
   | 'actions.personalFoul'
   | 'actions.technicalFoul'
@@ -51,7 +53,13 @@ const foulTypeKeys: Record<FoulType, TranslationKey> = {
   D: 'actions.disqualifyingFoul',
 }
 
-export function getActionTranslation(action: Pick<GameAction, 'type' | 'value' | 'foulType'>, locale: AppLocale) {
+const turnoverTypeKeys: Record<TurnoverType, TranslationKey> = {
+  turnover: 'actions.turnover',
+  second_dribble: 'actions.secondDribble',
+  travel: 'actions.travel',
+}
+
+export function getActionTranslation(action: Pick<GameAction, 'type' | 'value' | 'foulType' | 'turnoverType'>, locale: AppLocale) {
   if (action.type === 'score') {
     return { key: pointsKey('score', action.value, locale), params: { value: action.value } }
   }
@@ -60,6 +68,9 @@ export function getActionTranslation(action: Pick<GameAction, 'type' | 'value' |
   }
   if (action.type === 'foul' && action.foulType) {
     return { key: foulTypeKeys[action.foulType], params: undefined }
+  }
+  if (action.type === 'turnover' && action.turnoverType) {
+    return { key: turnoverTypeKeys[action.turnoverType], params: undefined }
   }
 
   return { key: actionKeys[action.type] ?? 'actions.rebound', params: undefined }

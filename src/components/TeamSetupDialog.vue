@@ -22,13 +22,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useLocale()
-const sides = ['home', 'away'] as const
-const steps = [
-  { side: 0, stage: 'participants' },
-  { side: 1, stage: 'participants' },
-  { side: 0, stage: 'starters' },
-  { side: 1, stage: 'starters' },
-] as const
+const steps = ['selectClubTeam', 'participants', 'chooseMatch'] as const
 const step = ref(0)
 const draftProfiles = ref(props.profiles.map((profile) => ({
   ...profile,
@@ -38,7 +32,6 @@ const draftProfiles = ref(props.profiles.map((profile) => ({
 const selected = ref<[string, string]>([...props.selectedProfileIds])
 const selectedCatalogTeamId = ref(
   draftProfiles.value.find((profile) => profile.id === selected.value[0])?.catalogTeamId
-    ?? props.catalogTeams[0]?.id
     ?? '',
 )
 const matches = ref<ZoebasMatch[]>([])
@@ -49,26 +42,12 @@ const manualMatchSelected = ref(false)
 const manualOpponentName = ref('')
 const newCoachName = ref('')
 const newCoachRole = ref<TeamProfileCoach['role']>('coach')
-const currentStep = computed(() => steps[step.value])
-const sideIndex = computed(() => currentStep.value.side)
-const isSelectingParticipants = computed(() => currentStep.value.stage === 'participants')
-const isSelectingHomeParticipants = computed(() => sideIndex.value === 0 && isSelectingParticipants.value)
-const currentProfileId = computed(() => selected.value[sideIndex.value])
 const currentProfile = computed(() =>
-  draftProfiles.value.find((profile) => profile.id === currentProfileId.value) ?? null,
+  draftProfiles.value.find((profile) => profile.id === selected.value[0]) ?? null,
 )
 const participatingPlayers = computed(() => currentProfile.value?.players.filter((player) => player.isParticipating) ?? [])
 const participatingMembersCount = computed(() =>
   participatingPlayers.value.length + (currentProfile.value?.coaches.filter((coach) => coach.isParticipating).length ?? 0),
-)
-const visiblePlayers = computed(() => {
-  if (!currentProfile.value) return []
-  return isSelectingParticipants.value ? currentProfile.value.players : participatingPlayers.value
-})
-const currentPlayersOnCourt = computed(() => currentProfile.value?.players.filter((player) => player.isOnCourt).length ?? 0)
-const opponentProfiles = computed(() => draftProfiles.value.filter((profile) => !profile.catalogTeamId))
-const selectionError = computed(() =>
-  selected.value[0] && selected.value[0] === selected.value[1] ? t('teamSetup.distinctTeams') : '',
 )
 const selectedMatch = computed(() => matches.value.find((match) => match.id === selectedMatchId.value) ?? null)
 const recommendedMatch = computed(() => getRecommendedMatch(matches.value))
@@ -79,10 +58,6 @@ const pastMatches = computed(() => matches.value.filter((match) =>
   new Date(`${match.date}T${match.startTime}:00`).getTime() < Date.now(),
 ))
 const hasMatchSelection = computed(() => !!selectedMatch.value || (manualMatchSelected.value && !!manualOpponentName.value.trim()))
-
-function updateSelectedProfile(value: string) {
-  selected.value[sideIndex.value] = value
-}
 
 function selectCatalogTeam(teamId: string) {
   selectedCatalogTeamId.value = teamId
@@ -96,13 +71,15 @@ function selectCatalogTeam(teamId: string) {
       || item.name === team.name
       || item.name === `Zoebas ${team.name}`,
     )
-  const rosterNames = new Set(team.playerNames.map((name) => name.toLocaleLowerCase()))
+  const usedPlayerIds = new Set<string>()
   const players = (team.playerNames.length ? team.playerNames : Array.from({ length: 5 }, () => '')).map((name, index): TeamProfilePlayer => {
-      const saved = legacyProfile?.players.find((player) => player.name.toLocaleLowerCase() === name.toLocaleLowerCase())
-        ?? legacyProfile?.players[index]
+      const saved = legacyProfile?.players.find((player) => !usedPlayerIds.has(player.id) && player.id === `${team.id}-player-${index + 1}`)
+        ?? legacyProfile?.players.find((player) => !usedPlayerIds.has(player.id) && player.name.toLocaleLowerCase() === name.toLocaleLowerCase())
+        ?? legacyProfile?.players.find((player, savedIndex) => savedIndex === index && !usedPlayerIds.has(player.id))
+      if (saved) usedPlayerIds.add(saved.id)
       return {
-        id: `${team.id}-player-${index + 1}`,
-        name,
+        id: saved?.id ?? `${team.id}-player-${index + 1}`,
+        name: saved?.name || name,
         jerseyNumber: saved?.jerseyNumber ?? '',
         isParticipating: saved?.isParticipating ?? false,
         isOnCourt: saved?.isOnCourt ?? false,
@@ -110,13 +87,12 @@ function selectCatalogTeam(teamId: string) {
     })
   if (legacyProfile) {
     players.push(...legacyProfile.players
-      .filter((player) => !rosterNames.has(player.name.toLocaleLowerCase()))
+      .filter((player) => !usedPlayerIds.has(player.id))
       .map((player) => ({ ...player })))
   }
   const rosterCoachNames = new Set(team.staff.map((member) => member.name.toLocaleLowerCase()))
   const coaches = team.staff.map((member, index): TeamProfileCoach => {
     const saved = legacyProfile?.coaches.find((coach) => coach.name.toLocaleLowerCase() === member.name.toLocaleLowerCase())
-      ?? legacyProfile?.coaches[index]
     return {
       id: saved?.id ?? `${team.id}-coach-${index + 1}`,
       name: member.name,
@@ -159,17 +135,16 @@ function formatMatchDate(match: ZoebasMatch) {
   return `${date.toLocaleDateString()} · ${match.startTime}`
 }
 
+let matchRequest = 0
 watch([selectedCatalogTeamId, () => props.catalogTeams], async ([teamId]) => {
+  const request = ++matchRequest
   matches.value = []
   selectedMatchId.value = ''
   manualMatchSelected.value = false
   manualOpponentName.value = ''
   matchError.value = ''
+  matchLoading.value = false
   if (!props.catalogTeams.length) return
-  if (!props.catalogTeams.some((team) => team.id === teamId)) {
-    selectedCatalogTeamId.value = props.catalogTeams[0].id
-    return
-  }
   if (!teamId) return
 
   const team = props.catalogTeams.find((item) => item.id === teamId)
@@ -178,30 +153,17 @@ watch([selectedCatalogTeamId, () => props.catalogTeams], async ([teamId]) => {
   matchLoading.value = true
   try {
     const fetchedMatches = await loadZoebasMatches(team.sourceTeamId)
-    if (selectedCatalogTeamId.value !== teamId) return
+    if (request !== matchRequest) return
     matches.value = fetchedMatches
     const suggested = getRecommendedMatch(fetchedMatches)
-    if (suggested) selectedMatchId.value = suggested.id
+    if (suggested && !manualMatchSelected.value) selectedMatchId.value = suggested.id
   } catch (error) {
     console.error('Failed to load the Zoebas match schedule.', error)
-    if (selectedCatalogTeamId.value === teamId) matchError.value = t('errors.loadMatchSchedule')
+    if (request === matchRequest) matchError.value = t('errors.loadMatchSchedule')
   } finally {
-    if (selectedCatalogTeamId.value === teamId) matchLoading.value = false
+    if (request === matchRequest) matchLoading.value = false
   }
 }, { immediate: true })
-
-function addTeam() {
-  const id = crypto.randomUUID()
-  const players = Array.from({ length: 5 }, (): TeamProfilePlayer => ({
-    id: crypto.randomUUID(),
-    name: '',
-    jerseyNumber: '',
-    isParticipating: false,
-    isOnCourt: false,
-  }))
-  draftProfiles.value.push({ id, name: '', players, coaches: [] })
-  updateSelectedProfile(id)
-}
 
 function addPlayer() {
   if (!currentProfile.value) return
@@ -246,15 +208,10 @@ function toggleParticipation(player: TeamProfilePlayer) {
   if (!player.isParticipating) player.isOnCourt = false
 }
 
-function toggleCourt(player: TeamProfilePlayer) {
-  if (player.isOnCourt) player.isOnCourt = false
-  else if (player.isParticipating && currentPlayersOnCourt.value < 5) player.isOnCourt = true
-}
-
 function participantError(profile: TeamProfile | undefined) {
   if (!profile?.name.trim()) return t('teamSetup.teamNameRequired')
   const participants = profile.players.filter((player) => player.isParticipating)
-  if (participants.length < 5) return t('teamSetup.selectAtLeastFive')
+  if (participants.length < 2) return t('teamSetup.selectAtLeastFive')
   if (participants.some((player) => !player.name.trim() || !/^\d{1,2}$/.test(player.jerseyNumber))) {
     return t('teamSetup.participantDetailsRequired')
   }
@@ -264,33 +221,29 @@ function participantError(profile: TeamProfile | undefined) {
   return ''
 }
 
-function profileError(profile: TeamProfile | undefined) {
-  if (!profile) return t('teamSetup.teamNameRequired')
-  const participationError = participantError(profile)
-  if (participationError) return participationError
-  if (profile.players.filter((player) => player.isOnCourt).length !== 5) return t('teamSetup.selectFive')
-  return ''
-}
-
-const currentStepError = computed(() =>
-  props.catalogError && isSelectingHomeParticipants.value
-    ? props.catalogError
-    : isSelectingParticipants.value
-      ? participantError(currentProfile.value ?? undefined)
-      : profileError(currentProfile.value ?? undefined),
-)
-
-const canAdvance = computed(() => !selectionError.value
-  && (!isSelectingHomeParticipants.value
-    || (!!props.catalogTeams.find((team) => team.id === selectedCatalogTeamId.value) && hasMatchSelection.value))
-  && !currentStepError.value)
-
-const canSave = computed(() => !selectionError.value
-  && sides.every((_, index) => !profileError(draftProfiles.value.find((profile) => profile.id === selected.value[index]))))
+const currentStepError = computed(() => step.value === 1 ? participantError(currentProfile.value ?? undefined) : '')
+const canAdvance = computed(() => {
+  if (step.value === 0) return !props.catalogError && !!props.catalogTeams.find((team) => team.id === selectedCatalogTeamId.value)
+  if (step.value === 1) return !currentStepError.value
+  return hasMatchSelection.value
+})
 
 function save() {
-  if (!canSave.value) return
-  emit('save', draftProfiles.value, [...selected.value], selectedMatch.value, manualOpponentName.value.trim())
+  if (!canAdvance.value || participantError(currentProfile.value ?? undefined)) return
+  const opponentId = 'watchtower-placeholder-opponent'
+  const opponent: TeamProfile = {
+    id: opponentId,
+    name: manualOpponentName.value.trim() || t('teamSetup.away'),
+    players: Array.from({ length: 5 }, (_, index) => ({
+      id: `player-${index + 1}`,
+      name: `player_${index + 1}`,
+      jerseyNumber: String(index + 1),
+      isParticipating: true,
+      isOnCourt: true,
+    })),
+    coaches: [],
+  }
+  emit('save', [...draftProfiles.value.filter((profile) => profile.id !== opponentId), opponent], [selected.value[0], opponentId], selectedMatch.value, manualOpponentName.value.trim())
 }
 
 function advance() {
@@ -328,56 +281,27 @@ function canNavigateTo(index: number) {
       <div class="team-setup-steps" :class="{ 'team-setup-home-steps': home }" role="tablist" :aria-label="t('teamSetup.title')">
         <button
           v-for="(wizardStep, index) in steps"
-          :key="`${wizardStep.side}-${wizardStep.stage}`"
+          :key="wizardStep"
           type="button"
           :disabled="!canNavigateTo(index)"
           role="tab"
           :aria-selected="step === index"
           :class="{ selected: step === index }"
           @click="step = index"
-        >{{ `${t(`teamSetup.${sides[wizardStep.side]}`)} · ${t(`teamSetup.${wizardStep.stage}`)}` }}</button>
+        >{{ t(`teamSetup.${wizardStep}`) }}</button>
       </div>
 
-      <div class="team-setup-team" :class="{ 'team-setup-home-participants': isSelectingHomeParticipants }">
-        <template v-if="isSelectingHomeParticipants">
-          <label class="team-setup-field team-setup-club-picker">
-            <span>{{ t('teamSetup.chooseClubTeam') }}</span>
-            <select
-              :value="selectedCatalogTeamId"
-              :disabled="catalogLoading || catalogTeams.length === 0"
-              @change="selectCatalogTeam(($event.target as HTMLSelectElement).value)"
-            >
-              <option value="">{{ t(catalogLoading ? 'teamSetup.loadingClubTeams' : 'teamSetup.chooseClubTeamPlaceholder') }}</option>
-              <option v-for="team in catalogTeams" :key="team.id" :value="team.id">{{ team.name }}</option>
-            </select>
-          </label>
+      <div class="team-setup-team">
+        <template v-if="step === 0">
+          <h3>{{ t('teamSetup.chooseClubTeam') }}</h3>
+          <p v-if="catalogLoading" class="team-setup-hint" role="status">{{ t('teamSetup.loadingClubTeams') }}</p>
+          <div class="team-setup-team-grid" role="group" :aria-label="t('teamSetup.chooseClubTeam')">
+            <button v-for="team in catalogTeams" :key="team.id" type="button"
+              :aria-pressed="selectedCatalogTeamId === team.id"
+              @click="selectedCatalogTeamId = team.id">{{ team.name }}</button>
+          </div>
         </template>
-        <template v-if="currentProfile && (!isSelectingHomeParticipants || selectedCatalogTeamId)">
-        <div class="team-setup-profile-row">
-          <label v-if="sideIndex === 1" class="team-setup-field">
-            <span>{{ t('teamSetup.chooseTeam') }}</span>
-            <select :value="currentProfileId" @change="updateSelectedProfile(($event.target as HTMLSelectElement).value)">
-              <option v-for="profile in opponentProfiles" :key="profile.id" :value="profile.id">
-                {{ profile.name || t('teamSetup.unnamedTeam') }}
-              </option>
-            </select>
-          </label>
-          <p v-else class="team-setup-club-name">{{ currentProfile.name }}</p>
-          <button v-if="sideIndex === 1" class="team-setup-add-team" type="button" @click="addTeam">{{ t('teamSetup.newTeam') }}</button>
-        </div>
-
-        <label v-if="sideIndex === 1" class="team-setup-field team-setup-name">
-          <span>{{ t('teamSetup.teamName') }}</span>
-          <input v-model="currentProfile.name" type="text" :placeholder="t('teamSetup.teamName')" maxlength="60">
-        </label>
-
-        <div class="team-setup-roster-heading">
-          <h3>{{ t(isSelectingParticipants ? 'teamSetup.players' : 'teamSetup.startingFive') }}</h3>
-          <span>{{ t(isSelectingParticipants ? 'teamSetup.participantCount' : 'teamSetup.onCourtCount', { count: isSelectingParticipants ? participatingMembersCount : currentPlayersOnCourt }) }}</span>
-        </div>
-        <p class="team-setup-hint">{{ t(isSelectingParticipants ? 'teamSetup.participantHint' : 'teamSetup.starterHint') }}</p>
-
-        <section v-if="isSelectingHomeParticipants" class="team-setup-matches" aria-labelledby="team-match-heading">
+        <section v-if="step === 2" class="team-setup-matches" aria-labelledby="team-match-heading">
           <h3 id="team-match-heading">{{ t('teamSetup.chooseMatch') }}</h3>
           <p v-if="matchLoading" class="team-setup-hint" role="status">{{ t('teamSetup.loadingMatches') }}</p>
           <p v-if="matchError" class="team-setup-error" role="alert">{{ matchError }}</p>
@@ -430,32 +354,29 @@ function canNavigateTo(index: number) {
           <p v-if="!hasMatchSelection" class="team-setup-error">{{ t('teamSetup.chooseMatchRequired') }}</p>
         </section>
 
+        <template v-if="step === 1 && currentProfile">
+        <p class="team-setup-club-name">{{ currentProfile.name }}</p>
+        <div class="team-setup-roster-heading">
+          <h3>{{ t('teamSetup.players') }}</h3>
+          <span>{{ t('teamSetup.participantCount', { count: participatingMembersCount }) }}</span>
+        </div>
+        <p class="team-setup-hint">{{ t('teamSetup.participantHint') }}</p>
         <div class="team-setup-roster">
-          <div v-for="player in visiblePlayers" :key="player.id" class="team-setup-player">
+          <div v-for="player in currentProfile.players" :key="player.id" class="team-setup-player">
             <button
-              v-if="isSelectingParticipants"
               class="team-setup-court-toggle"
               type="button"
               :aria-pressed="player.isParticipating"
-              :aria-label="t(player.isParticipating ? 'teamSetup.removeParticipant' : 'teamSetup.addParticipant', { name: player.name || t('teamSetup.playerName') })"
+              :aria-label="t('teamSetup.participation', { name: player.name || t('teamSetup.playerName') })"
               @click="toggleParticipation(player)"
-            >{{ player.isParticipating ? '✓' : '+' }}</button>
-            <button
-              v-else
-              class="team-setup-court-toggle"
-              type="button"
-              :aria-pressed="player.isOnCourt"
-              :aria-label="t(player.isOnCourt ? 'teamSetup.removeFromCourt' : 'teamSetup.putOnCourt', { name: player.name || t('teamSetup.playerName') })"
-              :disabled="!player.isParticipating"
-              @click="toggleCourt(player)"
-            >{{ player.isOnCourt ? '✓' : '+' }}</button>
+            ><span aria-hidden="true">×</span><span>{{ t('teamSetup.participates') }}</span></button>
             <input v-model="player.name" type="text" :aria-label="t('teamSetup.playerName')" :placeholder="t('teamSetup.playerName')" maxlength="60">
             <input v-model="player.jerseyNumber" type="text" inputmode="numeric" maxlength="2" :aria-label="t('teamSetup.jerseyNumber')" placeholder="#" @input="player.jerseyNumber = player.jerseyNumber.replace(/\D/g, '').slice(0, 2)">
-            <button v-if="isSelectingParticipants" class="team-setup-remove-player" type="button" :aria-label="t('teamSetup.removePlayer')" @click="removePlayer(player.id)">×</button>
+            <button class="team-setup-remove-player" type="button" :aria-label="t('teamSetup.removePlayer')" @click="removePlayer(player.id)">×</button>
           </div>
         </div>
-        <button v-if="isSelectingParticipants" class="team-setup-add-player" type="button" @click="addPlayer">+ {{ t('teamSetup.addPlayer') }}</button>
-        <section v-if="isSelectingParticipants" class="team-setup-coaches" :aria-label="t('teamSetup.coaches')">
+        <button class="team-setup-add-player" type="button" @click="addPlayer">+ {{ t('teamSetup.addPlayer') }}</button>
+        <section class="team-setup-coaches" :aria-label="t('teamSetup.coaches')">
           <div class="team-setup-roster-heading">
             <h3>{{ t('teamSetup.coaches') }}</h3>
             <span>{{ t('teamSetup.coachesSelected', { count: currentProfile?.coaches.filter((coach) => coach.isParticipating).length ?? 0 }) }}</span>
@@ -466,9 +387,9 @@ function canNavigateTo(index: number) {
                 class="team-setup-court-toggle"
                 type="button"
                 :aria-pressed="coach.isParticipating"
-                :aria-label="t(coach.isParticipating ? 'teamSetup.removeCoach' : 'teamSetup.addCoach', { name: coach.name })"
+                :aria-label="t('teamSetup.participation', { name: coach.name })"
                 @click="toggleCoachParticipation(coach)"
-              >{{ coach.isParticipating ? '✓' : '+' }}</button>
+              ><span aria-hidden="true">×</span><span>{{ t('teamSetup.participates') }}</span></button>
               <span class="team-setup-coach-name">{{ coach.name }} <small>{{ t(coach.role === 'assistant' ? 'teamSetup.assistantCoach' : 'teamSetup.coach') }}</small></span>
               <button
                 v-if="!props.catalogTeams.find((team) => team.id === currentProfile?.catalogTeamId)?.staff.some((member) => member.name === coach.name)"
@@ -489,13 +410,12 @@ function canNavigateTo(index: number) {
           </form>
         </section>
         <p v-if="currentStepError" class="team-setup-error" role="alert">{{ currentStepError }}</p>
-        <p v-if="selectionError" class="team-setup-error" role="alert">{{ selectionError }}</p>
         </template>
       </div>
 
       <footer class="team-setup-footer">
         <button v-if="step > 0" class="team-setup-secondary" type="button" @click="step--">{{ t('teamSetup.back') }}</button>
-        <button class="team-setup-primary" type="button" :disabled="step === steps.length - 1 ? !canSave : !canAdvance" @click="advance">{{ t(step === steps.length - 1 ? 'teamSetup.startGame' : 'teamSetup.next') }}</button>
+        <button class="team-setup-primary" type="button" :disabled="!canAdvance" @click="advance">{{ t(step === steps.length - 1 ? 'teamSetup.saveAndContinue' : 'teamSetup.next') }}</button>
       </footer>
     </section>
   </div>

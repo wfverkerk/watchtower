@@ -57,6 +57,31 @@ describe('shared match event log', () => {
     expect(storage.getItem(matchEventsStorageKey)).not.toBeNull()
   })
 
+  it('preserves the period of a queued foul', () => {
+    const storage = createStorage()
+    const event = createEvent({
+      action: { ...createEvent().action, type: 'foul', foulType: 'P', period: 4 },
+    })
+    appendMatchEvents([event], storage)
+    expect(loadMatchEvents(storage)).toEqual([event])
+  })
+
+  it('round-trips turnover types through the sync queue', () => {
+    const storage = createStorage()
+    const event = createEvent({ action: { ...createEvent().action, type: 'turnover', turnoverType: 'travel' } })
+    appendMatchEvents([event], storage)
+    expect(loadMatchEvents(storage)).toEqual([event])
+  })
+
+  it('round-trips an unattributed opponent score in the sync queue', () => {
+    const storage = createStorage()
+    const event = createEvent({
+      action: { ...createEvent().action, playerId: null, teamId: 'away', type: 'score', period: 2 },
+    })
+    appendMatchEvents([event], storage)
+    expect(loadMatchEvents(storage)).toEqual([event])
+  })
+
   it('preserves malformed events and keeps valid events available for the next operation', () => {
     const storage = createStorage()
     const valid = createEvent()

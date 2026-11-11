@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import ActivityPanel from './components/ActivityPanel.vue'
+import FoulMarker from './components/FoulMarker.vue'
 import GameControls from './components/GameControls.vue'
 import LineupDialog from './components/LineupDialog.vue'
 import MatchSyncDialog from './components/MatchSyncDialog.vue'
@@ -9,13 +10,14 @@ import Scoreboard from './components/Scoreboard.vue'
 import TeamSetupDialog from './components/TeamSetupDialog.vue'
 import UserProfileDialog from './components/UserProfileDialog.vue'
 import type { GameAction } from './domain/game'
+import { regulationPeriods } from './domain/gameClock'
 import type { TeamProfile } from './services/teamProfiles'
 import { loadUserProfile, saveUserProfile as persistUserProfile, type UserProfile } from './services/userProfile'
 import type { ZoebasMatch } from './services/zoebasMatches'
 import { useGameSession } from './composables/useGameSession'
 import { isAppLocale, saveLocale, useLocale } from './i18n/useLocale'
 
-const { t, locale, displayTeamName } = useLocale()
+const { t, locale, displayTeamName, displayPlayerName } = useLocale()
 const matchSyncOpen = ref(false)
 const userProfile = ref<UserProfile | null>(null)
 const userProfileOpen = ref(false)
@@ -67,20 +69,25 @@ const {
   selectedPlayerId,
   selectedTeam,
   teamPlayers,
-  onCourtPlayers,
   pickerPlayers,
   canStart,
   canStartNewMatch,
   scores,
+  scoreNotification,
   teamStats,
+  playerFouls,
+  periodTeamFouls,
+  clockDisplay,
   recentActions,
   pendingAction,
   pendingScorerId,
   pendingAssistId,
   pendingShotLocation,
   pendingFoulType,
+  pendingTurnoverType,
   editingActionId,
   lineupEditorOpen,
+  startingPeriod,
   draftCourtPlayerIds,
   newPlayerName,
   newPlayerNumber,
@@ -102,14 +109,18 @@ const {
   teamCatalogError,
   playerName,
   addAction,
+  addOpponentScore,
+  removeOpponentScore,
   selectPlayer,
   selectScorer,
   finishShotAction,
   finishFoulAction,
+  finishTurnoverAction,
   cancelPendingAction,
   editAction,
   undoLastAction,
   toggleGame,
+  toggleClock,
   applyTeamSetup,
   openTeamSetup,
   cancelTeamSetup,
@@ -120,12 +131,23 @@ const {
   togglePregamePlayer,
   playerHasActions,
   openLineupEditor,
+  beginPeriod,
   toggleDraftCourtPlayer,
   saveLineup,
   cancelLineupEdit,
   createSharedMatch,
   joinSharedMatch,
 } = useGameSession()
+const homeCourtPlayers = computed(() => game.players.filter((player) =>
+  player.teamId === game.teams[0].id && player.isOnCourt && !player.isCoach,
+))
+const nextPeriodLabel = computed(() => {
+  const period = (game.period ?? 1) + 1
+  const limit = regulationPeriods(game.youth ?? false)
+  return period > limit
+    ? t('scoreboard.overtime', { count: period - limit })
+    : t(game.youth ? 'scoreboard.period' : 'scoreboard.quarter', { count: period })
+})
 
 async function createMatch(displayName: string) {
   if (await createSharedMatch(displayName)) matchSyncOpen.value = false
@@ -245,40 +267,61 @@ watch(locale, (value) => {
     </div>
 
     <template v-else-if="!userProfileOpen">
+      <div class="game-header" :class="{ 'game-header-sticky': game.gameStarted || (game.period !== undefined && game.period > 0) }">
       <Scoreboard
         :teams="game.teams"
         :scores="scores"
+        :score-notification="scoreNotification"
         :game-started="game.gameStarted"
         :can-start="canStart"
         :can-start-new-match="canStartNewMatch"
+        :period="game.period"
+        :youth="game.youth ?? false"
+        :clock-display="clockDisplay"
+        :clock-phase="game.clock?.phase"
+        :clock-running="game.clock?.deadline != null"
+        :clock-available="!!game.clock"
+        :team-fouls="periodTeamFouls"
         @team-name-change="updateTeamName"
         @toggle-game="toggleGame"
         @new-match="openTeamSetup"
+        @next-period="beginPeriod"
+        @toggle-clock="toggleClock"
       />
+      <section v-if="game.gameStarted || (game.period !== undefined && game.period > 0)" class="court-lineup panel" :aria-label="t('picker.fieldPlayers')">
+        <ul class="court-lineup-players" tabindex="0">
+          <li v-for="player in homeCourtPlayers" :key="player.id">
+            <span class="court-lineup-number">{{ player.jerseyNumber || '—' }}</span>
+            <span>{{ displayPlayerName(player.name) }}</span>
+            <FoulMarker :count="playerFouls[player.id] ?? 0" />
+          </li>
+        </ul>
+        <button class="lineup-change-button" type="button" :aria-label="t('controls.substitutions')" :title="t('controls.substitutions')" @click="openLineupEditor"><span aria-hidden="true">⇄</span></button>
+      </section>
+      </div>
 
     <div class="content-grid">
       <GameControls
-        v-model:team-id="selectedTeamId"
+        :team-id="selectedTeamId"
         v-model:selected-player-id="selectedPlayerId"
         v-model:new-player-name="newPlayerName"
         v-model:new-player-number="newPlayerNumber"
-        :teams="game.teams"
-        :selected-team="selectedTeam"
         :team-players="teamPlayers"
-        :on-court-players="onCourtPlayers"
         :game-started="game.gameStarted"
         :can-start="canStart"
+        :awaiting-first-period="game.period === 0"
         :editing-player-id="editingPlayerId"
         :player-form-error="playerFormError"
         :lineup-error="lineupError"
         :player-has-actions="playerHasActions"
+        :player-fouls="playerFouls"
         @save-player="savePlayer"
         @edit-player="editPlayer"
         @cancel-player-edit="cancelPlayerEdit"
         @remove-player="removePlayer"
         @toggle-pregame-player="togglePregamePlayer"
         @add-action="addAction"
-        @open-lineup-editor="openLineupEditor"
+        @opponent-score="addOpponentScore"
       />
       <ActivityPanel
         :teams="game.teams"
@@ -287,7 +330,10 @@ watch(locale, (value) => {
         :team-stats="teamStats"
         :player-name="playerName"
         :can-undo="game.actions.length > 0"
+        :player-fouls="playerFouls"
+        :player-is-coach="(id) => !!game.players.find((player) => player.id === id)?.isCoach"
         @edit-action="handleEditAction"
+        @remove-opponent-score="removeOpponentScore"
         @undo="undoLastAction"
       />
     </div>
@@ -302,18 +348,25 @@ watch(locale, (value) => {
       :scorer-id="pendingScorerId"
       :editing="editingActionId !== null"
       :foul-type="pendingFoulType"
+      :turnover-type="pendingTurnoverType"
+      :player-fouls="playerFouls"
       @cancel="cancelPendingAction"
       @select-player="selectPlayer"
       @select-scorer="selectScorer"
       @update:foul-type="pendingFoulType = $event"
+      @update:turnover-type="pendingTurnoverType = $event"
       @finish-shot="finishShotAction"
       @finish-foul="finishFoulAction"
+      @finish-turnover="finishTurnoverAction"
     />
     <LineupDialog
       v-if="lineupEditorOpen"
       :team-name="displayTeamName(selectedTeam)"
       :players="teamPlayers"
       :selected-player-ids="draftCourtPlayerIds"
+      :period-label="startingPeriod ? nextPeriodLabel : undefined"
+      :error="lineupError"
+      :player-fouls="playerFouls"
       @cancel="cancelLineupEdit"
       @save="saveLineup"
       @toggle="toggleDraftCourtPlayer"

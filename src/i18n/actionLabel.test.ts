@@ -47,6 +47,13 @@ describe('localization', () => {
     expect(getActionTranslation({ type: 'foul', value: 1 }, 'nl').key).toBe('actions.foul')
   })
 
+  it('labels each turnover type and legacy turnovers', () => {
+    expect(getActionTranslation({ type: 'turnover', value: 1 }, 'nl').key).toBe('actions.turnover')
+    expect(getActionTranslation({ type: 'turnover', value: 1, turnoverType: 'turnover' }, 'nl').key).toBe('actions.turnover')
+    expect(getActionTranslation({ type: 'turnover', value: 1, turnoverType: 'second_dribble' }, 'nl').key).toBe('actions.secondDribble')
+    expect(getActionTranslation({ type: 'turnover', value: 1, turnoverType: 'travel' }, 'nl').key).toBe('actions.travel')
+  })
+
   it('creates default team and player names in the selected language', () => {
     expect(createInitialGameState('en').teams.map((team) => team.name)).toEqual(['Home', 'Away'])
     expect(createInitialGameState('cs').players[0].name).toBe('Hráč 1')
