@@ -23,9 +23,11 @@ import {
   type TurnoverType,
 } from '../domain/game'
 import { clockRemaining, formatClock, isYouthTeam, newPeriodClock, pauseClock, reconcileClock, startClock } from '../domain/gameClock'
+import { lineupChanges } from '../domain/matchTimeline'
 import { loadGameState, saveGameState } from '../services/gameStorage'
 import {
   createDefaultTeamProfiles,
+  clearTeamSetupDraft,
   hasSavedTeamProfiles,
   loadTeamProfileSelection,
   loadTeamProfiles,
@@ -117,7 +119,7 @@ export function useGameSession() {
   const playerFouls = computed(() => getPlayerFouls(game.actions))
   const periodTeamFouls = computed(() => getPeriodTeamFouls(game))
   const clockDisplay = computed(() => formatClock(game.clock ? clockRemaining(game.clock, clockNow.value) : 0))
-  const recentActions = computed(() => getRecentActions(game, 8, t('app.unknownPlayer')))
+  const recentActions = computed(() => getRecentActions(game, game.actions.length, t('app.unknownPlayer')))
   const playerFormError = computed(() => playerFormErrorKey.value ? t(playerFormErrorKey.value) : '')
   const lineupError = computed(() => lineupErrorKey.value ? t(lineupErrorKey.value) : '')
   const storageError = computed(() => storageErrorKey.value ? t(storageErrorKey.value) : '')
@@ -218,6 +220,7 @@ export function useGameSession() {
         ...(game.period !== undefined ? { period: game.period } : {}),
         ...(game.youth !== undefined ? { youth: game.youth } : {}),
         ...(game.clock ? { clock: { ...game.clock } } : {}),
+        ...(game.timeline ? { timeline: game.timeline.map((event) => ({ ...event })) } : {}),
       }
       const created = await createSharedMatchRecord(gameData, displayName)
       saveMatchLink(created.link)
@@ -254,6 +257,7 @@ export function useGameSession() {
       game.matchInfo = sharedGame.matchInfo
       game.youth = sharedGame.youth
       game.clock = sharedGame.clock
+      game.timeline = sharedGame.timeline ?? []
       initializeClock()
       saveMatchLink(joined.link)
       discardMatchEventsExcept(joined.link.matchId)
@@ -548,6 +552,7 @@ export function useGameSession() {
       teams,
       players,
       actions: [],
+      timeline: [],
       gameStarted: false,
       period: 0,
       youth: isYouthTeam(homeProfile.catalogTeamId) || isYouthTeam(homeProfile.name),
@@ -566,6 +571,7 @@ export function useGameSession() {
       saveTeamProfiles(profiles)
       saveTeamProfileSelection(profileIds)
       saveMatchLink(null)
+      clearTeamSetupDraft()
       if (storageErrorKey.value === 'errors.loadTeams' || storageErrorKey.value === 'errors.saveTeams' || storageErrorKey.value === 'errors.invalidTeamSetup') {
         storageErrorKey.value = ''
       }
@@ -736,6 +742,8 @@ export function useGameSession() {
       lineupErrorKey.value = 'errors.minOnCourt'
       return
     }
+    const selected = teamPlayers.value.filter((item) => item.isOnCourt !== (item.id === player.id)).map((item) => item.id)
+    if ((game.period ?? 0) > 0) recordLineupChanges(selected, Date.now())
     player.isOnCourt = !player.isOnCourt
     lineupErrorKey.value = ''
   }
@@ -770,17 +778,43 @@ export function useGameSession() {
     }
   }
 
+  function recordLineupChanges(selectedIds: string[], createdAt: number) {
+    const changes = lineupChanges(teamPlayers.value, selectedIds)
+    if (!changes.out.length && !changes.in.length) return
+    const timeline = game.timeline ??= []
+    timeline.push({ id: crypto.randomUUID(), type: 'substitution', period: Math.max(1, game.period ?? 1), createdAt, ...changes })
+  }
+
+  function recordPeriodEvent(type: 'period_start' | 'period_end', period: number, createdAt: number) {
+    const timeline = game.timeline ??= []
+    if (timeline.some((event) => event.type === type && event.period === period)) return
+    timeline.push({ id: crypto.randomUUID(), type, period, createdAt })
+  }
+
   function saveLineup() {
     if (draftCourtPlayerIds.value.length < 2 || draftCourtPlayerIds.value.length > 5) return
     if (startingPeriod.value) {
+      const previousPeriod = game.period ?? 1
+      const previousPlayers = teamPlayers.value.map((player) => ({ ...player }))
       if (!startNextPeriod(game, draftCourtPlayerIds.value)) {
         lineupErrorKey.value = 'errors.invalidPeriodLineup'
         return
       }
+      const now = Date.now()
+      if (previousPeriod > 0) {
+        recordPeriodEvent('period_end', previousPeriod, now)
+        const changes = lineupChanges(previousPlayers, draftCourtPlayerIds.value)
+        if (changes.out.length || changes.in.length) {
+          const timeline = game.timeline ??= []
+          timeline.push({ id: crypto.randomUUID(), type: 'substitution', period: game.period ?? 1, createdAt: now, ...changes })
+        }
+      }
+      recordPeriodEvent('period_start', game.period ?? 1, now)
       game.clock = newPeriodClock(game.period ?? 1, game.youth ?? false)
       clockNow.value = Date.now()
       startingPeriod.value = false
     } else {
+      if ((game.period ?? 0) > 0) recordLineupChanges(draftCourtPlayerIds.value, Date.now())
       for (const player of teamPlayers.value) {
         player.isOnCourt = draftCourtPlayerIds.value.includes(player.id)
       }
@@ -816,6 +850,9 @@ export function useGameSession() {
     clockNow.value = now
     if (!game.clock) return
     const next = reconcileClock(game.clock, game.period ?? 1, game.youth ?? false, now)
+    if (game.clock.phase === 'period' && game.clock.deadline !== null && game.clock.deadline <= now && (game.period ?? 0) > 0) {
+      recordPeriodEvent('period_end', game.period ?? 1, game.clock.deadline)
+    }
     if (next !== game.clock) game.clock = next
   }
 

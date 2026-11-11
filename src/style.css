@@ -448,7 +448,7 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .helper-text { margin: 10px 0 0; color: #a09e97; font-size: 9px; }
 .activity-mark { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid #eeece7; border-radius: 50%; color: #a4a199; font-size: 12px; }
 .count { display: inline-grid; min-width: 19px; height: 19px; place-items: center; margin-left: 4px; border-radius: 50%; color: #85827b; background: #f2f1ed; font-family: 'DM Sans', sans-serif; font-size: 9px; vertical-align: 2px; }
-.activity-list { min-height: 176px; margin-top: 13px; }
+.activity-list { min-height: 176px; max-height: 400px; overflow-y: auto; margin-top: 13px; }
 .activity-row { min-height: 44px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #f1efeb; }
 .activity-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; }
 .activity-action-icon { width: 22px; height: 22px; flex: 0 0 22px; display: grid; place-items: center; border-radius: 6px; color: #77756f; background: #f2f1ed; font-family: 'Space Grotesk', sans-serif; font-size: 10px; font-weight: 700; }

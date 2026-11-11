@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useLocale } from '../i18n/useLocale'
-import type { TeamProfile, TeamProfileCoach, TeamProfilePlayer } from '../services/teamProfiles'
+import { loadTeamSetupDraft, saveTeamSetupDraft, type TeamProfile, type TeamProfileCoach, type TeamProfilePlayer, type TeamSetupDraft } from '../services/teamProfiles'
 import { getRecommendedMatch, loadZoebasMatches, type ZoebasMatch } from '../services/zoebasMatches'
 import type { ZoebasTeam } from '../services/zoebasTeams'
 
@@ -25,15 +25,24 @@ const { t } = useLocale()
 const steps = ['stepTeam', 'stepPlayers', 'stepOpponent'] as const
 const step = ref(0)
 const furthestStep = ref(0)
-const draftProfiles = ref(props.profiles.map((profile) => ({
+const draftStorageError = ref('')
+let draftLoadFailed = false
+let restoredDraft: TeamSetupDraft | null = null
+try {
+  restoredDraft = loadTeamSetupDraft()
+} catch (error) {
+  console.error('Failed to load team setup draft.', error)
+  draftStorageError.value = 'errors.loadTeams'
+  draftLoadFailed = true
+}
+const draftProfiles = ref((restoredDraft?.profiles ?? props.profiles).map((profile) => ({
   ...profile,
   players: profile.players.map((player) => ({ ...player, isParticipating: player.isParticipating ?? true })),
   coaches: (profile.coaches ?? []).map((coach) => ({ ...coach, isParticipating: coach.isParticipating ?? true })),
 })))
-const selected = ref<[string, string]>([...props.selectedProfileIds])
+const selected = ref<[string, string]>([...(restoredDraft?.selectedProfileIds ?? props.selectedProfileIds)])
 const selectedCatalogTeamId = ref(
-  draftProfiles.value.find((profile) => profile.id === selected.value[0])?.catalogTeamId
-    ?? '',
+  restoredDraft?.catalogTeamId || (draftProfiles.value.find((profile) => profile.id === selected.value[0])?.catalogTeamId ?? ''),
 )
 const matches = ref<ZoebasMatch[]>([])
 const matchLoading = ref(false)
@@ -59,6 +68,21 @@ const pastMatches = computed(() => matches.value.filter((match) =>
   new Date(`${match.date}T${match.startTime}:00`).getTime() < Date.now(),
 ))
 const hasMatchSelection = computed(() => !!selectedMatch.value || (manualMatchSelected.value && !!manualOpponentName.value.trim()))
+
+watch([draftProfiles, selected, selectedCatalogTeamId], () => {
+  if (!selectedCatalogTeamId.value || draftLoadFailed) return
+  try {
+    saveTeamSetupDraft({
+      profiles: draftProfiles.value,
+      selectedProfileIds: selected.value,
+      catalogTeamId: selectedCatalogTeamId.value,
+    })
+    draftStorageError.value = ''
+  } catch (error) {
+    console.error('Failed to save team setup draft.', error)
+    draftStorageError.value = 'errors.saveTeams'
+  }
+}, { deep: true })
 
 function selectCatalogTeam(teamId: string) {
   selectedCatalogTeamId.value = teamId
@@ -276,7 +300,7 @@ function stepCompleted(index: number) {
       <header v-if="canCancel" class="team-setup-header">
         <button class="team-setup-close" type="button" :aria-label="t('teamSetup.cancel')" @click="emit('cancel')">×</button>
       </header>
-      <p v-if="error || catalogError" class="notice team-setup-notice" role="alert">{{ error || catalogError }}</p>
+      <p v-if="error || catalogError || draftStorageError" class="notice team-setup-notice" role="alert">{{ error || catalogError || t(draftStorageError) }}</p>
 
       <div class="team-setup-steps" role="tablist" :aria-label="t('teamSetup.title')">
         <button

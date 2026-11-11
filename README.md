@@ -63,11 +63,13 @@ De klok start je per periode handmatig en kun je pauzeren, ook tijdens de rust; 
 
 Bij vijf teamfouten verschijnt een rood vierkantje onder de teamnaam. Voor jeugd tellen periodes 1–2, 3–4, 5–6 en 7–8 samen; andere teams tellen per kwart. Verlengingen tellen door bij de laatste periodegroep. Alle geregistreerde fouten, inclusief coachfouten, tellen voor het team; bij vijf spelersfouten verschijnt een rood vierkantje achter de naam. Bestaande fouten zonder periode worden bij de huidige periode ingedeeld.
 
-De periode, klok en opstelling worden lokaal opgeslagen. Bij gedeelde wedstrijden zijn ze onderdeel van de beginsnapshot; latere klok-, periode- en opstellingswijzigingen worden momenteel niet tussen apparaten gesynchroniseerd. De geregistreerde fouten worden wel als actie-events gesynchroniseerd, inclusief hun periode.
+Het wedstrijdverloop toont acties, wissels (spelers erin en eruit) en het begin en einde van periodes of kwarten. Het einde wordt geregistreerd bij 00:00 of wanneer je eerder naar de volgende periode gaat; de eerste opstelling is geen wissel. De periode, klok, opstelling en dit verloop worden lokaal opgeslagen. Bij gedeelde wedstrijden zijn ze onderdeel van de beginsnapshot; latere klok-, periode-, opstellings- en verloopwijzigingen worden momenteel niet tussen apparaten gesynchroniseerd. De geregistreerde fouten worden wel als actie-events gesynchroniseerd, inclusief hun periode.
 
 De app bewaart de actieve wedstrijd en niet-gesynchroniseerde events lokaal. Nieuwe acties, wijzigingen en verwijderingen blijven per anonieme scorer gescheiden in `match_events`; de wedstrijd-roster wordt bij het aanmaken als uitgangspunt gedeeld. Een scorer kan offline blijven registreren nadat die online aan de gedeelde wedstrijd is toegevoegd. Bij herstellen van de verbinding worden events opnieuw geprobeerd te synchroniseren.
 
 De startwizard laadt de Zoebas-teams, spelersvoornamen en bekende coaches en assistent-coaches met hun rol uit `zoebas_teams` in Supabase. De stafmigraties voegen deze informatie toe; rugnummers en selecties van spelers en staf worden per apparaat bij de teamprofielen bewaard. Niet-vermelde coaches of assistent-coaches kun je daar zelf toevoegen.
+
+Wijzigingen aan het team in de wizard worden als lokaal concept bewaard, ook als je de pagina herlaadt voordat de wedstrijd is aangemaakt. Teamgegevens zijn browser- en apparaatspecifiek en worden niet tussen de lokale app en de gepubliceerde website uitgewisseld. De resetknop verwijdert ook dit concept.
 
 De ruwe registraties zijn in Supabase te vergelijken via de `match_events`-tabel, gefilterd op `match_id` en gesorteerd op `occurred_at`. `tracker_id` is de vaste anonieme apparaatidentiteit; `tracker_name` is de gekozen weergavenaam. De UI voor het naast elkaar vergelijken van registraties volgt later.
 

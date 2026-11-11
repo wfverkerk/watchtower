@@ -339,8 +339,9 @@ watch(locale, (value) => {
       />
       <ActivityPanel
         :teams="game.teams"
-        :actions="game.actions"
         :recent-actions="recentActions"
+        :timeline="game.timeline ?? []"
+        :youth="game.youth ?? false"
         :team-stats="teamStats"
         :player-name="playerName"
         :can-undo="game.actions.length > 0"
