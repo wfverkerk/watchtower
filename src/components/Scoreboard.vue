@@ -43,7 +43,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <section class="scoreboard panel" :aria-label="t('scoreboard.label')">
+  <section class="scoreboard panel" :class="{ 'clock-running': clockRunning }" :aria-label="t('scoreboard.label')">
     <div class="team-score home-score">
       <span class="team-caption"><span class="team-dot orange"></span> {{ t('scoreboard.home') }}</span>
       <input
@@ -59,11 +59,12 @@ const emit = defineEmits<{
       </div>
     </div>
     <div class="score-middle">
-      <span class="live-pill" :class="{ active: gameStarted }">
-        <span></span>{{ gameStarted ? t('scoreboard.live') : t('scoreboard.ready') }}
-      </span>
-      <div class="versus">VS</div>
-      <span v-if="period !== undefined && period > 0" class="period-label">{{ period > regulationPeriods(youth) ? t('scoreboard.overtime', { count: period - regulationPeriods(youth) }) : t(youth ? 'scoreboard.period' : 'scoreboard.quarter', { count: period }) }}</span>
+      <div class="score-status">
+        <span class="live-pill" :class="{ active: gameStarted }">
+          <span></span>{{ gameStarted ? t('scoreboard.live') : t('scoreboard.ready') }}
+        </span>
+        <span v-if="period !== undefined && period > 0" class="period-label">{{ period > regulationPeriods(youth) ? t('scoreboard.overtime', { count: period - regulationPeriods(youth) }) : t(youth ? 'scoreboard.period' : 'scoreboard.quarter', { count: period }) }}</span>
+      </div>
       <div v-if="clockAvailable" class="game-clock">
         <span v-if="clockPhase === 'halftime'" class="period-label">{{ t('scoreboard.halftime') }}</span>
         <time :aria-label="`${t('scoreboard.clock')}: ${clockDisplay}`"><span>{{ clockDisplay.split(':')[0] }}</span><span>:</span><span>{{ clockDisplay.split(':')[1] }}</span></time>
@@ -72,13 +73,13 @@ const emit = defineEmits<{
         </button>
       </div>
       <button
+        v-if="!gameStarted"
         class="start-button"
-        :class="{ started: gameStarted }"
-        :disabled="!gameStarted && !canStart"
+        :disabled="!canStart"
         @click="emit('toggle-game')"
       >
-        {{ gameStarted ? t('scoreboard.pause') : t('scoreboard.start') }}
-        <span aria-hidden="true">{{ gameStarted ? 'Ⅱ' : '▶' }}</span>
+        {{ t('scoreboard.start') }}
+        <span aria-hidden="true">▶</span>
       </button>
       <button v-if="period !== 0" class="new-match-button" type="button" @click="emit('next-period')">
         {{ t(period !== undefined && period >= regulationPeriods(youth) ? 'scoreboard.nextOvertime' : 'scoreboard.nextPeriod') }}

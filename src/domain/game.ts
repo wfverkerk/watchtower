@@ -23,6 +23,7 @@ export type Player = {
   teamId: string
   jerseyNumber: string
   isOnCourt: boolean
+  isParticipating?: boolean
   isCoach?: boolean
   coachRole?: 'coach' | 'assistant'
 }
@@ -196,13 +197,14 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       || typeof player.id !== 'string'
       || typeof player.name !== 'string'
       || typeof player.teamId !== 'string'
+      || (player.isParticipating !== undefined && typeof player.isParticipating !== 'boolean')
       || !teams.some((team) => team.id === player.teamId)) {
       throw new Error('Opgeslagen spelersgegevens zijn ongeldig.')
     }
 
     const activeCount = courtCounts.get(player.teamId) ?? 0
     const requestedOnCourt = typeof player.isOnCourt === 'boolean' ? player.isOnCourt : activeCount < 5
-    const isOnCourt = requestedOnCourt && activeCount < 5
+    const isOnCourt = requestedOnCourt && player.isParticipating !== false && activeCount < 5
     if (isOnCourt) courtCounts.set(player.teamId, activeCount + 1)
 
     return {
@@ -211,6 +213,7 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       teamId: player.teamId,
       jerseyNumber: typeof player.jerseyNumber === 'string' ? player.jerseyNumber : '',
       isOnCourt,
+      ...(player.isParticipating === false ? { isParticipating: false } : {}),
       ...(player.isCoach === true ? { isCoach: true } : {}),
       ...(player.coachRole === 'coach' || player.coachRole === 'assistant' ? { coachRole: player.coachRole } : {}),
     }
@@ -290,7 +293,7 @@ function isGameMatchInfo(value: unknown): value is GameMatchInfo {
 
 export function canStartGame(game: GameState) {
   return game.teams.every((team) => {
-    const teamPlayers = game.players.filter((player) => player.teamId === team.id && !player.isCoach)
+    const teamPlayers = game.players.filter((player) => player.teamId === team.id && !player.isCoach && player.isParticipating !== false)
     const active = teamPlayers.filter((player) => player.isOnCourt).length
     return active >= 2 && active <= 5
       && teamPlayers.every((player) => player.jerseyNumber !== '')
@@ -298,7 +301,7 @@ export function canStartGame(game: GameState) {
 }
 
 export function startNextPeriod(game: GameState, playerIds: string[]) {
-  const players = game.players.filter((player) => player.teamId === game.teams[0].id && !player.isCoach)
+  const players = game.players.filter((player) => player.teamId === game.teams[0].id && !player.isCoach && player.isParticipating !== false)
   const selected = new Set(playerIds)
   if (selected.size < 2 || selected.size > 5 || selected.size !== playerIds.length || !playerIds.every((id) => players.some((player) => player.id === id))) {
     return false
