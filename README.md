@@ -10,7 +10,9 @@ Bij rake en gemiste 2- en 3-puntsschoten kun je de locatie vastleggen op een hal
 
 ## Ontwikkeling
 
-Vereist Node.js en npm.
+Vereist Node.js 26 LTS en npm. De aanbevolen Node-versie staat in `.nvmrc` (bij gebruik van nvm: `nvm install` en `nvm use`).
+
+TypeScript blijft voorlopig op versie 6: de Vue/Volar-typechecker ondersteunt TypeScript 7 nog niet.
 
 ```sh
 npm install
