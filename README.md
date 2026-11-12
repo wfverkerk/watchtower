@@ -54,9 +54,13 @@ De actieve gedeelde wedstrijd en de niet-gesynchroniseerde eventwachtrij staan o
 
 Bij het eerste gebruik stel je lokaal je naam, taal en weergave in. Via het profiel rechtsboven kun je deze voorkeuren later aanpassen. Kies daarna een Zoebas-team uit het raster en selecteer de spelers en coaches die meedoen; vul voor de spelers ook hun rugnummers in. De naam van de tegenstander kun je direct invoeren. De wizard laadt daarnaast programma en uitslagen uit de publieke FOYS-competitie-API; je kunt een wedstrijd zelf selecteren, maar er wordt niet automatisch een wedstrijd gekozen. De tegenstander krijgt voorlopig vijf tijdelijke spelers (`player_1` tot en met `player_5`) met fictieve nummers.
 
+In dialoogvensters blijft de toetsenbordfocus binnen het venster. Met Escape kun je een venster sluiten wanneer annuleren mogelijk is; de focus keert dan waar mogelijk terug naar de knop waarmee je het opende.
+
 Via het profiel rechtsboven kun je met **App lokaal resetten** na bevestiging opnieuw beginnen. Dit verwijdert de lokale Watchtower-gegevens op dit apparaat, inclusief niet-gesynchroniseerde acties, maar laat servergegevens en de Supabase-aanmelding ongemoeid.
 
 Op het wedstrijdscherm kies je twee tot vijf actieve Zoebas-spelers om de eerste periode te starten. Met **Volgende periode** bevestig of wijzig je de opstelling voor iedere volgende periode; annuleren laat de huidige periode intact. Je kunt ook vóór 00:00 doorgaan. Tijdens een periode kun je blijven wisselen.
+
+Met **Spelers bewerken** pas je vóór en tijdens de wedstrijd dezelfde spelers- en coachlijst aan als in de wizard. Geef iemand als afwezig op in plaats van die te verwijderen; bestaande wedstrijdacties blijven bewaard. De opstelling kies je afzonderlijk. Tijdens de wedstrijd stopt het openen van de spelerseditor de klok.
 
 De spelers op het veld staan met naam en rugnummer bij de wisselknop onder het scorebord; deze balk blijft tijdens het scrollen zichtbaar. Bij lange namen kun je de spelerslijst horizontaal scrollen. Voor de tegenstander registreer je alleen de score met de knoppen +1, +2 en +3 in het actiegebied. Deze scores worden als acties zonder toegewezen speler opgeslagen en gesynchroniseerd; je kunt ze afzonderlijk verwijderen in het wedstrijdoverzicht of de laatste actie ongedaan maken. Het automatisch koppelen of verrijken van deze scores door een tegenstander is nog niet geïmplementeerd.
 
@@ -64,11 +68,11 @@ De klok start je per periode handmatig en kun je pauzeren, ook tijdens de rust; 
 
 Bij vijf teamfouten verschijnt een rood vierkantje onder de teamnaam. Voor jeugd tellen periodes 1–2, 3–4, 5–6 en 7–8 samen; andere teams tellen per kwart. Verlengingen tellen door bij de laatste periodegroep. Alle geregistreerde fouten, inclusief coachfouten, tellen voor het team; bij vijf spelersfouten verschijnt een rood vierkantje achter de naam. Bestaande fouten zonder periode worden bij de huidige periode ingedeeld.
 
-Het wedstrijdverloop toont acties, wissels (spelers erin en eruit) en het begin en einde van periodes of kwarten. Het einde wordt geregistreerd bij 00:00 of wanneer je eerder naar de volgende periode gaat; de eerste opstelling is geen wissel. De periode, klok, opstelling en dit verloop worden lokaal opgeslagen. Bij gedeelde wedstrijden zijn ze onderdeel van de beginsnapshot; latere klok-, periode-, opstellings- en verloopwijzigingen worden momenteel niet tussen apparaten gesynchroniseerd. De geregistreerde fouten worden wel als actie-events gesynchroniseerd, inclusief hun periode.
+Het wedstrijdverloop toont acties, wissels (spelers erin en eruit) en het begin en einde van periodes of kwarten. Nieuwe regels verschijnen met een korte animatie in de teamkleur; periodegebeurtenissen hebben een neutrale kleur. Bij verminderde beweging is de animatie uitgeschakeld. Het einde wordt geregistreerd bij 00:00 of wanneer je eerder naar de volgende periode gaat; de eerste opstelling is geen wissel. De periode, klok, opstelling en dit verloop worden lokaal opgeslagen. Bij gedeelde wedstrijden zijn ze onderdeel van de beginsnapshot; latere klok-, periode-, opstellings- en verloopwijzigingen worden momenteel niet tussen apparaten gesynchroniseerd. De geregistreerde fouten worden wel als actie-events gesynchroniseerd, inclusief hun periode.
 
 De app bewaart de actieve wedstrijd en niet-gesynchroniseerde events lokaal. Nieuwe acties, wijzigingen en verwijderingen blijven per anonieme scorer gescheiden in `match_events`; de wedstrijd-roster wordt bij het aanmaken als uitgangspunt gedeeld. Een scorer kan offline blijven registreren nadat die online aan de gedeelde wedstrijd is toegevoegd. Bij herstellen van de verbinding worden events opnieuw geprobeerd te synchroniseren.
 
-De startwizard laadt de Zoebas-teams, spelersvoornamen en bekende coaches en assistent-coaches met hun rol uit `zoebas_teams` in Supabase. Spelers zijn bij een nieuwe wizard standaard aanwezig; een onafgemaakt concept behoudt de gemaakte keuzes. Rugnummers van spelers uit de teamlijst worden bij doorgaan naar de tegenstander in Supabase opgeslagen en op andere apparaten opgehaald. Deze nummers zijn openbaar leesbaar en door iedere bezoeker aanpasbaar. Gelijktijdige wijzigingen worden gecontroleerd; bij een conflict moet je de gedeelde nummers opnieuw laden en controleren. Zelf toegevoegde spelers, coaches en hun gegevens blijven lokaal.
+De startwizard laadt de Zoebas-teams, spelersvoornamen en bekende coaches en assistent-coaches met hun rol uit `zoebas_teams` in Supabase. Spelers zijn bij een nieuwe wizard standaard aanwezig; een onafgemaakt concept behoudt de gemaakte keuzes. Rugnummers van spelers uit de teamlijst worden bij doorgaan naar de tegenstander in Supabase opgeslagen en op andere apparaten opgehaald. Ook wijzigingen aan deze nummers in de wedstrijdeditor worden gedeeld. Deze nummers zijn openbaar leesbaar en door iedere bezoeker aanpasbaar. Gelijktijdige wijzigingen worden gecontroleerd; bij een conflict moet je de gedeelde nummers opnieuw laden en controleren. Zelf toegevoegde spelers, coaches en hun gegevens blijven lokaal.
 
 Wijzigingen aan het team in de wizard worden als lokaal concept bewaard, ook als je de pagina herlaadt voordat de wedstrijd is aangemaakt. Behalve de gedeelde rugnummers zijn teamgegevens browser- en apparaatspecifiek. De resetknop verwijdert ook dit concept, maar niet de gedeelde rugnummers.
 
@@ -83,6 +87,14 @@ De workflow in [deploy-pages.yml](./.github/workflows/deploy-pages.yml) publicee
 3. Kies bij **Settings → Pages → Build and deployment → Source** voor **GitHub Actions**. Controleer daarna de workflow bij **Actions** en open de site op je telefoon.
 
 Browseropslag is per apparaat en per websiteadres gescheiden. Een lokale wedstrijd op je computer verschijnt dus niet automatisch op je telefoon. Deel een wedstrijdcode om de gedeelde sync te testen.
+
+### App op je beginscherm
+
+Open de gepubliceerde site op je telefoon en kies in de browser **Deel → Zet op beginscherm** (iPhone) of **Toevoegen aan startscherm / App installeren** (Android). Open de app daarna via het nieuwe icoon. Op iPhone hebben Safari en de beginschermapp afzonderlijke opslag: lokale wedstrijden, instellingen en niet-gesynchroniseerde acties worden niet automatisch overgenomen. Synchroniseer eventuele acties eerst en gebruik de wedstrijdcode om een gedeelde wedstrijd opnieuw te openen. Klok, opstelling en lokaal wedstrijdverloop worden daarbij niet doorlopend overgezet.
+
+Na een eerste online bezoek kan de app offline opstarten. Voor het laden van de teamcatalogus, deelnemen aan een gedeelde wedstrijd en synchroniseren blijft internet nodig. Offline acties worden opnieuw gesynchroniseerd wanneer de app met verbinding actief is. Een nieuwe versie wordt pas na alle oude vensters te sluiten of via **Bijwerken** geladen; die knop is niet beschikbaar terwijl de wedstrijdklok loopt.
+
+Via **Profiel en voorkeuren** kun je instellen of het scherm tijdens een actieve wedstrijd aan blijft. Dit staat standaard aan, werkt alleen terwijl de app zichtbaar is en hangt af van browser, apparaat en energiebesparing.
 
 ## Testgegevens eenmalig wissen
 

@@ -3,8 +3,9 @@ import { ref, watch } from 'vue'
 import { useLocale } from '../i18n/useLocale'
 import type { Team } from '../domain/game'
 import { regulationPeriods } from '../domain/gameClock'
+import TeamScore from './TeamScore.vue'
 
-const { t, displayTeamName } = useLocale()
+const { t, formatPeriod } = useLocale()
 
 type ScoreNotification = { id: number; teamId: string; value: 1 | 2 | 3 }
 
@@ -44,26 +45,13 @@ const emit = defineEmits<{
 
 <template>
   <section class="scoreboard panel" :class="{ 'clock-running': clockRunning }" :aria-label="t('scoreboard.label')">
-    <div class="team-score home-score">
-      <span class="team-caption"><span class="team-dot orange"></span> {{ t('scoreboard.home') }}</span>
-      <input
-        class="team-name"
-        :value="displayTeamName(teams[0])"
-        :aria-label="t('scoreboard.homeName')"
-        @input="emit('team-name-change', teams[0].id, ($event.target as HTMLInputElement).value)"
-      >
-      <span v-if="(teamFouls[teams[0].id] ?? 0) >= 5" class="foul-marker" role="img" :aria-label="t('scoreboard.teamFoulLimit')" :title="t('scoreboard.teamFoulLimit')"></span>
-      <div class="score-value">
-        <strong>{{ scores[0]?.points ?? 0 }}</strong>
-        <span v-for="notification in scoreNotifications.filter((item) => item.teamId === teams[0].id)" :key="notification.id" class="score-increment" aria-hidden="true" @animationend="removeNotification(notification.id)">+{{ notification.value }}</span>
-      </div>
-    </div>
+    <TeamScore :team="teams[0]" side="home" :points="scores[0]?.points ?? 0" :fouls="teamFouls[teams[0].id] ?? 0" :notifications="scoreNotifications.filter((item) => item.teamId === teams[0].id)" @name-change="(id, name) => emit('team-name-change', id, name)" @notification-end="removeNotification" />
     <div class="score-middle">
       <div class="score-status">
         <span class="live-pill" :class="{ active: gameStarted }">
           <span></span>{{ gameStarted ? t('scoreboard.live') : t('scoreboard.ready') }}
         </span>
-        <span v-if="period !== undefined && period > 0" class="period-label">{{ period > regulationPeriods(youth) ? t('scoreboard.overtime', { count: period - regulationPeriods(youth) }) : t(youth ? 'scoreboard.period' : 'scoreboard.quarter', { count: period }) }}</span>
+        <span v-if="period !== undefined && period > 0" class="period-label">{{ formatPeriod(period, youth) }}</span>
       </div>
       <div v-if="clockAvailable" class="game-clock">
         <span v-if="clockPhase === 'halftime'" class="period-label">{{ t('scoreboard.halftime') }}</span>
@@ -88,19 +76,6 @@ const emit = defineEmits<{
         {{ t('teamSetup.newGame') }}
       </button>
     </div>
-    <div class="team-score away-score">
-      <span class="team-caption">{{ t('scoreboard.away') }} <span class="team-dot blue"></span></span>
-      <input
-        class="team-name"
-        :value="displayTeamName(teams[1])"
-        :aria-label="t('scoreboard.awayName')"
-        @input="emit('team-name-change', teams[1].id, ($event.target as HTMLInputElement).value)"
-      >
-      <span v-if="(teamFouls[teams[1].id] ?? 0) >= 5" class="foul-marker" role="img" :aria-label="t('scoreboard.teamFoulLimit')" :title="t('scoreboard.teamFoulLimit')"></span>
-      <div class="score-value">
-        <strong>{{ scores[1]?.points ?? 0 }}</strong>
-        <span v-for="notification in scoreNotifications.filter((item) => item.teamId === teams[1].id)" :key="notification.id" class="score-increment" aria-hidden="true" @animationend="removeNotification(notification.id)">+{{ notification.value }}</span>
-      </div>
-    </div>
+    <TeamScore :team="teams[1]" side="away" :points="scores[1]?.points ?? 0" :fouls="teamFouls[teams[1].id] ?? 0" :notifications="scoreNotifications.filter((item) => item.teamId === teams[1].id)" @name-change="(id, name) => emit('team-name-change', id, name)" @notification-end="removeNotification" />
   </section>
 </template>

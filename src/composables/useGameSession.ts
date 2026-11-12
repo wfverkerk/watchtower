@@ -60,7 +60,6 @@ export function useGameSession() {
   const currentLocale = computed(() => isAppLocale(locale.value) ? locale.value : 'nl')
   const game = reactive<GameState>(createInitialGameState(currentLocale.value))
   const selectedTeamId = ref(game.teams[0].id)
-  const selectedPlayerId = ref('')
   const pendingAction = ref<PendingAction | null>(null)
   const pendingScorerId = ref('')
   const pendingAssistId = ref<string | 'none' | null>(null)
@@ -81,11 +80,7 @@ export function useGameSession() {
   const teamCatalog = ref<ZoebasTeam[]>([])
   const teamCatalogLoading = ref(true)
   const teamCatalogError = ref('')
-  const newPlayerName = ref('')
-  const newPlayerNumber = ref('')
-  const playerFormErrorKey = ref('')
   const lineupErrorKey = ref('')
-  const editingPlayerId = ref('')
   const storageErrorKey = ref('')
   const matchLink = ref<MatchLink | null>(null)
   const matchSyncStatus = ref<'local' | 'offline' | 'syncing' | 'synced' | 'error'>('local')
@@ -122,7 +117,6 @@ export function useGameSession() {
   const periodTeamFouls = computed(() => getPeriodTeamFouls(game))
   const clockDisplay = computed(() => formatClock(game.clock ? clockRemaining(game.clock, clockNow.value) : 0))
   const recentActions = computed(() => getRecentActions(game, game.actions.length, t('app.unknownPlayer')))
-  const playerFormError = computed(() => playerFormErrorKey.value ? t(playerFormErrorKey.value) : '')
   const lineupError = computed(() => lineupErrorKey.value ? t(lineupErrorKey.value) : '')
   const storageError = computed(() => storageErrorKey.value ? t(storageErrorKey.value) : '')
   const rosterEditProfile = computed(() => {
@@ -615,7 +609,6 @@ export function useGameSession() {
     matchSyncError.value = ''
     Object.assign(game, nextGame, { matchInfo, clock: undefined })
     selectedTeamId.value = 'home'
-    selectedPlayerId.value = ''
     beginPeriod()
     return true
   }
@@ -716,91 +709,6 @@ export function useGameSession() {
       game.clock = pauseClock(game.clock, Date.now())
     }
     game.gameStarted = !game.gameStarted
-  }
-
-  function savePlayer() {
-    const name = newPlayerName.value.trim()
-    const number = newPlayerNumber.value.trim()
-    if (!name || !/^\d{1,2}$/.test(number) || Number(number) > 99) {
-      playerFormErrorKey.value = 'errors.invalidPlayer'
-      return
-    }
-
-    const duplicateNumber = game.players.some((player) =>
-      player.teamId === selectedTeamId.value
-        && player.id !== editingPlayerId.value
-        && Number(player.jerseyNumber) === Number(number),
-    )
-    if (duplicateNumber) {
-      playerFormErrorKey.value = 'errors.duplicateNumber'
-      return
-    }
-
-    if (editingPlayerId.value) {
-      const player = game.players.find((item) => item.id === editingPlayerId.value)
-      if (player) {
-        player.name = name
-        player.jerseyNumber = number
-      }
-    } else {
-      const player: Player = {
-        id: crypto.randomUUID(),
-        name,
-        teamId: selectedTeamId.value,
-        jerseyNumber: number,
-        isOnCourt: teamPlayers.value.filter((item) => item.isOnCourt).length < 5,
-      }
-      game.players.push(player)
-      selectedPlayerId.value = player.id
-    }
-    cancelPlayerEdit()
-  }
-
-  function editPlayer(player: Player) {
-    editingPlayerId.value = player.id
-    newPlayerName.value = player.name
-    newPlayerNumber.value = player.jerseyNumber
-    playerFormErrorKey.value = ''
-  }
-
-  function cancelPlayerEdit() {
-    editingPlayerId.value = ''
-    newPlayerName.value = ''
-    newPlayerNumber.value = ''
-    playerFormErrorKey.value = ''
-  }
-
-  function removePlayer(playerId: string) {
-    if (game.actions.some((action) => action.playerId === playerId)) return
-    const player = game.players.find((item) => item.id === playerId)
-    if (game.period !== 0 && player?.isOnCourt && teamPlayers.value.filter((item) => item.isOnCourt).length <= 2) {
-      lineupErrorKey.value = 'errors.minOnCourt'
-      return
-    }
-    game.players = game.players.filter((player) => player.id !== playerId)
-    lineupErrorKey.value = ''
-    if (selectedPlayerId.value === playerId) selectedPlayerId.value = ''
-    if (editingPlayerId.value === playerId) cancelPlayerEdit()
-  }
-
-  function togglePregamePlayer(player: Player) {
-    const activeCount = teamPlayers.value.filter((item) => item.isOnCourt).length
-    if (!player.isOnCourt && activeCount >= 5) {
-      lineupErrorKey.value = 'errors.maxOnCourt'
-      return
-    }
-    if (player.isOnCourt && activeCount <= 2 && game.period !== 0) {
-      lineupErrorKey.value = 'errors.minOnCourt'
-      return
-    }
-    const selected = teamPlayers.value.filter((item) => item.isOnCourt !== (item.id === player.id)).map((item) => item.id)
-    if ((game.period ?? 0) > 0) recordLineupChanges(selected, Date.now())
-    player.isOnCourt = !player.isOnCourt
-    lineupErrorKey.value = ''
-  }
-
-  function playerHasActions(playerId: string) {
-    return game.actions.some((action) => action.playerId === playerId)
   }
 
   function openLineupEditor() {
@@ -1071,11 +979,6 @@ export function useGameSession() {
     { deep: true },
   )
 
-  watch(selectedTeamId, () => {
-    selectedPlayerId.value = game.players.find((player) => player.teamId === selectedTeamId.value)?.id ?? ''
-    cancelPlayerEdit()
-  })
-
   function handleOnline() {
     if (matchLink.value) scheduleMatchSync()
   }
@@ -1090,7 +993,6 @@ export function useGameSession() {
   return {
     game,
     selectedTeamId,
-    selectedPlayerId,
     selectedTeam,
     teamPlayers,
     onCourtPlayers,
@@ -1122,11 +1024,7 @@ export function useGameSession() {
     teamCatalog,
     teamCatalogLoading,
     teamCatalogError,
-    newPlayerName,
-    newPlayerNumber,
-    playerFormError,
     lineupError,
-    editingPlayerId,
     storageError,
     matchLink,
     matchSyncStatus,
@@ -1152,12 +1050,6 @@ export function useGameSession() {
     saveGameRoster,
     openTeamSetup,
     cancelTeamSetup,
-    savePlayer,
-    editPlayer,
-    cancelPlayerEdit,
-    removePlayer,
-    togglePregamePlayer,
-    playerHasActions,
     openLineupEditor,
     beginPeriod,
     toggleDraftCourtPlayer,

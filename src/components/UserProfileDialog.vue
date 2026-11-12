@@ -4,6 +4,7 @@ import { appLocales, localeFlags, localeLabels, type AppLocale } from '../i18n/t
 import { useLocale } from '../i18n/useLocale'
 import type { UserProfile } from '../services/userProfile'
 import type { ZoebasTeam } from '../services/zoebasTeams'
+import BaseDialog from './BaseDialog.vue'
 
 const props = defineProps<{
   profile: UserProfile | null
@@ -24,6 +25,7 @@ const { t, locale } = useLocale()
 const name = ref(props.profile?.name ?? '')
 const description = ref(props.profile?.description ?? '')
 const selectedLocale = ref<AppLocale>(props.profile?.locale ?? locale.value)
+const keepScreenAwake = ref(props.profile?.keepScreenAwake ?? true)
 const databasePlayerNames = computed(() => [...new Set(props.teams.flatMap((team) => team.playerNames).filter(Boolean))])
 const examplePlayerName = ref('')
 const canSave = computed(() => name.value.trim().length > 0)
@@ -44,19 +46,20 @@ function save() {
     name: name.value.trim(),
     description: description.value.trim(),
     locale: selectedLocale.value,
+    keepScreenAwake: keepScreenAwake.value,
   })
 }
 </script>
 
 <template>
-  <div :class="profile ? 'match-dialog-backdrop' : 'user-profile-page'" @keydown.esc.window="profile && emit('cancel')">
-    <section
-      class="panel user-profile-dialog"
-      :class="{ 'user-profile-modal': profile, 'user-profile-onboarding': !profile }"
-      :role="profile ? 'dialog' : 'region'"
-      :aria-modal="profile ? true : undefined"
-      aria-labelledby="user-profile-title"
-    >
+  <BaseDialog
+    :backdrop-class="profile ? 'match-dialog-backdrop' : 'user-profile-page'"
+    :dialog-class="`panel user-profile-dialog ${profile ? 'user-profile-modal' : 'user-profile-onboarding'}`"
+    :modal="!!profile"
+    :close-on-escape="!!profile"
+    labelledby="user-profile-title"
+    @close="emit('cancel')"
+  >
       <header class="match-dialog-header">
         <div>
           <h2 id="user-profile-title">{{ t(profile ? 'userProfile.editTitle' : 'userProfile.welcomeTitle') }}</h2>
@@ -112,6 +115,16 @@ function save() {
           </label>
         </fieldset>
 
+        <label v-if="profile" class="profile-screen-setting">
+          <input v-model="keepScreenAwake" type="checkbox">
+          <span>
+            <strong>{{ t('userProfile.keepScreenAwake') }}</strong>
+            <small>{{ t('userProfile.keepScreenAwakeHint') }}</small>
+          </span>
+        </label>
+
+        <p class="profile-install-note">{{ t('userProfile.installStorageNote') }}</p>
+
         <p v-if="error" class="match-sync-error" role="alert">{{ error }}</p>
         <button v-if="profile" class="user-profile-reset" type="button" @click="emit('reset')">{{ t('userProfile.reset') }}</button>
         <footer class="user-profile-footer">
@@ -121,6 +134,5 @@ function save() {
           </button>
         </footer>
       </form>
-    </section>
-  </div>
+  </BaseDialog>
 </template>

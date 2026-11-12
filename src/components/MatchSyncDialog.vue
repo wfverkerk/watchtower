@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useLocale } from '../i18n/useLocale'
 import type { MatchLink } from '../services/matchEventLog'
+import BaseDialog from './BaseDialog.vue'
 
 const props = defineProps<{
   configured: boolean
@@ -33,8 +34,13 @@ function joinMatch() {
 </script>
 
 <template>
-  <div class="match-dialog-backdrop" @click.self="emit('close')">
-    <section class="match-dialog panel" role="dialog" aria-modal="true" :aria-label="t('sync.title')">
+  <BaseDialog
+    backdrop-class="match-dialog-backdrop"
+    dialog-class="match-dialog panel"
+    :label="t('sync.title')"
+    close-on-backdrop
+    @close="emit('close')"
+  >
       <header class="match-dialog-header">
         <div>
           <p class="eyebrow">{{ t('sync.eyebrow') }}</p>
@@ -73,6 +79,5 @@ function joinMatch() {
 
       <p v-if="props.error" class="match-sync-error" role="alert">{{ props.error }}</p>
       <p class="match-sync-footnote">{{ t('sync.offlineNote') }}</p>
-    </section>
-  </div>
+  </BaseDialog>
 </template>

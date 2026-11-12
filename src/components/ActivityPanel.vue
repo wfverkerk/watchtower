@@ -4,10 +4,9 @@ import { getActionTranslation } from '../i18n/actionLabel'
 import { getIntlLocale, isAppLocale, useLocale } from '../i18n/useLocale'
 import { getCoachMarker, type GameAction, type Player, type RecentAction, type Team, type TeamStats } from '../domain/game'
 import type { MatchTimelineEvent, TimelinePlayer } from '../domain/matchTimeline'
-import { regulationPeriods } from '../domain/gameClock'
 import FoulMarker from './FoulMarker.vue'
 
-const { t, locale, displayTeamName, displayPlayerName } = useLocale()
+const { t, locale, displayTeamName, displayPlayerName, formatPeriod } = useLocale()
 
 const props = defineProps<{
   teams: Team[]
@@ -36,13 +35,6 @@ const activityItems = computed(() => [
   ...props.recentActions.map((item) => ({ kind: 'action' as const, item, createdAt: item.action.createdAt })),
   ...[...props.timeline].reverse().map((item) => ({ kind: 'timeline' as const, item, createdAt: item.createdAt })),
 ].sort((a, b) => b.createdAt - a.createdAt))
-
-function periodLabel(period: number) {
-  const limit = regulationPeriods(props.youth)
-  return period > limit
-    ? t('scoreboard.overtime', { count: period - limit })
-    : t(props.youth ? 'scoreboard.period' : 'scoreboard.quarter', { count: period })
-}
 
 function timelinePlayers(players: TimelinePlayer[]) {
   return players.map((player) => `${player.jerseyNumber ? `#${player.jerseyNumber} ` : ''}${displayPlayerName(player.name)}`).join(', ')
@@ -100,9 +92,9 @@ function actionIcon(action: GameAction) {
       </div>
     </div>
 
-    <div v-if="activityItems.length" class="activity-list">
+    <TransitionGroup v-show="activityItems.length" tag="div" name="activity" class="activity-list">
       <template v-for="entry in activityItems" :key="`${entry.kind}-${entry.kind === 'action' ? entry.item.action.id : entry.item.id}`">
-      <div v-if="entry.kind === 'action'" class="activity-row">
+      <div v-if="entry.kind === 'action'" class="activity-row" :style="{ '--activity-color': teams.find((team) => team.id === entry.item.action.teamId)?.color ?? 'var(--muted)' }">
         <template v-for="item in [entry.item]" :key="item.action.id">
         <span class="activity-dot" :class="item.action.teamId === 'home' ? 'orange' : 'blue'"></span>
         <span class="activity-action-icon" :class="`activity-action-icon-${item.action.type}`" aria-hidden="true">{{ actionIcon(item.action) }}</span>
@@ -124,11 +116,11 @@ function actionIcon(action: GameAction) {
         <button v-else class="activity-edit" :aria-label="t(item.action.value === 1 ? 'activity.removeOpponentPoint' : 'activity.removeOpponentScore', { team: actionPlayer(item.action), count: item.action.value })" :title="t(item.action.value === 1 ? 'activity.removeOpponentPoint' : 'activity.removeOpponentScore', { team: actionPlayer(item.action), count: item.action.value })" @click="emit('remove-opponent-score', item.action)">×</button>
         </template>
       </div>
-      <div v-else class="activity-row">
+      <div v-else class="activity-row" :style="{ '--activity-color': entry.item.type === 'substitution' ? teams[0]?.color : 'var(--muted)' }">
         <span class="activity-dot orange"></span>
         <span class="activity-action-icon" aria-hidden="true">{{ entry.item.type === 'substitution' ? '⇄' : '◷' }}</span>
         <div class="activity-description">
-          <strong>{{ entry.item.type === 'substitution' ? t('activity.substitution') : t(entry.item.type === 'period_start' ? 'activity.periodStart' : 'activity.periodEnd', { period: periodLabel(entry.item.period) }) }}</strong>
+          <strong>{{ entry.item.type === 'substitution' ? t('activity.substitution') : t(entry.item.type === 'period_start' ? 'activity.periodStart' : 'activity.periodEnd', { period: formatPeriod(entry.item.period, youth) }) }}</strong>
           <template v-if="entry.item.type === 'substitution'">
             <span v-if="entry.item.out.length">{{ t('activity.playersOut', { players: timelinePlayers(entry.item.out) }) }}</span>
             <span v-if="entry.item.in.length">{{ t('activity.playersIn', { players: timelinePlayers(entry.item.in) }) }}</span>
@@ -137,8 +129,8 @@ function actionIcon(action: GameAction) {
         <time>{{ actionTime(entry.item.createdAt) }}</time>
       </div>
       </template>
-    </div>
-    <div v-else class="empty-state">
+    </TransitionGroup>
+    <div v-if="!activityItems.length" class="empty-state">
       <div class="empty-icon">◎</div>
       <strong>{{ t('activity.emptyTitle') }}</strong>
       <span>{{ t('activity.emptyDescription') }}</span>

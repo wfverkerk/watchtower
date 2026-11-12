@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { messages } from './messages'
 import { isAppLocale, type AppLocale } from './types'
+import { regulationPeriods } from '../domain/gameClock'
 
 export const localeStorageKey = 'watchtower-locale-v1'
 
@@ -40,6 +41,12 @@ function translate(key: string, params: Record<string, string | number> = {}) {
 }
 
 export function useLocale() {
+  function formatPeriod(period: number, youth: boolean, shortQuarter = false) {
+    const limit = regulationPeriods(youth)
+    if (period > limit) return translate('scoreboard.overtime', { count: period - limit })
+    return translate(youth ? 'scoreboard.period' : shortQuarter ? 'lineup.quarter' : 'scoreboard.quarter', { count: period })
+  }
+
   function displayTeamName(team: { id: string; name: string }) {
     const defaultNames = team.id === 'home'
       ? ['Thuis', 'Home', 'Domácí']
@@ -55,7 +62,7 @@ export function useLocale() {
     return defaultPlayer ? translate('app.defaultPlayer', { number: defaultPlayer[1] }) : name
   }
 
-  return { locale: currentLocale, t: translate, displayTeamName, displayPlayerName }
+  return { locale: currentLocale, t: translate, displayTeamName, displayPlayerName, formatPeriod }
 }
 
 export function saveLocale(locale: AppLocale) {
