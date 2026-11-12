@@ -22,6 +22,7 @@ const emit = defineEmits<{
 }>()
 
 const { t, locale } = useLocale()
+const buildId = __BUILD_ID__
 const name = ref(props.profile?.name ?? '')
 const description = ref(props.profile?.description ?? '')
 const selectedLocale = ref<AppLocale>(props.profile?.locale ?? locale.value)
@@ -127,6 +128,7 @@ function save() {
 
         <p v-if="error" class="match-sync-error" role="alert">{{ error }}</p>
         <button v-if="profile" class="user-profile-reset" type="button" @click="emit('reset')">{{ t('userProfile.reset') }}</button>
+        <p v-if="profile" class="profile-build-id">{{ t('userProfile.buildVersion') }}: {{ buildId }}</p>
         <footer class="user-profile-footer">
           <button v-if="profile" class="match-sync-secondary" type="button" @click="emit('cancel')">{{ t('userProfile.cancel') }}</button>
           <button class="match-sync-primary" type="submit" :disabled="!canSave">

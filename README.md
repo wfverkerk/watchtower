@@ -96,6 +96,8 @@ Na een eerste online bezoek kan de app offline opstarten. Voor het laden van de 
 
 Via **Profiel en voorkeuren** kun je instellen of het scherm tijdens een actieve wedstrijd aan blijft. Dit staat standaard aan, werkt alleen terwijl de app zichtbaar is en hangt af van browser, apparaat en energiebesparing.
 
+Onderaan **Profiel en voorkeuren** staat de buildcode voor probleemonderzoek. Bij GitHub Pages zijn dit de eerste 12 tekens van de gepubliceerde commit; de ontwikkelserver toont `dev` en lokale productiebuilds krijgen een eigen `local-` code.
+
 ## Testgegevens eenmalig wissen
 
 **Let op:** hiermee verdwijnen alle gedeelde wedstrijden, leden en events definitief, ook die van andere scorers. Oude wedstrijdcodes werken daarna niet meer. Lokale wedstrijden, profielen en wachtende events op andere apparaten blijven bestaan; start daar een nieuwe gedeelde wedstrijd om een oude koppeling te vervangen.

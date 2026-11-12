@@ -414,6 +414,7 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .profile-screen-setting span { display: grid; gap: 3px; }
 .profile-screen-setting small, .profile-install-note { color: var(--muted); font-size: 11px; line-height: 1.4; }
 .profile-install-note { margin: 0; }
+.profile-build-id { margin: 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .user-profile-form .match-sync-field small { color: var(--muted); font-style: italic; font-weight: 400; }
 .user-profile-form select { min-height: 39px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); background: var(--panel); font-size: 13px; }
 .profile-language-options { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; border: 0; }
