@@ -12,7 +12,7 @@ function createStorage() {
 describe('user profile storage', () => {
   it('loads no profile on first use and saves name, description, and language', () => {
     const storage = createStorage()
-    const profile = { name: 'Jamie', description: 'Vader Jamie', locale: 'nl' as const }
+    const profile = { name: 'Jamie', description: 'Vader Jamie', locale: 'nl' as const, keepScreenAwake: false }
 
     expect(loadUserProfile(storage)).toBeNull()
     saveUserProfile(profile, storage)
@@ -30,11 +30,13 @@ describe('user profile storage', () => {
       name: 'Jamie',
       description: '',
       locale: 'nl',
+      keepScreenAwake: true,
     })
     expect(() => parseUserProfile({
       name: 'Jamie',
       description: 'x'.repeat(121),
       locale: 'nl',
     })).toThrow('invalid format')
+    expect(() => parseUserProfile({ name: 'Jamie', locale: 'nl', keepScreenAwake: 'yes' })).toThrow('invalid format')
   })
 })

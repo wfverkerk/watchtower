@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useLocale } from '../i18n/useLocale'
 import type { Player, StatType } from '../domain/game'
-import PlayerChoiceButton from './PlayerChoiceButton.vue'
 
 const { t, displayPlayerName } = useLocale()
 
@@ -11,34 +10,14 @@ defineProps<{
   gameStarted: boolean
   canStart: boolean
   awaitingFirstPeriod: boolean
-  selectedPlayerId: string
-  newPlayerName: string
-  newPlayerNumber: string
-  editingPlayerId: string
-  playerFormError: string
-  lineupError: string
-  playerHasActions: (playerId: string) => boolean
-  playerFouls: Record<string, number>
 }>()
 
 const emit = defineEmits<{
-  'update:selectedPlayerId': [playerId: string]
-  'update:newPlayerName': [name: string]
-  'update:newPlayerNumber': [number: string]
-  'save-player': []
-  'edit-player': [player: Player]
-  'cancel-player-edit': []
-  'remove-player': [playerId: string]
-  'toggle-pregame-player': [player: Player]
+  'edit-roster': []
+  'edit-lineup': []
   'add-action': [type: StatType, value?: number]
   'opponent-score': [value: 1 | 2 | 3]
 }>()
-
-function updateInput(event: Event, field: 'name' | 'number') {
-  const value = (event.target as HTMLInputElement).value
-  if (field === 'name') emit('update:newPlayerName', value)
-  else emit('update:newPlayerNumber', value)
-}
 </script>
 
 <template>
@@ -56,62 +35,17 @@ function updateInput(event: Event, field: 'name' | 'number') {
         <p class="field-label">{{ t('controls.roster', { side: t(teamId === 'home' ? 'controls.homeSide' : 'controls.awaySide') }) }}</p>
         <span>{{ t('controls.onCourtCount', { count: teamPlayers.filter((player) => player.isOnCourt).length }) }}</span>
       </div>
-      <div v-if="teamPlayers.length" class="roster-list">
-        <div v-for="player in teamPlayers" :key="player.id" class="roster-row">
-          <PlayerChoiceButton
-            :player="player"
-            :foul-count="playerFouls[player.id] ?? 0"
-            :class="{ selected: selectedPlayerId === player.id }"
-            @click="emit('update:selectedPlayerId', player.id)"
-          >
-            <span class="court-status">{{ player.isOnCourt ? t('controls.court') : t('controls.bench') }}</span>
-          </PlayerChoiceButton>
-          <button
-            class="court-toggle"
-            :class="{ active: player.isOnCourt }"
-            :aria-label="t(player.isOnCourt ? 'controls.removeFromCourt' : 'controls.putOnCourt', { name: displayPlayerName(player.name) })"
-            @click="emit('toggle-pregame-player', player)"
-          >{{ player.isOnCourt ? '−' : '+' }}</button>
-          <button class="roster-edit" :aria-label="t('controls.editPlayer', { name: displayPlayerName(player.name) })" @click="emit('edit-player', player)">✎</button>
-          <button
-            class="roster-remove"
-            :aria-label="t('controls.removePlayer', { name: displayPlayerName(player.name) })"
-            :disabled="playerHasActions(player.id)"
-            :title="playerHasActions(player.id) ? t('controls.playerHasActions') : t('controls.removePlayer', { name: displayPlayerName(player.name) })"
-            @click="emit('remove-player', player.id)"
-          >×</button>
-        </div>
-      </div>
+      <ul v-if="teamPlayers.length" class="pregame-roster">
+        <li v-for="player in teamPlayers" :key="player.id">
+          <span>{{ player.jerseyNumber ? `#${player.jerseyNumber} ` : '' }}{{ displayPlayerName(player.name) }}</span>
+          <span>{{ player.isOnCourt ? t('controls.court') : t('controls.bench') }}</span>
+        </li>
+      </ul>
       <p v-else class="roster-empty">{{ t('controls.addRosterPrompt') }}</p>
-
-      <form class="player-form" @submit.prevent="emit('save-player')">
-        <label class="player-input">
-          <span>{{ t('controls.playerName') }}</span>
-          <input
-            type="text"
-            :value="newPlayerName"
-            :placeholder="t('controls.namePlaceholder')"
-            autocomplete="off"
-            @input="updateInput($event, 'name')"
-          >
-        </label>
-        <label class="player-input jersey-input">
-          <span>{{ t('controls.jerseyNumber') }}</span>
-          <input
-            type="text"
-            :value="newPlayerNumber"
-            inputmode="numeric"
-            maxlength="2"
-            placeholder="00"
-            :aria-label="t('controls.jerseyNumber')"
-            @input="updateInput($event, 'number')"
-          >
-        </label>
-        <button type="submit" class="add-player-button">{{ editingPlayerId ? t('controls.save') : t('controls.addPlayer') }}</button>
-        <button v-if="editingPlayerId" type="button" class="cancel-edit" @click="emit('cancel-player-edit')">{{ t('controls.cancel') }}</button>
-      </form>
-      <p v-if="playerFormError" class="form-error" role="alert">{{ playerFormError }}</p>
-      <p v-if="lineupError" class="form-error" role="alert">{{ lineupError }}</p>
+      <div class="pregame-roster-actions">
+        <button class="team-setup-secondary" type="button" @click="emit('edit-roster')">{{ t('scoreboard.editPlayers') }}</button>
+        <button class="team-setup-secondary" type="button" @click="emit('edit-lineup')">{{ t('controls.chooseLineup') }}</button>
+      </div>
       <p class="roster-requirement">
         {{ awaitingFirstPeriod ? t('controls.firstPeriodRequirement') : canStart ? t('controls.startReady') : t('controls.startRequirement') }}
       </p>

@@ -6,6 +6,7 @@ export type UserProfile = {
   name: string
   description: string
   locale: AppLocale
+  keepScreenAwake: boolean
 }
 
 type StringStorage = Pick<Storage, 'getItem' | 'setItem'>
@@ -20,6 +21,7 @@ export function parseUserProfile(value: unknown): UserProfile {
     || !value.name.trim()
     || (value.description !== undefined && typeof value.description !== 'string')
     || (typeof value.description === 'string' && value.description.length > 120)
+    || (value.keepScreenAwake !== undefined && typeof value.keepScreenAwake !== 'boolean')
     || typeof value.locale !== 'string'
     || !isAppLocale(value.locale)) {
     throw new Error('Saved user profile has an invalid format.')
@@ -28,6 +30,7 @@ export function parseUserProfile(value: unknown): UserProfile {
     name: value.name.trim(),
     description: typeof value.description === 'string' ? value.description.trim() : '',
     locale: value.locale,
+    keepScreenAwake: value.keepScreenAwake !== false,
   }
 }
 

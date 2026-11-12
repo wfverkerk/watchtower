@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { registerSW } from 'virtual:pwa-register'
 import ActivityPanel from './components/ActivityPanel.vue'
 import FoulMarker from './components/FoulMarker.vue'
 import GameControls from './components/GameControls.vue'
@@ -10,15 +11,15 @@ import Scoreboard from './components/Scoreboard.vue'
 import TeamSetupDialog from './components/TeamSetupDialog.vue'
 import UserProfileDialog from './components/UserProfileDialog.vue'
 import type { GameAction } from './domain/game'
-import { regulationPeriods } from './domain/gameClock'
 import type { TeamProfile } from './services/teamProfiles'
 import { loadUserProfile, saveUserProfile as persistUserProfile, type UserProfile } from './services/userProfile'
 import { resetLocalData } from './services/resetLocalData'
 import type { ZoebasMatch } from './services/zoebasMatches'
 import { useGameSession } from './composables/useGameSession'
+import { useScreenWakeLock } from './composables/useScreenWakeLock'
 import { isAppLocale, saveLocale, useLocale } from './i18n/useLocale'
 
-const { t, locale, displayTeamName, displayPlayerName } = useLocale()
+const { t, locale, displayTeamName, displayPlayerName, formatPeriod } = useLocale()
 const matchSyncOpen = ref(false)
 const userProfile = ref<UserProfile | null>(null)
 const userProfileOpen = ref(false)
@@ -68,7 +69,6 @@ function previewTheme(value: Theme) {
 const {
   game,
   selectedTeamId,
-  selectedPlayerId,
   selectedTeam,
   teamPlayers,
   pickerPlayers,
@@ -91,11 +91,7 @@ const {
   lineupEditorOpen,
   startingPeriod,
   draftCourtPlayerIds,
-  newPlayerName,
-  newPlayerNumber,
-  playerFormError,
   lineupError,
-  editingPlayerId,
   storageError,
   matchLink,
   matchSyncStatus,
@@ -128,12 +124,6 @@ const {
   saveGameRoster,
   openTeamSetup,
   cancelTeamSetup,
-  savePlayer,
-  editPlayer,
-  cancelPlayerEdit,
-  removePlayer,
-  togglePregamePlayer,
-  playerHasActions,
   openLineupEditor,
   beginPeriod,
   toggleDraftCourtPlayer,
@@ -142,15 +132,68 @@ const {
   createSharedMatch,
   joinSharedMatch,
 } = useGameSession()
+const wakeLockStatus = useScreenWakeLock(computed(() =>
+  game.gameStarted && (userProfile.value?.keepScreenAwake ?? true),
+))
+const updateAvailable = ref(false)
+const offlineSetupError = ref(false)
+const updateBlocked = computed(() => game.gameStarted && game.clock?.deadline != null)
+let updateActivated = false
+let updateRequested = false
+let updateServiceWorker: ((reloadPage?: boolean) => Promise<void>) | undefined
+
+onMounted(() => {
+  if (!import.meta.env.PROD) return
+  if (!('serviceWorker' in navigator)) {
+    console.error('Service workers are unavailable; offline startup cannot be prepared.')
+    offlineSetupError.value = true
+    return
+  }
+  updateServiceWorker = registerSW({
+    onNeedRefresh() { updateAvailable.value = true },
+    onNeedReload() {
+      updateActivated = true
+      if (updateRequested && !updateBlocked.value) window.location.reload()
+      else updateAvailable.value = true
+    },
+    onOfflineReady() { offlineSetupError.value = false },
+    onRegisterError(error) {
+      console.error('Failed to register the offline app.', error)
+      offlineSetupError.value = true
+    },
+    onRegisteredSW(_url, registration) {
+      const installing = registration?.installing
+      installing?.addEventListener('statechange', () => {
+        if (installing.state === 'redundant' && !registration?.active) {
+          console.error('Failed to install the offline app.')
+          offlineSetupError.value = true
+        }
+      })
+    },
+  })
+})
+
+async function updateApp() {
+  if (updateBlocked.value || !updateServiceWorker) return
+  try {
+    if (updateActivated) {
+      window.location.reload()
+      return
+    }
+    updateRequested = true
+    await updateServiceWorker(true)
+  } catch (error) {
+    updateRequested = false
+    console.error('Failed to update the offline app.', error)
+    offlineSetupError.value = true
+  }
+}
 const homeCourtPlayers = computed(() => game.players.filter((player) =>
   player.teamId === game.teams[0].id && player.isOnCourt && !player.isCoach,
 ))
 const nextPeriodLabel = computed(() => {
   const period = (game.period ?? 1) + 1
-  const limit = regulationPeriods(game.youth ?? false)
-  return period > limit
-    ? t('scoreboard.overtime', { count: period - limit })
-    : t(game.youth ? 'scoreboard.period' : 'lineup.quarter', { count: period })
+  return formatPeriod(period, game.youth ?? false, true)
 })
 
 async function createMatch(displayName: string) {
@@ -262,6 +305,15 @@ watch(locale, (value) => {
     </header>
 
     <div v-if="storageError" class="notice" role="alert">{{ storageError }}</div>
+    <div v-if="offlineSetupError" class="notice" role="alert">{{ t('userProfile.offlineSetupError') }}</div>
+    <div v-if="wakeLockStatus === 'unsupported' || wakeLockStatus === 'error'" class="notice" role="status">
+      {{ t(wakeLockStatus === 'unsupported' ? 'userProfile.screenWakeUnsupported' : 'userProfile.screenWakeError') }}
+    </div>
+    <div v-if="updateAvailable" class="notice" role="status">
+      {{ t('userProfile.updateAvailable') }}
+      <span v-if="updateBlocked">{{ t('userProfile.updateAfterGame') }}</span>
+      <button v-else type="button" class="text-button" @click="updateApp">{{ t('userProfile.updateNow') }}</button>
+    </div>
     <UserProfileDialog
       v-if="userProfileOpen"
       :profile="userProfile"
@@ -346,23 +398,12 @@ watch(locale, (value) => {
     <div class="content-grid">
       <GameControls
         :team-id="selectedTeamId"
-        v-model:selected-player-id="selectedPlayerId"
-        v-model:new-player-name="newPlayerName"
-        v-model:new-player-number="newPlayerNumber"
         :team-players="teamPlayers"
         :game-started="game.gameStarted"
         :can-start="canStart"
         :awaiting-first-period="game.period === 0"
-        :editing-player-id="editingPlayerId"
-        :player-form-error="playerFormError"
-        :lineup-error="lineupError"
-        :player-has-actions="playerHasActions"
-        :player-fouls="playerFouls"
-        @save-player="savePlayer"
-        @edit-player="editPlayer"
-        @cancel-player-edit="cancelPlayerEdit"
-        @remove-player="removePlayer"
-        @toggle-pregame-player="togglePregamePlayer"
+        @edit-roster="openRosterEditor"
+        @edit-lineup="openLineupEditor"
         @add-action="addAction"
         @opponent-score="addOpponentScore"
       />
