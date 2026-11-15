@@ -399,6 +399,15 @@ describe('statistics database authorization', () => {
     expect(afterRerun).toBe(4)
   })
 
+  it('reports the live score of the test live game from the scorer snapshot', async () => {
+    await db.exec('reset role; select public.refresh_test_games(); select public.refresh_test_live_snapshot();')
+    const session = (await db.query<{ home: number; away: number }>(
+      `select (s->>'homeScore')::integer home, (s->>'awayScore')::integer away
+       from jsonb_array_elements(public.list_match_sessions(false)) s where s->>'scheduleId' = 'test-game-live'`,
+    )).rows[0]
+    expect(session).toEqual({ home: 5, away: 2 })
+  })
+
   it('adds a finished test game with full statistics to the team history', async () => {
     await db.exec('reset role; select public.refresh_test_history();')
     await asUser(coach)

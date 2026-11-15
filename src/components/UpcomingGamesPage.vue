@@ -179,6 +179,10 @@ function statusLabel(status: SessionStatus) {
   return t(`sessions.status.${status}`)
 }
 
+function isLiveGame(game: ScheduleGame) {
+  return sessionForGame(game)?.status === 'live'
+}
+
 function formatDay(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString(locale.value, { weekday: 'long', day: 'numeric', month: 'long' })
 }
@@ -316,15 +320,23 @@ onUnmounted(() => {
         <button type="button" class="schedule-open-trigger" :disabled="!canPick(game)" @click="tapGame(game)">
           <span class="schedule-match">
             <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
-            <span class="schedule-center">
+            <span v-if="isLiveGame(game)" class="schedule-center">
+              <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
+              <span class="schedule-score is-live">
+                <span>{{ sessionForGame(game)?.homeScore ?? 0 }} – {{ sessionForGame(game)?.awayScore ?? 0 }}</span>
+                <span class="live-score-label">{{ statusLabel('live') }}</span>
+              </span>
+              <time class="schedule-time is-small">{{ game.startTime }}</time>
+            </span>
+            <span v-else class="schedule-center">
               <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
               <time class="schedule-time">{{ game.startTime }}</time>
             </span>
             <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </span>
         </button>
-        <span v-if="sessionForGame(game)" class="session-status" :data-status="sessionForGame(game)!.status">{{ statusLabel(sessionForGame(game)!.status) }}</span>
-        <span v-else-if="!canPick(game)" class="statistics-hint">{{ t('sessions.opensBefore') }}</span>
+        <span v-if="sessionForGame(game) && !isLiveGame(game)" class="session-status" :data-status="sessionForGame(game)!.status">{{ statusLabel(sessionForGame(game)!.status) }}</span>
+        <span v-else-if="!sessionForGame(game) && !canPick(game)" class="statistics-hint">{{ t('sessions.opensBefore') }}</span>
         <div v-if="sessionForGame(game)?.canReview && sessionForGame(game)?.status === 'in_review'" class="session-actions">
           <button type="button" class="match-sync-primary" @click="finalizeSession(sessionForGame(game)!.id)">{{ t('sessions.finalise') }}</button>
         </div>

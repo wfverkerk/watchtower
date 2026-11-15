@@ -17,7 +17,10 @@
 .schedule-venue { font-size: 0.9em; opacity: 0.75; }
 .schedule-score { display: inline-flex; align-items: center; gap: 8px; padding: 4px 14px; border-radius: 12px; background: var(--line); font-size: 2em; line-height: 1.2; }
 .schedule-score .is-winner { font-weight: 800; }
-.schedule-score .is-loser { font-weight: 400; }
+.schedule-score.is-live { flex-direction: column; gap: 0; background: #e5484d; color: #fff; animation: live-score-pulse 1.6s ease-in-out infinite; }
+.live-score-label { font-size: 0.4em; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+@keyframes live-score-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(229, 72, 77, 0.6); } 70% { box-shadow: 0 0 0 10px rgba(229, 72, 77, 0); } }
+@media (prefers-reduced-motion: reduce) { .schedule-score.is-live { animation: none; } }
 .schedule-day-summary { cursor: pointer; font-weight: 700; text-transform: capitalize; padding: 6px 0; }
 .history-day { border-top: 1px solid var(--line); padding: 8px 0; }
 .history-day > summary { cursor: pointer; font-weight: 700; text-transform: capitalize; padding: 6px 0; }
