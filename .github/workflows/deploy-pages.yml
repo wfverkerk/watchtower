@@ -3,7 +3,7 @@ name: Deploy GitHub Pages
 on:
   push:
     branches:
-      - agents/pages-current-version
+      - main
   workflow_dispatch:
 
 permissions:
@@ -34,6 +34,7 @@ jobs:
             echo "::error::Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in GitHub Actions variables."
             exit 1
           fi
+      - run: npm test
       - run: npm run build
         env:
           VITE_BASE_PATH: /watchtower/
