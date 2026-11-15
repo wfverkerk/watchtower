@@ -58,6 +58,8 @@ export type MatchSession = {
   closed: boolean
   canClose: boolean
   canReview: boolean
+  homeScore?: number
+  awayScore?: number
 }
 
 const sessionStatuses: readonly string[] = ['open', 'live', 'closed', 'in_review', 'final']
@@ -86,6 +88,8 @@ export async function listMatchSessions(includeClosed = false): Promise<MatchSes
       closed: session.closed,
       canClose: session.canClose,
       canReview: session.canReview,
+      homeScore: typeof session.homeScore === 'number' ? session.homeScore : 0,
+      awayScore: typeof session.awayScore === 'number' ? session.awayScore : 0,
       teams,
     }
   })

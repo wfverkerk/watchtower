@@ -12,6 +12,10 @@ export type ScheduleGame = {
   status: string
   venue: string
   hasStats?: boolean
+  homeClub?: string | null
+  awayClub?: string | null
+  homeLogoUrl?: string | null
+  awayLogoUrl?: string | null
 }
 
 export type ScheduleBucket = 'open' | 'upcoming' | 'history'
@@ -33,6 +37,43 @@ export function scheduleBucket(game: ScheduleGame, now: number, today = localDat
   if (game.date < today) return 'history'
   if (game.date > today) return 'upcoming'
   return now >= gameStartMs(game) + gameDurationMs ? 'history' : 'open'
+}
+
+export type TeamGroup = 'young' | 'middle' | 'other' | 'test'
+
+// Team codes look like "V22-1" or "M16-2": the number after the letters is the age group.
+export function teamAgeGroup(name: string): number | null {
+  const match = /^[A-Za-z]{1,2}(\d{1,2})-/.exec(name.trim())
+  return match ? Number(match[1]) : null
+}
+
+export function teamGroup(name: string, isTestTeam: boolean): TeamGroup {
+  if (isTestTeam) return 'test'
+  const age = teamAgeGroup(name)
+  if (age !== null && age <= 12) return 'young'
+  if (age !== null && age >= 14 && age <= 18) return 'middle'
+  return 'other'
+}
+
+export function groupTeams(names: string[], testTeams: Set<string>) {
+  const order: TeamGroup[] = ['young', 'middle', 'other', 'test']
+  return order
+    .map((group) => ({
+      group,
+      teams: names.filter((name) => teamGroup(name, testTeams.has(name)) === group).sort(compareTeamNames),
+    }))
+    .filter((section) => section.teams.length > 0)
+}
+
+// Compares the numbers in a team name in order, so "V12-2" sorts before "V12-10" and "M14-1" before "M16-1".
+export function compareTeamNames(left: string, right: string) {
+  const leftNumbers = left.match(/\d+/g)?.map(Number) ?? []
+  const rightNumbers = right.match(/\d+/g)?.map(Number) ?? []
+  for (let index = 0; index < Math.max(leftNumbers.length, rightNumbers.length); index += 1) {
+    const difference = (leftNumbers[index] ?? Infinity) - (rightNumbers[index] ?? Infinity)
+    if (difference !== 0 && !Number.isNaN(difference)) return difference
+  }
+  return left.localeCompare(right)
 }
 
 export function groupByDay(games: ScheduleGame[]) {

@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const apiBaseUrl = 'https://api.foys.io/competition/public-api/v1'
 const organisationId = 'F7729CA8-4E22-4AE3-BEDE-6E36C2F507EB'
+const federationId = '52CFA65E-9782-4A81-AB35-E2F981FCB7A9'
 const pageSize = 100
 const timeZone = 'Europe/Amsterdam'
 
@@ -18,7 +19,19 @@ type Row = {
   away_score: number | null
   status: string
   venue: string
+  home_club: string | null
+  away_club: string | null
+  home_logo_url: string | null
+  away_logo_url: string | null
   synced_at: string
+}
+
+function optionalText(value: unknown, max: number) {
+  return typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null
+}
+
+function optionalUrl(value: unknown) {
+  return typeof value === 'string' && /^https:\/\//.test(value) ? value.slice(0, 500) : null
 }
 
 function localDate(now: Date) {
@@ -44,22 +57,26 @@ function toRow(kind: Kind, value: Record<string, unknown>, syncedAt: string): Ro
     away_score: score(value.awayScore),
     status: typeof value.status === 'string' ? value.status : '',
     venue: typeof value.accommodationName === 'string' ? value.accommodationName : '',
+    home_club: optionalText((value.homeOrganisation as { name?: unknown } | undefined)?.name, 60),
+    away_club: optionalText((value.awayOrganisation as { name?: unknown } | undefined)?.name, 60),
+    home_logo_url: optionalUrl(value.homeLogoUrl),
+    away_logo_url: optionalUrl(value.awayLogoUrl),
     synced_at: syncedAt,
   }
 }
 
-async function fetchRange(teamGuid: string, kind: Kind, now: Date, syncedAt: string): Promise<Row[]> {
+async function fetchRange(competitionId: number, kind: Kind, now: Date, syncedAt: string): Promise<Row[]> {
   const rows: Row[] = []
   for (let skipCount = 0; ; skipCount += pageSize) {
     const params = new URLSearchParams({
       organisationId,
-      teamGuid,
+      competitionId: String(competitionId),
       skipCount: String(skipCount),
       maxResultCount: String(pageSize),
       sorting: kind === 'program' ? 'date asc, startTime asc' : 'date desc, startTime desc',
       [kind === 'program' ? 'startDate' : 'endDate']: localDate(now),
     })
-    const response = await fetch(`${apiBaseUrl}/matches?${params}`)
+    const response = await fetch(`${apiBaseUrl}/matches?${params}`, { headers: { 'X-FederationId': federationId } })
     if (!response.ok) throw new Error(`Foys ${kind} request failed (${response.status}).`)
     const payload = await response.json() as { items?: Record<string, unknown>[] }
     const items = Array.isArray(payload.items) ? payload.items : []
@@ -81,16 +98,16 @@ Deno.serve(async (request) => {
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
     auth: { persistSession: false },
   })
-  const { data: teams, error: teamsError } = await supabase.from('zoebas_teams').select('source_team_id')
-  if (teamsError) return new Response(teamsError.message, { status: 500 })
+  const { data: competitions, error: competitionsError } = await supabase.from('zoebas_competitions').select('id')
+  if (competitionsError) return new Response(competitionsError.message, { status: 500 })
 
   const now = new Date()
   const syncedAt = now.toISOString()
   const rows = new Map<string, Row>()
   try {
-    for (const team of teams ?? []) {
+    for (const competition of competitions ?? []) {
       for (const kind of ['program', 'result'] as const) {
-        for (const row of await fetchRange(String(team.source_team_id), kind, now, syncedAt)) {
+        for (const row of await fetchRange(Number(competition.id), kind, now, syncedAt)) {
           rows.set(row.id, row)
         }
       }

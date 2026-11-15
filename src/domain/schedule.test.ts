@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupByDay, scheduleBucket, winnerSide, type ScheduleGame } from './schedule'
+import { groupByDay, groupTeams, scheduleBucket, winnerSide, type ScheduleGame } from './schedule'
 
 const base: ScheduleGame = {
   id: '1',
@@ -25,6 +25,18 @@ describe('schedule buckets', () => {
     expect(scheduleBucket({ ...base, date: '2026-11-16' }, now)).toBe('upcoming')
     expect(scheduleBucket({ ...base, date: '2026-11-14' }, now)).toBe('history')
     expect(scheduleBucket({ ...base, kind: 'result' }, now)).toBe('history')
+  })
+})
+
+describe('favorite team sections', () => {
+  it('groups teams by age group, keeps other codes together and puts test teams in their own section', () => {
+    const sections = groupTeams(['V22-1', 'M12-1', 'M16-2', 'MSE-2', 'U14-1', 'Harlem Globetrotters'], new Set(['Harlem Globetrotters']))
+    expect(sections.map((section) => [section.group, section.teams])).toEqual([
+      ['young', ['M12-1']],
+      ['middle', ['U14-1', 'M16-2']],
+      ['other', ['MSE-2', 'V22-1']],
+      ['test', ['Harlem Globetrotters']],
+    ])
   })
 })
 

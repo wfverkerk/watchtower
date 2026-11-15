@@ -62,6 +62,14 @@ Afgesloten lokale wedstrijden en hun indienstatus staan onder `watchtower-local-
    - [`20261121000000_admin_dashboard.sql`](./supabase/migrations/20261121000000_admin_dashboard.sql)
    - [`20261122000000_test_games.sql`](./supabase/migrations/20261122000000_test_games.sql) (testdata; draai daarna `select public.refresh_test_games();`)
    - [`20261123000000_test_team_logos.sql`](./supabase/migrations/20261123000000_test_team_logos.sql) (upload de bestanden in `supabase/test-logos/` naar de bucket `logos`)
+   - [`20261124000000_test_history_game.sql`](./supabase/migrations/20261124000000_test_history_game.sql) (testdata; draai daarna `select public.refresh_test_history();`)
+   - [`20261125000000_schedule_stats.sql`](./supabase/migrations/20261125000000_schedule_stats.sql)
+   - [`20261126000000_zoebas_competitions.sql`](./supabase/migrations/20261126000000_zoebas_competitions.sql) (competities voor de schedule-sync)
+   - [`20261127000000_schedule_clubs_logos.sql`](./supabase/migrations/20261127000000_schedule_clubs_logos.sql) (club- en logokolommen voor het programma)
+   - [`20261128000000_test_games_today.sql`](./supabase/migrations/20261128000000_test_games_today.sql) (testdata: een wedstrijd van vandaag die nog niet gestart is; draai daarna opnieuw `select public.refresh_test_games();`)
+   - [`20261129000000_live_scores.sql`](./supabase/migrations/20261129000000_live_scores.sql) (live-stand in de sessielijst; zet de snapshot van de testwedstrijd die nu live is)
+
+De Edge Function `sync-zoebas-schedule` haalt het programma per competitie op uit de FOYS-API (met header `X-FederationId`). Een pg_cron-taak roept hem dagelijks om 03:00 Amsterdamse tijd aan; het `SYNC_SECRET` staat in de Supabase-secrets en in Vault (`sync_zoebas_schedule_secret`).
 3. Kopieer `.env.example` naar `.env.local` en vul de project-URL en publishable/anon key in. Deze client key is bedoeld voor gebruik in de browser; de database vertrouwt op RLS-beleid en anonieme Supabase Auth-sessies.
 4. Controleer dat Supabase Realtime is ingeschakeld en dat `match_events`, `shared_matches` en `match_score_links` in de publicatie `supabase_realtime` staan. De migratie voegt deze toe als de publicatie bestaat.
 5. Herstart `npm run dev`. Kies op de startpagina een wedstrijd uit het programma.

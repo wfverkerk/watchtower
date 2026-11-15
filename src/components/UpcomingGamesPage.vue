@@ -2,13 +2,14 @@
 import PageHeader from './PageHeader.vue'
 import BaseDialog from './BaseDialog.vue'
 import JoinSidePicker from './JoinSidePicker.vue'
-import TeamLogo from './TeamLogo.vue'
+import ScheduleSide from './ScheduleSide.vue'
 import { errorMessage } from '../domain/guards'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { gameStartMs, groupByDay, scheduleBucket, winnerSide, type ScheduleGame } from '../domain/schedule'
+import { gameStartMs, groupByDay, groupTeams, localDateKey, scheduleBucket, winnerSide, type ScheduleGame, type TeamGroup } from '../domain/schedule'
 import { sessionPhase } from '../domain/sessionWindow'
 import { createInitialGameState, type GameState } from '../domain/game'
 import { useFavoriteTeams } from '../composables/useFavoriteTeams'
+import { useOpponentTeams } from '../composables/useOpponentTeams'
 import { useLocale } from '../i18n/useLocale'
 import { listMatchSessions, openScheduleSession, setSessionFinal, type MatchSession, type SessionStatus } from '../services/sharedMatch'
 import { loadLocalMatches, type LocalMatch } from '../services/localMatches'
@@ -36,11 +37,30 @@ let lastRefresh = 0
 const schedule = ref<ScheduleGame[]>([])
 const scheduleError = ref('')
 const { favorites, setFavorites } = useFavoriteTeams()
+const { refreshOpponentTeams } = useOpponentTeams()
 const mode = ref<'mine' | 'all'>(favorites.value.length ? 'mine' : 'all')
 const editing = ref(false)
 const draftFavorites = ref<string[]>([])
+const testTeamNames = computed(() => new Set(schedule.value
+  .filter((game) => game.id.startsWith('test-game'))
+  .flatMap((game) => [game.homeTeam, game.awayTeam])))
+const zoebasClubName = 'Zoebas'
+// Only Zoebas teams (and test teams) are offered; opponent teams of other clubs are left out.
+const zoebasTeamNames = computed(() => new Set(schedule.value.flatMap((game) => [
+  game.homeClub === zoebasClubName ? game.homeTeam : null,
+  game.awayClub === zoebasClubName ? game.awayTeam : null,
+]).filter((name): name is string => name !== null)))
 const teamNames = computed(() => [...new Set(schedule.value.flatMap((game) => [game.homeTeam, game.awayTeam]))]
+  .filter((name) => zoebasTeamNames.value.has(name) || testTeamNames.value.has(name))
   .sort((left, right) => left.localeCompare(right)))
+const teamSections = computed(() => groupTeams(teamNames.value, testTeamNames.value))
+
+function teamGroupLabel(group: TeamGroup) {
+  if (group === 'young') return t('sessions.teamGroupYoung')
+  if (group === 'middle') return t('sessions.teamGroupMiddle')
+  if (group === 'test') return t('sessions.teamGroupTest')
+  return t('sessions.teamGroupOther')
+}
 const showMine = computed(() => mode.value === 'mine' && favorites.value.length > 0)
 const visibleSchedule = computed(() => showMine.value
   ? schedule.value.filter((game) => favorites.value.includes(game.homeTeam) || favorites.value.includes(game.awayTeam))
@@ -159,8 +179,17 @@ function statusLabel(status: SessionStatus) {
   return t(`sessions.status.${status}`)
 }
 
+function isLiveGame(game: ScheduleGame) {
+  return sessionForGame(game)?.status === 'live'
+}
+
 function formatDay(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString(locale.value, { weekday: 'long', day: 'numeric', month: 'long' })
+}
+
+// Today's games and the next day with games start expanded; later days stay collapsed.
+function isExpandedDay(date: string, index: number) {
+  return date === localDateKey(new Date(now.value)) || index === 0
 }
 
 async function refreshSchedule() {
@@ -171,6 +200,7 @@ async function refreshSchedule() {
     console.error('Failed to load the schedule.', reason)
     scheduleError.value = errorMessage(reason)
   }
+  void refreshOpponentTeams()
 }
 
 async function refresh() {
@@ -260,19 +290,24 @@ onUnmounted(() => {
     <section v-if="editing" class="panel statistics-card my-teams-editor">
       <h2>{{ t('sessions.pickMyTeams') }}</h2>
       <p class="statistics-hint">{{ t('sessions.myTeamsHint') }}</p>
-      <ul class="favorite-team-list">
-        <li v-for="name in teamNames" :key="name" class="favorite-team-row">
-          <span>{{ name }}</span>
+      <div v-for="section in teamSections" :key="section.group" class="favorite-team-section">
+        <h3>{{ teamGroupLabel(section.group) }}</h3>
+        <div class="favorite-team-grid">
           <button
+            v-for="name in section.teams"
+            :key="name"
             type="button"
-            class="favorite-heart"
+            class="favorite-team-tile"
             :class="{ 'is-favorite': draftFavorites.includes(name) }"
             :aria-pressed="draftFavorites.includes(name) ? 'true' : 'false'"
             :aria-label="name"
             @click="toggleDraft(name)"
-          >♥</button>
-        </li>
-      </ul>
+          >
+            <span>{{ name }}</span>
+            <span class="favorite-tile-heart" aria-hidden="true">♥</span>
+          </button>
+        </div>
+      </div>
       <div class="session-actions">
         <button type="button" class="match-sync-primary" @click="saveMyTeams">{{ t('sessions.saveMyTeams') }}</button>
       </div>
@@ -283,17 +318,25 @@ onUnmounted(() => {
       <p v-if="!openGames.length" class="statistics-hint">{{ t('sessions.openEmpty') }}</p>
       <article v-for="game in openGames" :key="game.id" class="session-row schedule-game" :class="{ 'is-live': sessionForGame(game)?.status === 'live' }">
         <button type="button" class="schedule-open-trigger" :disabled="!canPick(game)" @click="tapGame(game)">
-          <span class="schedule-teams">
-            <TeamLogo :name="game.homeTeam" placeholder />
-            <strong>{{ game.homeTeam }}</strong>
-            <span>–</span>
-            <strong>{{ game.awayTeam }}</strong>
-            <TeamLogo :name="game.awayTeam" placeholder />
+          <span class="schedule-match">
+            <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
+            <span v-if="isLiveGame(game)" class="schedule-center">
+              <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
+              <span class="schedule-score is-live">
+                <span>{{ sessionForGame(game)?.homeScore ?? 0 }} – {{ sessionForGame(game)?.awayScore ?? 0 }}</span>
+                <span class="live-score-label">{{ statusLabel('live') }}</span>
+              </span>
+              <time class="schedule-time is-small">{{ game.startTime }}</time>
+            </span>
+            <span v-else class="schedule-center">
+              <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
+              <time class="schedule-time">{{ game.startTime }}</time>
+            </span>
+            <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </span>
-          <time>{{ game.startTime }}</time>
         </button>
-        <span v-if="sessionForGame(game)" class="session-status" :data-status="sessionForGame(game)!.status">{{ statusLabel(sessionForGame(game)!.status) }}</span>
-        <span v-else-if="!canPick(game)" class="statistics-hint">{{ t('sessions.opensBefore') }}</span>
+        <span v-if="sessionForGame(game) && !isLiveGame(game)" class="session-status" :data-status="sessionForGame(game)!.status">{{ statusLabel(sessionForGame(game)!.status) }}</span>
+        <span v-else-if="!sessionForGame(game) && !canPick(game)" class="statistics-hint">{{ t('sessions.opensBefore') }}</span>
         <div v-if="sessionForGame(game)?.canReview && sessionForGame(game)?.status === 'in_review'" class="session-actions">
           <button type="button" class="match-sync-primary" @click="finalizeSession(sessionForGame(game)!.id)">{{ t('sessions.finalise') }}</button>
         </div>
@@ -302,19 +345,19 @@ onUnmounted(() => {
     <section class="panel statistics-card">
       <h2>{{ t('sessions.upcomingTitle') }}</h2>
       <p v-if="!upcomingDays.length" class="statistics-hint">{{ t('sessions.upcomingEmpty') }}</p>
-      <div v-for="day in upcomingDays" :key="day.date" class="card schedule-day">
-        <h3>{{ formatDay(day.date) }}</h3>
+      <details v-for="(day, index) in upcomingDays" :key="day.date" class="history-day" :open="isExpandedDay(day.date, index)">
+        <summary class="schedule-day-summary">{{ formatDay(day.date) }} <small>{{ day.games.length }}</small></summary>
         <article v-for="game in day.games" :key="game.id" class="session-row schedule-game">
-          <div class="schedule-teams">
-            <TeamLogo :name="game.homeTeam" placeholder />
-            <strong>{{ game.homeTeam }}</strong>
-            <span>–</span>
-            <strong>{{ game.awayTeam }}</strong>
-            <TeamLogo :name="game.awayTeam" placeholder />
+          <div class="schedule-match">
+            <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
+            <span class="schedule-center">
+              <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
+              <time class="schedule-time">{{ game.startTime }}</time>
+            </span>
+            <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </div>
-          <time>{{ game.startTime }}</time>
         </article>
-      </div>
+      </details>
     </section>
     <section class="panel statistics-card">
       <h2>{{ t('sessions.historyTitle') }}</h2>
@@ -323,13 +366,19 @@ onUnmounted(() => {
         <summary>{{ formatDay(day.date) }} <small>{{ day.games.length }}</small></summary>
         <article v-for="game in day.games" :key="game.id" class="session-row schedule-game">
           <span class="stats-label" :class="game.hasStats ? 'has-stats' : 'no-stats'">{{ game.hasStats ? t('sessions.withStats') : t('sessions.withoutStats') }}</span>
-          <div class="schedule-teams">
-            <span :class="{ 'schedule-winner': winnerSide(game) === 'home' }">{{ game.homeTeam }}</span>
-            <strong>{{ game.homeScore ?? '–' }} – {{ game.awayScore ?? '–' }}</strong>
-            <span :class="{ 'schedule-winner': winnerSide(game) === 'away' }">{{ game.awayTeam }}</span>
+          <div class="schedule-match">
+            <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
+            <span class="schedule-center">
+              <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
+              <span class="schedule-score">
+                <span :class="winnerSide(game) === 'home' ? 'is-winner' : 'is-loser'">{{ game.homeScore ?? '–' }}</span>
+                –
+                <span :class="winnerSide(game) === 'away' ? 'is-winner' : 'is-loser'">{{ game.awayScore ?? '–' }}</span>
+              </span>
+              <time class="schedule-time is-small">{{ game.startTime }}</time>
+            </span>
+            <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </div>
-          <time>{{ game.startTime }}</time>
-          <span v-if="winnerSide(game)" class="statistics-hint">{{ t('sessions.winner') }}: {{ winnerSide(game) === 'home' ? game.homeTeam : game.awayTeam }}</span>
           <div v-if="sessionForGame(game)?.canReview && sessionForGame(game)?.status === 'in_review'" class="session-actions">
             <button type="button" class="match-sync-primary" @click="finalizeSession(sessionForGame(game)!.id)">{{ t('sessions.finalise') }}</button>
           </div>

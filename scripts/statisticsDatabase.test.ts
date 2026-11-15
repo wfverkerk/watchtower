@@ -375,12 +375,16 @@ describe('statistics database authorization', () => {
     expect(remaining).toBe(0)
   })
 
-  it('refreshes the test games: one upcoming game tomorrow and one live game with events', async () => {
+  it('refreshes the test games: one upcoming game tomorrow, one game today not yet started and one live game with events', async () => {
     await db.exec('reset role; select public.refresh_test_games();')
     const upcoming = (await db.query<{ days: number }>(
       "select (match_date - (now() at time zone 'Europe/Amsterdam')::date)::integer days from public.zoebas_schedule where id = 'test-game-upcoming'",
     )).rows[0]
     expect(upcoming.days).toBe(1)
+    const today = (await db.query<{ future: boolean }>(
+      "select (match_date + start_time) > (now() at time zone 'Europe/Amsterdam') future from public.zoebas_schedule where id = 'test-game-today'",
+    )).rows[0]
+    expect(today.future).toBe(true)
     const live = (await db.query<{ id: string; status: string; events: number }>(
       `select m.id, public.session_status(m.id) status,
         (select count(*)::integer from public.match_events e where e.match_id = m.id) events
@@ -393,6 +397,15 @@ describe('statistics database authorization', () => {
       "select count(*)::integer events from public.match_events e join public.shared_matches m on m.id = e.match_id where m.schedule_game_id = 'test-game-live'",
     )).rows[0].events
     expect(afterRerun).toBe(4)
+  })
+
+  it('reports the live score of the test live game from the scorer snapshot', async () => {
+    await db.exec('reset role; select public.refresh_test_games(); select public.refresh_test_live_snapshot();')
+    const session = (await db.query<{ home: number; away: number }>(
+      `select (s->>'homeScore')::integer home, (s->>'awayScore')::integer away
+       from jsonb_array_elements(public.list_match_sessions(false)) s where s->>'scheduleId' = 'test-game-live'`,
+    )).rows[0]
+    expect(session).toEqual({ home: 5, away: 2 })
   })
 
   it('adds a finished test game with full statistics to the team history', async () => {
