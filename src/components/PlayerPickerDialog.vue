@@ -229,7 +229,7 @@ function actionLabel(action: PendingAction) {
         </div>
       </section>
 
-      <div class="scoring-picker-footer">
+      <div v-if="action.type !== 'turnover'" class="scoring-picker-footer">
         <button class="picker-cancel" @click="emit('cancel')">{{ t('picker.cancel') }}</button>
         <button class="picker-confirm" :disabled="!scorerId" @click="emit('finish')">{{ t('picker.submit') }}</button>
       </div>
