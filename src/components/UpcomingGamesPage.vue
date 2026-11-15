@@ -5,7 +5,7 @@ import JoinSidePicker from './JoinSidePicker.vue'
 import ScheduleSide from './ScheduleSide.vue'
 import { errorMessage } from '../domain/guards'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { gameStartMs, groupByDay, localDateKey, scheduleBucket, winnerSide, type ScheduleGame } from '../domain/schedule'
+import { gameStartMs, groupByDay, groupTeams, localDateKey, scheduleBucket, winnerSide, type ScheduleGame, type TeamGroup } from '../domain/schedule'
 import { sessionPhase } from '../domain/sessionWindow'
 import { createInitialGameState, type GameState } from '../domain/game'
 import { useFavoriteTeams } from '../composables/useFavoriteTeams'
@@ -43,6 +43,17 @@ const editing = ref(false)
 const draftFavorites = ref<string[]>([])
 const teamNames = computed(() => [...new Set(schedule.value.flatMap((game) => [game.homeTeam, game.awayTeam]))]
   .sort((left, right) => left.localeCompare(right)))
+const testTeamNames = computed(() => new Set(schedule.value
+  .filter((game) => game.id.startsWith('test-game'))
+  .flatMap((game) => [game.homeTeam, game.awayTeam])))
+const teamSections = computed(() => groupTeams(teamNames.value, testTeamNames.value))
+
+function teamGroupLabel(group: TeamGroup) {
+  if (group === 'young') return t('sessions.teamGroupYoung')
+  if (group === 'middle') return t('sessions.teamGroupMiddle')
+  if (group === 'test') return t('sessions.teamGroupTest')
+  return t('sessions.teamGroupOther')
+}
 const showMine = computed(() => mode.value === 'mine' && favorites.value.length > 0)
 const visibleSchedule = computed(() => showMine.value
   ? schedule.value.filter((game) => favorites.value.includes(game.homeTeam) || favorites.value.includes(game.awayTeam))
@@ -268,20 +279,23 @@ onUnmounted(() => {
     <section v-if="editing" class="panel statistics-card my-teams-editor">
       <h2>{{ t('sessions.pickMyTeams') }}</h2>
       <p class="statistics-hint">{{ t('sessions.myTeamsHint') }}</p>
-      <div class="favorite-team-grid">
-        <button
-          v-for="name in teamNames"
-          :key="name"
-          type="button"
-          class="favorite-team-tile"
-          :class="{ 'is-favorite': draftFavorites.includes(name) }"
-          :aria-pressed="draftFavorites.includes(name) ? 'true' : 'false'"
-          :aria-label="name"
-          @click="toggleDraft(name)"
-        >
-          <span>{{ name }}</span>
-          <span class="favorite-tile-heart" aria-hidden="true">♥</span>
-        </button>
+      <div v-for="section in teamSections" :key="section.group" class="favorite-team-section">
+        <h3>{{ teamGroupLabel(section.group) }}</h3>
+        <div class="favorite-team-grid">
+          <button
+            v-for="name in section.teams"
+            :key="name"
+            type="button"
+            class="favorite-team-tile"
+            :class="{ 'is-favorite': draftFavorites.includes(name) }"
+            :aria-pressed="draftFavorites.includes(name) ? 'true' : 'false'"
+            :aria-label="name"
+            @click="toggleDraft(name)"
+          >
+            <span>{{ name }}</span>
+            <span class="favorite-tile-heart" aria-hidden="true">♥</span>
+          </button>
+        </div>
       </div>
       <div class="session-actions">
         <button type="button" class="match-sync-primary" @click="saveMyTeams">{{ t('sessions.saveMyTeams') }}</button>

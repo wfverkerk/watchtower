@@ -39,6 +39,29 @@ export function scheduleBucket(game: ScheduleGame, now: number, today = localDat
   return now >= gameStartMs(game) + gameDurationMs ? 'history' : 'open'
 }
 
+export type TeamGroup = 'young' | 'middle' | 'other' | 'test'
+
+// Team codes look like "V22-1" or "M16-2": the number after the letters is the age group.
+export function teamAgeGroup(name: string): number | null {
+  const match = /^[A-Za-z]{1,2}(\d{1,2})-/.exec(name.trim())
+  return match ? Number(match[1]) : null
+}
+
+export function teamGroup(name: string, isTestTeam: boolean): TeamGroup {
+  if (isTestTeam) return 'test'
+  const age = teamAgeGroup(name)
+  if (age !== null && age <= 12) return 'young'
+  if (age !== null && age >= 14 && age <= 18) return 'middle'
+  return 'other'
+}
+
+export function groupTeams(names: string[], testTeams: Set<string>) {
+  const order: TeamGroup[] = ['young', 'middle', 'other', 'test']
+  return order
+    .map((group) => ({ group, teams: names.filter((name) => teamGroup(name, testTeams.has(name)) === group) }))
+    .filter((section) => section.teams.length > 0)
+}
+
 export function groupByDay(games: ScheduleGame[]) {
   const groups = new Map<string, ScheduleGame[]>()
   for (const game of games) {
