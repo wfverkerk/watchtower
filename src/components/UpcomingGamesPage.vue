@@ -41,11 +41,18 @@ const { refreshOpponentTeams } = useOpponentTeams()
 const mode = ref<'mine' | 'all'>(favorites.value.length ? 'mine' : 'all')
 const editing = ref(false)
 const draftFavorites = ref<string[]>([])
-const teamNames = computed(() => [...new Set(schedule.value.flatMap((game) => [game.homeTeam, game.awayTeam]))]
-  .sort((left, right) => left.localeCompare(right)))
 const testTeamNames = computed(() => new Set(schedule.value
   .filter((game) => game.id.startsWith('test-game'))
   .flatMap((game) => [game.homeTeam, game.awayTeam])))
+const zoebasClubName = 'Zoebas'
+// Only Zoebas teams (and test teams) are offered; opponent teams of other clubs are left out.
+const zoebasTeamNames = computed(() => new Set(schedule.value.flatMap((game) => [
+  game.homeClub === zoebasClubName ? game.homeTeam : null,
+  game.awayClub === zoebasClubName ? game.awayTeam : null,
+]).filter((name): name is string => name !== null)))
+const teamNames = computed(() => [...new Set(schedule.value.flatMap((game) => [game.homeTeam, game.awayTeam]))]
+  .filter((name) => zoebasTeamNames.value.has(name) || testTeamNames.value.has(name))
+  .sort((left, right) => left.localeCompare(right)))
 const teamSections = computed(() => groupTeams(teamNames.value, testTeamNames.value))
 
 function teamGroupLabel(group: TeamGroup) {
