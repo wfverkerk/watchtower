@@ -50,7 +50,6 @@ const foulOptions = computed<FoulType[]>(() => {
   const scorer = props.players.find((player) => player.id === props.scorerId)
   return scorer && !scorer.isOnCourt ? ['B', 'BD'] : ['P', 'U', 'T', 'D']
 })
-const personalNumber = computed(() => (props.playerFouls[props.scorerId] ?? 0) + (props.editing && props.foulType === 'P' ? 0 : 1))
 const personalLimitReached = computed(() => (props.playerFouls[props.scorerId] ?? 0) >= 5 && !(props.editing && props.foulType === 'P'))
 function foulSubtitle(type: FoulType) {
   if (type === 'BD') return 'D'
@@ -222,7 +221,7 @@ function actionLabel(action: PendingAction) {
             :aria-pressed="foulType === type"
             @click="emit('select-foul-type', type)"
           >
-            <strong>{{ type === 'P' ? `P${personalNumber}` : foulCode(type) }}</strong>
+            <strong>{{ foulCode(type) }}</strong>
             <span>{{ t(`picker.foulTypes.${foulSubtitle(type)}`) }}</span>
           </button>
         </div>
