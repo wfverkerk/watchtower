@@ -9,6 +9,7 @@ import { gameStartMs, groupByDay, localDateKey, scheduleBucket, winnerSide, type
 import { sessionPhase } from '../domain/sessionWindow'
 import { createInitialGameState, type GameState } from '../domain/game'
 import { useFavoriteTeams } from '../composables/useFavoriteTeams'
+import { useOpponentTeams } from '../composables/useOpponentTeams'
 import { useLocale } from '../i18n/useLocale'
 import { listMatchSessions, openScheduleSession, setSessionFinal, type MatchSession, type SessionStatus } from '../services/sharedMatch'
 import { loadLocalMatches, type LocalMatch } from '../services/localMatches'
@@ -36,6 +37,7 @@ let lastRefresh = 0
 const schedule = ref<ScheduleGame[]>([])
 const scheduleError = ref('')
 const { favorites, setFavorites } = useFavoriteTeams()
+const { refreshOpponentTeams } = useOpponentTeams()
 const mode = ref<'mine' | 'all'>(favorites.value.length ? 'mine' : 'all')
 const editing = ref(false)
 const draftFavorites = ref<string[]>([])
@@ -176,6 +178,7 @@ async function refreshSchedule() {
     console.error('Failed to load the schedule.', reason)
     scheduleError.value = errorMessage(reason)
   }
+  void refreshOpponentTeams()
 }
 
 async function refresh() {
@@ -290,7 +293,10 @@ onUnmounted(() => {
         <button type="button" class="schedule-open-trigger" :disabled="!canPick(game)" @click="tapGame(game)">
           <span class="schedule-match">
             <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
-            <time class="schedule-center">{{ game.startTime }}</time>
+            <span class="schedule-center">
+              <time class="schedule-time">{{ game.startTime }}</time>
+              <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
+            </span>
             <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </span>
         </button>
@@ -309,7 +315,10 @@ onUnmounted(() => {
         <article v-for="game in day.games" :key="game.id" class="session-row schedule-game">
           <div class="schedule-match">
             <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
-            <time class="schedule-center">{{ game.startTime }}</time>
+            <span class="schedule-center">
+              <time class="schedule-time">{{ game.startTime }}</time>
+              <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
+            </span>
             <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </div>
         </article>
@@ -324,14 +333,17 @@ onUnmounted(() => {
           <span class="stats-label" :class="game.hasStats ? 'has-stats' : 'no-stats'">{{ game.hasStats ? t('sessions.withStats') : t('sessions.withoutStats') }}</span>
           <div class="schedule-match">
             <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
-            <span class="schedule-score schedule-center">
-              <span :class="winnerSide(game) === 'home' ? 'is-winner' : 'is-loser'">{{ game.homeScore ?? '–' }}</span>
-              –
-              <span :class="winnerSide(game) === 'away' ? 'is-winner' : 'is-loser'">{{ game.awayScore ?? '–' }}</span>
+            <span class="schedule-center">
+              <span class="schedule-score">
+                <span :class="winnerSide(game) === 'home' ? 'is-winner' : 'is-loser'">{{ game.homeScore ?? '–' }}</span>
+                –
+                <span :class="winnerSide(game) === 'away' ? 'is-winner' : 'is-loser'">{{ game.awayScore ?? '–' }}</span>
+              </span>
+              <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
+              <time class="schedule-time">{{ game.startTime }}</time>
             </span>
             <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </div>
-          <time>{{ game.startTime }}</time>
           <div v-if="sessionForGame(game)?.canReview && sessionForGame(game)?.status === 'in_review'" class="session-actions">
             <button type="button" class="match-sync-primary" @click="finalizeSession(sessionForGame(game)!.id)">{{ t('sessions.finalise') }}</button>
           </div>

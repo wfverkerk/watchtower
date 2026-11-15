@@ -11,7 +11,9 @@
 .schedule-side .team-logo { width: 56px; height: 56px; }
 .schedule-names { display: grid; justify-items: center; line-height: 1.2; min-width: 0; }
 .schedule-names span { font-size: 0.85em; opacity: 0.75; }
-.schedule-center { text-align: center; }
+.schedule-center { display: grid; justify-items: center; gap: 4px; text-align: center; }
+.schedule-time { font-size: 2em; line-height: 1.2; }
+.schedule-venue { font-size: 0.9em; opacity: 0.75; }
 .schedule-score { display: inline-flex; align-items: center; gap: 8px; padding: 4px 14px; border-radius: 12px; background: var(--line); font-size: 2em; line-height: 1.2; }
 .schedule-score .is-winner { font-weight: 800; }
 .schedule-score .is-loser { font-weight: 400; }
@@ -40,6 +42,9 @@
 .session-status[data-status='final'] { background: #dae8fc; color: #1d3d7a; }
 .join-side-picker { display: grid; gap: 10px; margin-top: 8px; }
 .schedule-open-trigger { border: 0; background: transparent; padding: 0; color: inherit; text-align: left; cursor: pointer; display: grid; gap: 6px; width: 100%; }
+.schedule-open-trigger::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
+.schedule-game { position: relative; }
+.schedule-game > .session-actions { position: relative; z-index: 1; }
 .join-side-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .join-side-option { display: grid; justify-items: center; gap: 6px; padding: 10px; border: 2px solid var(--line); border-radius: 12px; background: transparent; color: inherit; transform: scale(1); transition: transform 180ms ease, opacity 180ms ease, border-color 180ms ease; }
 .join-side-option .team-logo { width: 56px; height: 56px; }
