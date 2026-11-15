@@ -6,12 +6,16 @@
 .statistics-hint { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .session-row { display: grid; gap: 6px; padding: 14px 0; border-top: 1px solid var(--line); }
 .session-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.schedule-teams { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.schedule-side { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.schedule-names { display: grid; line-height: 1.2; min-width: 0; }
+.schedule-match { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; }
+.schedule-side { display: grid; justify-items: center; gap: 6px; text-align: center; min-width: 0; }
+.schedule-side .team-logo { width: 56px; height: 56px; }
+.schedule-names { display: grid; justify-items: center; line-height: 1.2; min-width: 0; }
 .schedule-names span { font-size: 0.85em; opacity: 0.75; }
-.schedule-side.schedule-winner .schedule-names strong { text-decoration: underline; }
-.schedule-day h3 { margin: 14px 0 0; text-transform: capitalize; }
+.schedule-center { text-align: center; }
+.schedule-score { display: inline-flex; align-items: center; gap: 8px; padding: 4px 14px; border-radius: 12px; background: var(--line); font-size: 2em; line-height: 1.2; }
+.schedule-score .is-winner { font-weight: 800; }
+.schedule-score .is-loser { font-weight: 400; }
+.schedule-day-summary { cursor: pointer; font-weight: 700; text-transform: capitalize; padding: 6px 0; }
 .history-day { border-top: 1px solid var(--line); padding: 8px 0; }
 .history-day > summary { cursor: pointer; font-weight: 700; text-transform: capitalize; padding: 6px 0; }
 .history-day > summary small { font-weight: 400; margin-left: 6px; opacity: 0.7; }
@@ -35,7 +39,7 @@
 .session-status[data-status='closed'], .session-status[data-status='in_review'] { background: #fff2cc; color: #6b4e00; }
 .session-status[data-status='final'] { background: #dae8fc; color: #1d3d7a; }
 .join-side-picker { display: grid; gap: 10px; margin-top: 8px; }
-.schedule-open-trigger { border: 0; background: transparent; padding: 0; color: inherit; text-align: left; cursor: pointer; display: grid; gap: 6px; }
+.schedule-open-trigger { border: 0; background: transparent; padding: 0; color: inherit; text-align: left; cursor: pointer; display: grid; gap: 6px; width: 100%; }
 .join-side-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .join-side-option { display: grid; justify-items: center; gap: 6px; padding: 10px; border: 2px solid var(--line); border-radius: 12px; background: transparent; color: inherit; transform: scale(1); transition: transform 180ms ease, opacity 180ms ease, border-color 180ms ease; }
 .join-side-option .team-logo { width: 56px; height: 56px; }

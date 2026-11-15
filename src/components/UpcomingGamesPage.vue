@@ -5,7 +5,7 @@ import JoinSidePicker from './JoinSidePicker.vue'
 import ScheduleSide from './ScheduleSide.vue'
 import { errorMessage } from '../domain/guards'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { gameStartMs, groupByDay, scheduleBucket, winnerSide, type ScheduleGame } from '../domain/schedule'
+import { gameStartMs, groupByDay, localDateKey, scheduleBucket, winnerSide, type ScheduleGame } from '../domain/schedule'
 import { sessionPhase } from '../domain/sessionWindow'
 import { createInitialGameState, type GameState } from '../domain/game'
 import { useFavoriteTeams } from '../composables/useFavoriteTeams'
@@ -163,6 +163,11 @@ function formatDay(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString(locale.value, { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
+// Today's games and the next day with games start expanded; later days stay collapsed.
+function isExpandedDay(date: string, index: number) {
+  return date === localDateKey(new Date(now.value)) || index === 0
+}
+
 async function refreshSchedule() {
   try {
     schedule.value = await loadSchedule()
@@ -283,12 +288,11 @@ onUnmounted(() => {
       <p v-if="!openGames.length" class="statistics-hint">{{ t('sessions.openEmpty') }}</p>
       <article v-for="game in openGames" :key="game.id" class="session-row schedule-game" :class="{ 'is-live': sessionForGame(game)?.status === 'live' }">
         <button type="button" class="schedule-open-trigger" :disabled="!canPick(game)" @click="tapGame(game)">
-          <span class="schedule-teams">
+          <span class="schedule-match">
             <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
-            <span>–</span>
+            <time class="schedule-center">{{ game.startTime }}</time>
             <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </span>
-          <time>{{ game.startTime }}</time>
         </button>
         <span v-if="sessionForGame(game)" class="session-status" :data-status="sessionForGame(game)!.status">{{ statusLabel(sessionForGame(game)!.status) }}</span>
         <span v-else-if="!canPick(game)" class="statistics-hint">{{ t('sessions.opensBefore') }}</span>
@@ -300,17 +304,16 @@ onUnmounted(() => {
     <section class="panel statistics-card">
       <h2>{{ t('sessions.upcomingTitle') }}</h2>
       <p v-if="!upcomingDays.length" class="statistics-hint">{{ t('sessions.upcomingEmpty') }}</p>
-      <div v-for="day in upcomingDays" :key="day.date" class="card schedule-day">
-        <h3>{{ formatDay(day.date) }}</h3>
+      <details v-for="(day, index) in upcomingDays" :key="day.date" class="history-day" :open="isExpandedDay(day.date, index)">
+        <summary class="schedule-day-summary">{{ formatDay(day.date) }} <small>{{ day.games.length }}</small></summary>
         <article v-for="game in day.games" :key="game.id" class="session-row schedule-game">
-          <div class="schedule-teams">
+          <div class="schedule-match">
             <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
-            <span>–</span>
+            <time class="schedule-center">{{ game.startTime }}</time>
             <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </div>
-          <time>{{ game.startTime }}</time>
         </article>
-      </div>
+      </details>
     </section>
     <section class="panel statistics-card">
       <h2>{{ t('sessions.historyTitle') }}</h2>
@@ -319,10 +322,14 @@ onUnmounted(() => {
         <summary>{{ formatDay(day.date) }} <small>{{ day.games.length }}</small></summary>
         <article v-for="game in day.games" :key="game.id" class="session-row schedule-game">
           <span class="stats-label" :class="game.hasStats ? 'has-stats' : 'no-stats'">{{ game.hasStats ? t('sessions.withStats') : t('sessions.withoutStats') }}</span>
-          <div class="schedule-teams">
-            <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" :class="{ 'schedule-winner': winnerSide(game) === 'home' }" />
-            <strong>{{ game.homeScore ?? '–' }} – {{ game.awayScore ?? '–' }}</strong>
-            <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" :class="{ 'schedule-winner': winnerSide(game) === 'away' }" />
+          <div class="schedule-match">
+            <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
+            <span class="schedule-score schedule-center">
+              <span :class="winnerSide(game) === 'home' ? 'is-winner' : 'is-loser'">{{ game.homeScore ?? '–' }}</span>
+              –
+              <span :class="winnerSide(game) === 'away' ? 'is-winner' : 'is-loser'">{{ game.awayScore ?? '–' }}</span>
+            </span>
+            <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </div>
           <time>{{ game.startTime }}</time>
           <div v-if="sessionForGame(game)?.canReview && sessionForGame(game)?.status === 'in_review'" class="session-actions">
