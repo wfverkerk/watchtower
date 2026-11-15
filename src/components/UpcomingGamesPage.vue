@@ -2,7 +2,7 @@
 import PageHeader from './PageHeader.vue'
 import BaseDialog from './BaseDialog.vue'
 import JoinSidePicker from './JoinSidePicker.vue'
-import TeamLogo from './TeamLogo.vue'
+import ScheduleSide from './ScheduleSide.vue'
 import { errorMessage } from '../domain/guards'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { gameStartMs, groupByDay, scheduleBucket, winnerSide, type ScheduleGame } from '../domain/schedule'
@@ -284,11 +284,9 @@ onUnmounted(() => {
       <article v-for="game in openGames" :key="game.id" class="session-row schedule-game" :class="{ 'is-live': sessionForGame(game)?.status === 'live' }">
         <button type="button" class="schedule-open-trigger" :disabled="!canPick(game)" @click="tapGame(game)">
           <span class="schedule-teams">
-            <TeamLogo :name="game.homeTeam" placeholder />
-            <strong>{{ game.homeTeam }}</strong>
+            <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
             <span>–</span>
-            <strong>{{ game.awayTeam }}</strong>
-            <TeamLogo :name="game.awayTeam" placeholder />
+            <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </span>
           <time>{{ game.startTime }}</time>
         </button>
@@ -306,11 +304,9 @@ onUnmounted(() => {
         <h3>{{ formatDay(day.date) }}</h3>
         <article v-for="game in day.games" :key="game.id" class="session-row schedule-game">
           <div class="schedule-teams">
-            <TeamLogo :name="game.homeTeam" placeholder />
-            <strong>{{ game.homeTeam }}</strong>
+            <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
             <span>–</span>
-            <strong>{{ game.awayTeam }}</strong>
-            <TeamLogo :name="game.awayTeam" placeholder />
+            <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </div>
           <time>{{ game.startTime }}</time>
         </article>
@@ -324,12 +320,11 @@ onUnmounted(() => {
         <article v-for="game in day.games" :key="game.id" class="session-row schedule-game">
           <span class="stats-label" :class="game.hasStats ? 'has-stats' : 'no-stats'">{{ game.hasStats ? t('sessions.withStats') : t('sessions.withoutStats') }}</span>
           <div class="schedule-teams">
-            <span :class="{ 'schedule-winner': winnerSide(game) === 'home' }">{{ game.homeTeam }}</span>
+            <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" :class="{ 'schedule-winner': winnerSide(game) === 'home' }" />
             <strong>{{ game.homeScore ?? '–' }} – {{ game.awayScore ?? '–' }}</strong>
-            <span :class="{ 'schedule-winner': winnerSide(game) === 'away' }">{{ game.awayTeam }}</span>
+            <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" :class="{ 'schedule-winner': winnerSide(game) === 'away' }" />
           </div>
           <time>{{ game.startTime }}</time>
-          <span v-if="winnerSide(game)" class="statistics-hint">{{ t('sessions.winner') }}: {{ winnerSide(game) === 'home' ? game.homeTeam : game.awayTeam }}</span>
           <div v-if="sessionForGame(game)?.canReview && sessionForGame(game)?.status === 'in_review'" class="session-actions">
             <button type="button" class="match-sync-primary" @click="finalizeSession(sessionForGame(game)!.id)">{{ t('sessions.finalise') }}</button>
           </div>

@@ -12,6 +12,10 @@ export type ScheduleGame = {
   status: string
   venue: string
   hasStats?: boolean
+  homeClub?: string | null
+  awayClub?: string | null
+  homeLogoUrl?: string | null
+  awayLogoUrl?: string | null
 }
 
 export type ScheduleBucket = 'open' | 'upcoming' | 'history'

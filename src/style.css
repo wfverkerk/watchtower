@@ -7,8 +7,11 @@
 .session-row { display: grid; gap: 6px; padding: 14px 0; border-top: 1px solid var(--line); }
 .session-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .schedule-teams { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.schedule-side { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.schedule-names { display: grid; line-height: 1.2; min-width: 0; }
+.schedule-names span { font-size: 0.85em; opacity: 0.75; }
+.schedule-side.schedule-winner .schedule-names strong { text-decoration: underline; }
 .schedule-day h3 { margin: 14px 0 0; text-transform: capitalize; }
-.schedule-winner { font-weight: 700; text-decoration: underline; }
 .history-day { border-top: 1px solid var(--line); padding: 8px 0; }
 .history-day > summary { cursor: pointer; font-weight: 700; text-transform: capitalize; padding: 6px 0; }
 .history-day > summary small { font-weight: 400; margin-left: 6px; opacity: 0.7; }

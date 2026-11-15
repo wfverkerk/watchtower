@@ -19,7 +19,19 @@ type Row = {
   away_score: number | null
   status: string
   venue: string
+  home_club: string | null
+  away_club: string | null
+  home_logo_url: string | null
+  away_logo_url: string | null
   synced_at: string
+}
+
+function optionalText(value: unknown, max: number) {
+  return typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null
+}
+
+function optionalUrl(value: unknown) {
+  return typeof value === 'string' && /^https:\/\//.test(value) ? value.slice(0, 500) : null
 }
 
 function localDate(now: Date) {
@@ -45,6 +57,10 @@ function toRow(kind: Kind, value: Record<string, unknown>, syncedAt: string): Ro
     away_score: score(value.awayScore),
     status: typeof value.status === 'string' ? value.status : '',
     venue: typeof value.accommodationName === 'string' ? value.accommodationName : '',
+    home_club: optionalText((value.homeOrganisation as { name?: unknown } | undefined)?.name, 60),
+    away_club: optionalText((value.awayOrganisation as { name?: unknown } | undefined)?.name, 60),
+    home_logo_url: optionalUrl(value.homeLogoUrl),
+    away_logo_url: optionalUrl(value.awayLogoUrl),
     synced_at: syncedAt,
   }
 }

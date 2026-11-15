@@ -12,6 +12,10 @@ type ScheduleRow = {
   away_score: number | null
   status: string
   venue: string
+  home_club: string | null
+  away_club: string | null
+  home_logo_url: string | null
+  away_logo_url: string | null
 }
 
 export async function loadSchedule(): Promise<ScheduleGame[]> {
@@ -19,7 +23,7 @@ export async function loadSchedule(): Promise<ScheduleGame[]> {
   if (!client) throw new Error('Supabase is not configured.')
   const { data, error } = await client
     .from('zoebas_schedule')
-    .select('id, kind, match_date, start_time, home_team, away_team, home_score, away_score, status, venue')
+    .select('id, kind, match_date, start_time, home_team, away_team, home_score, away_score, status, venue, home_club, away_club, home_logo_url, away_logo_url')
     .order('match_date', { ascending: true })
     .order('start_time', { ascending: true })
     .limit(1000)
@@ -38,6 +42,10 @@ export async function loadSchedule(): Promise<ScheduleGame[]> {
     awayScore: row.away_score,
     status: row.status,
     venue: row.venue,
+    homeClub: row.home_club,
+    awayClub: row.away_club,
+    homeLogoUrl: row.home_logo_url,
+    awayLogoUrl: row.away_logo_url,
     hasStats: withStats.has(row.id),
   }))
 }
