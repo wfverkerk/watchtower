@@ -33,8 +33,8 @@ describe('favorite team sections', () => {
     const sections = groupTeams(['V22-1', 'M12-1', 'M16-2', 'MSE-2', 'U14-1', 'Harlem Globetrotters'], new Set(['Harlem Globetrotters']))
     expect(sections.map((section) => [section.group, section.teams])).toEqual([
       ['young', ['M12-1']],
-      ['middle', ['M16-2', 'U14-1']],
-      ['other', ['V22-1', 'MSE-2']],
+      ['middle', ['U14-1', 'M16-2']],
+      ['other', ['MSE-2', 'V22-1']],
       ['test', ['Harlem Globetrotters']],
     ])
   })

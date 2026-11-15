@@ -58,8 +58,22 @@ export function teamGroup(name: string, isTestTeam: boolean): TeamGroup {
 export function groupTeams(names: string[], testTeams: Set<string>) {
   const order: TeamGroup[] = ['young', 'middle', 'other', 'test']
   return order
-    .map((group) => ({ group, teams: names.filter((name) => teamGroup(name, testTeams.has(name)) === group) }))
+    .map((group) => ({
+      group,
+      teams: names.filter((name) => teamGroup(name, testTeams.has(name)) === group).sort(compareTeamNames),
+    }))
     .filter((section) => section.teams.length > 0)
+}
+
+// Compares the numbers in a team name in order, so "V12-2" sorts before "V12-10" and "M14-1" before "M16-1".
+export function compareTeamNames(left: string, right: string) {
+  const leftNumbers = left.match(/\d+/g)?.map(Number) ?? []
+  const rightNumbers = right.match(/\d+/g)?.map(Number) ?? []
+  for (let index = 0; index < Math.max(leftNumbers.length, rightNumbers.length); index += 1) {
+    const difference = (leftNumbers[index] ?? Infinity) - (rightNumbers[index] ?? Infinity)
+    if (difference !== 0 && !Number.isNaN(difference)) return difference
+  }
+  return left.localeCompare(right)
 }
 
 export function groupByDay(games: ScheduleGame[]) {
