@@ -123,3 +123,42 @@ describe('registering for the away side', () => {
     expect(loadPendingMatchSnapshots()[0].catalogTeamId).toBeNull()
   })
 })
+
+describe('practice games', () => {
+  const home = {
+    id: 'zoebas-x12-1', name: 'X12-1', catalogTeamId: 'x12-1', coaches: [],
+    players: [1, 2].map((number) => ({ id: `p${number}`, name: `Home ${number}`, jerseyNumber: String(number), isParticipating: true, isOnCourt: false })),
+  }
+  const opponent = (count: number) => ({
+    id: 'opponent', name: 'Friends', coaches: [],
+    players: Array.from({ length: count }, (_, index) => ({ id: `o${index}`, name: `Away ${index}`, jerseyNumber: String(index + 10), isParticipating: true, isOnCourt: false })),
+  })
+
+  async function mountSession() {
+    let session!: ReturnType<typeof useGameSession>
+    app = createApp({ setup() { session = useGameSession(); return () => h('div') } })
+    app.mount(document.body.appendChild(document.createElement('div')))
+    await vi.waitFor(() => expect(session.teamSetupInitializing.value).toBe(false))
+    return session
+  }
+
+  it('records the manually entered opponent without a schedule start or end', async () => {
+    const session = await mountSession()
+    expect(session.applyTeamSetup([home, opponent(7)], [home.id, 'opponent'], null, 'M16-1', '', true, 'Friends')).toBe(true)
+    expect(session.game.matchInfo).toMatchObject({ kind: 'practice', venue: '' })
+    expect(session.game.matchInfo?.id).toMatch(/^practice-/)
+    expect(session.game.catalogTeamId).toBe('x12-1')
+    expect(session.game.teams[1]).toMatchObject({ name: 'M16-1', club: 'Friends' })
+    const away = session.game.players.filter((player) => player.teamId === 'away')
+    expect(away.map((player) => player.name)).toEqual(Array.from({ length: 7 }, (_, index) => `Away ${index}`))
+    expect(away.filter((player) => player.isOnCourt)).toHaveLength(5)
+  })
+
+  it('requires opponent players and a club team', async () => {
+    const session = await mountSession()
+    expect(session.applyTeamSetup([home, opponent(1)], [home.id, 'opponent'], null, 'Friends', '', true)).toBe(false)
+    const local = { ...home, id: 'local', catalogTeamId: 'local-1' }
+    expect(session.applyTeamSetup([local, opponent(2)], [local.id, 'opponent'], null, 'Friends', '', true)).toBe(false)
+    expect(session.game.matchInfo).toBeUndefined()
+  })
+})

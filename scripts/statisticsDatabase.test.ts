@@ -227,6 +227,28 @@ describe('statistics database authorization', () => {
     expect(events).toBe(1)
   })
 
+  it('marks a submitted practice game in the team statistics history', async () => {
+    const starts = '2026-11-12T18:00:00Z'
+    const game = {
+      teams: [{ id: 'home', name: 'X12-1', color: '#000000' }, { id: 'away', name: 'M16-1', club: 'Vrienden', color: '#000000' }],
+      players: [{ id: 'home-1', name: 'Player', teamId: 'home', jerseyNumber: '1' }, { id: 'away-1', name: 'Guest', teamId: 'away', jerseyNumber: '7' }],
+      actions: [{ id: 'practice-score', playerId: 'home-1', teamId: 'home', type: 'score', value: 2, createdAt: 1 }],
+      catalogTeamId: 'x12-1',
+      matchInfo: { id: 'practice-1', date: '2026-11-12', startTime: '19:00', venue: '', startsAt: starts, kind: 'practice' },
+    }
+    await asUser(coach)
+    const matchId = (await db.query<{ result: { match_id: string } }>(
+      'select public.submit_offline_match(null, $1, $2, $3, $4) result',
+      ['cccccccc-cccc-4ccc-8ccc-cccccccccccc', game, starts, 'Coach'],
+    )).rows[0].result.match_id
+    await db.query("select public.statistics_finish_match($1, 'x12-1', $2)", [matchId, coach])
+    const history = (await db.query<{ history: { id: string; practice: boolean; teamClubs: Record<string, string> }[] }>(
+      "select public.statistics_history('x12-1') history",
+    )).rows[0].history
+    expect(history.find((item) => item.id === matchId)).toMatchObject({ practice: true, teamClubs: { away: 'Vrienden' } })
+    expect(history.filter((item) => item.id !== matchId).every((item) => item.practice === false)).toBe(true)
+  })
+
   it('exposes other scorers\' current events and score links with the official statistics history', async () => {
     const starts = new Date().toISOString()
     const game = {

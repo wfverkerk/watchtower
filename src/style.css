@@ -443,6 +443,7 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .team-setup-hint { margin: 4px 0 9px; line-height: 1.4; }
 .team-setup-roster { display: grid; gap: 6px; }
 .team-setup-player { display: grid; grid-template-columns: 54px minmax(0, 1fr) 76px; gap: 6px; }
+.team-setup-opponent-remove { justify-self: center; min-width: 36px; min-height: 36px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: transparent; font-size: 16px; }
 .team-setup-column-heading { margin-bottom: 5px; color: var(--muted); font-size: 10px; font-weight: 600; }
 .team-setup-column-heading span:first-child, .team-setup-column-heading span:last-child { text-align: center; }
 .team-setup-player input { width: 100%; }

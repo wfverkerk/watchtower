@@ -24,6 +24,7 @@ import {
 } from '../domain/game'
 import { clockRemaining, formatClock, isYouthTeam, newPeriodClock, pauseClock, reconcileClock, startClock } from '../domain/gameClock'
 import { lineupChanges } from '../domain/matchTimeline'
+import { localDateKey } from '../domain/schedule'
 import { loadGameState, saveGameState } from '../services/gameStorage'
 import { loadLocalMatches, saveLocalMatch } from '../services/localMatches'
 import { applyGameRoster, createGameRosterDraft } from '../services/gameRoster'
@@ -584,6 +585,8 @@ export function useGameSession() {
     selectedMatch: ZoebasMatch | null = null,
     manualOpponentName = '',
     manualStart = '',
+    practice = false,
+    opponentClub = '',
   ) {
     const homeProfile = profiles.find((profile) => profile.id === profileIds[0])
     const awayProfile = profiles.find((profile) => profile.id === profileIds[1])
@@ -602,16 +605,16 @@ export function useGameSession() {
       : manualOpponentName.trim() || awayProfile.name.trim()
     const teams = [
       { id: 'home', name: homeProfile.name.trim(), color: '#f26a36' },
-      { id: 'away', name: opponentName, color: '#5d72d9' },
+      { id: 'away', name: opponentName, color: '#5d72d9', ...(opponentClub.trim() ? { club: opponentClub.trim() } : {}) },
     ]
     const players = [homeProfile, awayProfile].flatMap<Player>((profile, index) => [
-      ...profile.players.filter((player) => player.isParticipating).map((player) => ({
+      ...profile.players.filter((player) => player.isParticipating).map((player, playerIndex) => ({
         id: `${teams[index].id}-${player.id}`,
         name: player.name.trim(),
         teamId: teams[index].id,
         jerseyNumber: player.jerseyNumber,
         ...(player.statisticsPrivate ? { statisticsPrivate: true } : {}),
-        isOnCourt: index === 1,
+        isOnCourt: index === 1 && playerIndex < 5,
       })),
       ...(profile.coaches ?? []).filter((coach) => coach.isParticipating).map((coach) => ({
         id: `${teams[index].id}-coach-${coach.id}`,
@@ -623,7 +626,17 @@ export function useGameSession() {
         coachRole: coach.role,
       })),
     ])
-    const matchInfo: GameMatchInfo | undefined = selectedMatch
+    const now = new Date()
+    const matchInfo: GameMatchInfo | undefined = practice
+      ? {
+          id: `practice-${crypto.randomUUID()}`,
+          date: localDateKey(now),
+          startTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+          venue: '',
+          startsAt: now.toISOString(),
+          kind: 'practice',
+        }
+      : selectedMatch
       ? {
           id: selectedMatch.id,
           date: selectedMatch.date,
@@ -646,10 +659,14 @@ export function useGameSession() {
       youth: isYouthTeam(homeProfile.catalogTeamId) || isYouthTeam(homeProfile.name),
       ...(matchInfo ? { matchInfo } : {}),
     }
-    const homePlayers = players.filter((player) => player.teamId === 'home' && !player.isCoach)
-    if (homePlayers.length < 2
-      || homePlayers.some((player) => !player.name || !/^\d{1,2}$/.test(player.jerseyNumber))
-      || new Set(homePlayers.map((player) => Number(player.jerseyNumber))).size !== homePlayers.length
+    const isValidRoster = (teamId: string) => {
+      const teamPlayers = players.filter((player) => player.teamId === teamId && !player.isCoach)
+      return teamPlayers.length >= 2
+        && teamPlayers.every((player) => player.name && /^\d{1,2}$/.test(player.jerseyNumber))
+        && new Set(teamPlayers.map((player) => Number(player.jerseyNumber))).size === teamPlayers.length
+    }
+    if (!isValidRoster('home')
+      || (practice && (homeProfile.catalogTeamId.startsWith('local-') || !isValidRoster('away')))
       || !opponentName) {
       storageErrorKey.value = 'errors.invalidTeamSetup'
       return false
@@ -755,8 +772,12 @@ export function useGameSession() {
   }
 
 
-  function cancelTeamSetup() {
-    if (canCancelTeamSetup.value) teamSetupOpen.value = false
+  function openTeamSetup() {
+    teamSetupOpen.value = true
+  }
+
+  function cancelTeamSetup(force = false) {
+    if (force || canCancelTeamSetup.value) teamSetupOpen.value = false
   }
 
   function toggleGame() {
@@ -1219,6 +1240,7 @@ export function useGameSession() {
     toggleClock,
     applyTeamSetup,
     saveGameRoster,
+    openTeamSetup,
     cancelTeamSetup,
     openLineupEditor,
     beginPeriod,

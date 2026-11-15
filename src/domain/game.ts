@@ -17,7 +17,8 @@ export type StatType =
 export type FoulType = 'P' | 'TF' | 'U' | 'D'
 export type TurnoverType = 'turnover' | 'second_dribble' | 'travel'
 
-export type Team = { id: string; name: string; color: string }
+// club is set when the team name alone does not identify the club, such as a typed practice opponent.
+export type Team = { id: string; name: string; color: string; club?: string }
 export type Player = {
   id: string
   name: string
@@ -57,6 +58,8 @@ export type GameMatchInfo = {
   startTime: string
   venue: string
   startsAt?: string
+  // Practice games are set up by hand, outside the schedule, and have no session window.
+  kind?: 'practice'
 }
 export type GameState = {
   teams: Team[]
@@ -173,10 +176,11 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
     if (!isRecord(team)
       || typeof team.id !== 'string'
       || typeof team.name !== 'string'
-      || typeof team.color !== 'string') {
+      || typeof team.color !== 'string'
+      || (team.club !== undefined && typeof team.club !== 'string')) {
       throw new Error('Opgeslagen teamgegevens zijn ongeldig.')
     }
-    return { id: team.id, name: team.name, color: team.color }
+    return { id: team.id, name: team.name, color: team.color, ...(team.club ? { club: team.club } : {}) }
   })
   if (teams.length !== 2 || new Set(teams.map((team) => team.id)).size !== 2) {
     throw new Error('Een wedstrijd moet precies twee verschillende teams hebben.')
@@ -305,6 +309,15 @@ function isGameMatchInfo(value: unknown): value is GameMatchInfo {
     && /^\d{2}:\d{2}$/.test(value.startTime)
     && typeof value.venue === 'string'
     && (value.startsAt === undefined || (typeof value.startsAt === 'string' && Number.isFinite(Date.parse(value.startsAt))))
+    && (value.kind === undefined || value.kind === 'practice')
+}
+
+export function fullTeamName(team: Pick<Team, 'name' | 'club'>) {
+  return team.club && team.club !== team.name ? `${team.club} ${team.name}` : team.name
+}
+
+export function isPracticeGame(game: Pick<GameState, 'matchInfo'>) {
+  return game.matchInfo?.kind === 'practice'
 }
 
 export function canStartGame(game: GameState) {
