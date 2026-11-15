@@ -139,9 +139,11 @@ Wijzigingen aan het team in de wizard worden als lokaal concept bewaard, ook als
 
 De ruwe registraties zijn in Supabase te vergelijken via de `match_events`-tabel, gefilterd op `match_id` en gesorteerd op `sequence_id`. `tracker_id` is de apparaatidentiteit; `tracker_name` is de gekozen weergavenaam.
 
-## Testen via GitHub Pages
+## Publiceren via GitHub Pages
 
-De workflow in [deploy-pages.yml](./.github/workflows/deploy-pages.yml) publiceert de tijdelijke testbranch `agents/pages-current-version` op `https://wfverkerk.github.io/watchtower/`. De site is publiek toegankelijk. Een push naar deze branch start een deployment. Om later vanaf een andere branch te publiceren, pas zowel de workflow als de toegestane branches van de GitHub Pages-omgeving aan.
+De workflow in [deploy-pages.yml](./.github/workflows/deploy-pages.yml) publiceert `main` automatisch op `https://wfverkerk.github.io/watchtower/` zodra er naar `main` wordt gepusht of een pull request wordt gemerged. De tests en de build moeten slagen; anders wordt er niets gepubliceerd. Handmatig opnieuw publiceren kan via **Actions → Deploy GitHub Pages → Run workflow**. De site is publiek toegankelijk.
+
+Databasemigraties worden niet automatisch uitgevoerd. Voer een nieuwe migratie uit in de SQL-editor van Supabase vóórdat je de bijbehorende wijziging naar `main` merget.
 
 1. Stel in de GitHub-repository bij **Settings → Secrets and variables → Actions → Variables** `VITE_SUPABASE_URL` en `VITE_SUPABASE_ANON_KEY` in. Gebruik de project-URL en de publieke publishable/anon key, **niet** de service-role key. Deze waarden worden in de publiek beschikbare app opgenomen.
 2. Configureer Supabase zoals hierboven beschreven, inclusief anonieme aanmelding en alle nog ontbrekende migraties.
