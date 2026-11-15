@@ -294,8 +294,8 @@ onUnmounted(() => {
           <span class="schedule-match">
             <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
             <span class="schedule-center">
-              <time class="schedule-time">{{ game.startTime }}</time>
               <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
+              <time class="schedule-time">{{ game.startTime }}</time>
             </span>
             <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </span>
@@ -316,8 +316,8 @@ onUnmounted(() => {
           <div class="schedule-match">
             <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
             <span class="schedule-center">
-              <time class="schedule-time">{{ game.startTime }}</time>
               <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
+              <time class="schedule-time">{{ game.startTime }}</time>
             </span>
             <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </div>
@@ -334,13 +334,13 @@ onUnmounted(() => {
           <div class="schedule-match">
             <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
             <span class="schedule-center">
+              <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
               <span class="schedule-score">
                 <span :class="winnerSide(game) === 'home' ? 'is-winner' : 'is-loser'">{{ game.homeScore ?? '–' }}</span>
                 –
                 <span :class="winnerSide(game) === 'away' ? 'is-winner' : 'is-loser'">{{ game.awayScore ?? '–' }}</span>
               </span>
-              <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
-              <time class="schedule-time">{{ game.startTime }}</time>
+              <time class="schedule-time is-small">{{ game.startTime }}</time>
             </span>
             <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </div>
