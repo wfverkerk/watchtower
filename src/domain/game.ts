@@ -230,7 +230,7 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
   const actions = rawActions.map((action): GameAction => {
     if (!isRecord(action)
       || typeof action.id !== 'string'
-      || (typeof action.playerId !== 'string' && !(action.playerId === null && action.type === 'score' && action.teamId === teams[1].id))
+      || (typeof action.playerId !== 'string' && !(action.playerId === null && ((action.type === 'score' && action.teamId === teams[1].id) || isReboundType(action.type))))
       || typeof action.teamId !== 'string'
       || !teams.some((team) => team.id === action.teamId)
       || !isStatType(action.type)
@@ -453,6 +453,79 @@ export function undoLastAction(actions: GameAction[]) {
 
 export function updateActionPlayer(actions: GameAction[], actionId: string, playerId: string) {
   return actions.map((action) => action.id === actionId ? { ...action, playerId } : action)
+}
+
+export function isReboundType(type: unknown): type is 'offensive_rebound' | 'defensive_rebound' {
+  return type === 'offensive_rebound' || type === 'defensive_rebound'
+}
+
+// The rebound is a player id, or 'opponent' for a rebound by the other team (recorded without a player), or 'none'.
+export function updateMissedShotPlay(
+  actions: GameAction[],
+  input: {
+    actionId?: string
+    teamId: string
+    otherTeamId: string
+    shooterId: string
+    value: number
+    rebound: string | null
+    shotLocation?: ShotLocation
+    period: number
+    createdAt: number
+    createId: () => string
+  },
+) {
+  const existingShot = input.actionId
+    ? actions.find((action) => action.id === input.actionId && action.type === 'missed_shot')
+    : undefined
+  const existingRebound = existingShot?.groupId
+    ? actions.find((action) => action.groupId === existingShot.groupId && isReboundType(action.type))
+    : undefined
+  const rebound = input.rebound
+  const hasRebound = rebound !== null && rebound !== 'none'
+  const groupId = hasRebound ? existingShot?.groupId ?? input.createId() : undefined
+  let updated = [...actions]
+  if (existingShot) {
+    updated = updated.map((action) => {
+      if (action.id !== existingShot.id) return action
+      const shot = { ...action, playerId: input.shooterId }
+      delete shot.groupId
+      delete shot.shotLocation
+      return {
+        ...shot,
+        ...(input.shotLocation ? { shotLocation: input.shotLocation } : {}),
+        ...(groupId ? { groupId } : {}),
+      }
+    })
+  } else {
+    updated.push({
+      id: input.createId(),
+      playerId: input.shooterId,
+      teamId: input.teamId,
+      type: 'missed_shot',
+      value: input.value,
+      createdAt: input.createdAt,
+      ...(input.shotLocation ? { shotLocation: input.shotLocation } : {}),
+      ...(groupId ? { groupId } : {}),
+    })
+  }
+  if (!rebound || rebound === 'none') {
+    return existingRebound ? updated.filter((action) => action.id !== existingRebound.id) : updated
+  }
+  // A rebound by the team that missed is offensive; by the other team it is defensive.
+  const reboundTeamId = rebound === 'opponent' ? input.otherTeamId : input.teamId
+  const reboundFields = {
+    playerId: rebound === 'opponent' ? null : rebound,
+    teamId: reboundTeamId,
+    type: reboundTeamId === input.teamId ? 'offensive_rebound' as const : 'defensive_rebound' as const,
+    value: 1,
+    groupId: groupId!,
+  }
+  if (existingRebound) {
+    return updated.map((action) => action.id === existingRebound.id ? { ...action, ...reboundFields } : action)
+  }
+  updated.push({ id: input.createId(), ...reboundFields, createdAt: input.createdAt, period: input.period })
+  return updated
 }
 
 export function updateScoringPlay(

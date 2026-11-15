@@ -316,19 +316,12 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .player-picker-heading { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
 .player-picker-heading .eyebrow { margin-bottom: 5px; }
 .player-picker-heading h2 { font-size: 19px; }
-.scoring-picker-title { margin: 0; color: #77756e; font-size: 15px; font-weight: 700; }
 .picker-close { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; color: #716f68; background: white; font-size: 21px; }
 .player-picker-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .picker-player { min-height: 44px; gap: 0; padding: 0 6px 0 0; text-align: left; }
 .picker-player .jersey-number { width: 30px; height: auto; align-self: stretch; flex: 0 0 30px; border-radius: 5px 0 0 5px; font-size: 12px; }
 .picker-player .player-choice-name { max-width: 100%; min-width: 0; margin-left: 6px; flex: 1; font-size: 12px; line-height: 1.15; }
 .picker-cancel { width: 100%; min-height: 44px; margin-top: 12px; border: 1px solid var(--line); border-radius: 7px; color: #66645e; background: #faf9f7; font-size: 12px; font-weight: 600; }
-.scoring-player-lists { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; column-gap: 40px; }
-.scoring-player-lists.single-scorer-list { grid-template-columns: minmax(0, 1fr); }
-.single-scorer-list .scorer-player-list { grid-column: 1 / -1; }
-.single-scorer-list .picker-player { width: 100%; }
-.assist-connector { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; overflow: visible; color: #8062ad; pointer-events: none; }
-.assist-connector-line { fill: none; stroke: currentColor; stroke-dasharray: 1 4; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
 .scoring-player-list { min-width: 0; }
 .scoring-player-list h3 { margin: 0 0 7px; color: #6f6d67; font-size: 14px; font-weight: 700; }
 .scorer-player-list .picker-player { border-color: #cfe4d2; background: #f0f8f1; }
@@ -385,6 +378,12 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .picker-confirm:disabled { cursor: not-allowed; color: #aaa79f; background: #e8e6e1; }
 .foul-type-picker { margin-top: 12px; }
 .foul-type-picker h3 { margin: 0 0 7px; color: var(--muted); font-size: 11px; text-transform: uppercase; }
+.event-flow-progress { margin-bottom: 10px; }
+.event-flow-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.event-flow-back { padding: 0; border: 0; color: var(--orange); background: none; font-size: 11px; font-weight: 700; }
+.event-flow-bar { height: 6px; overflow: hidden; border-radius: 3px; background: var(--line); }
+.event-flow-fill { display: block; height: 100%; border-radius: 3px; background: var(--orange); transition: width 0.2s ease; }
+.event-flow-extra { width: 100%; min-height: 44px; margin-top: 6px; align-content: center; }
 .foul-type-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .turnover-type-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .turnover-type-options .foul-type-option { place-items: center; padding: 5px; text-align: center; font-size: 11px; }
@@ -726,7 +725,6 @@ h2 { margin-bottom: 0; font-size: 16px; }
 :root[data-theme='dark'] .cancel-edit,
 :root[data-theme='dark'] .roster-requirement,
 :root[data-theme='dark'] .lineup-change-button,
-:root[data-theme='dark'] .scoring-picker-title,
 :root[data-theme='dark'] .shot-location-picker h3,
 :root[data-theme='dark'] .shot-location-hint,
 :root[data-theme='dark'] .picker-close,
@@ -909,8 +907,6 @@ h2 { margin-bottom: 0; font-size: 16px; }
   .game-live .player-picker { max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); padding: 18px 15px 14px; border-radius: 14px 14px 10px 10px; }
   .game-live .shot-court-board { width: min(100%, 220px); margin-inline: auto; }
   .game-live .picker-player { min-height: 44px; }
-  .game-live .scoring-player-lists { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; column-gap: 40px; }
-  .game-live .scoring-player-lists.single-scorer-list { grid-template-columns: minmax(0, 1fr); }
   .game-live .scoring-player-list .player-picker-grid { max-height: none; overflow: visible; }
   .game-live .scoring-player-list .picker-player { min-height: 34px; gap: 0; padding: 0 5px 0 0; }
   .game-live .standard-player-list .picker-player { min-height: 44px; }
@@ -923,8 +919,6 @@ h2 { margin-bottom: 0; font-size: 16px; }
 @media (max-width: 700px) and (max-height: 700px) {
   .game-live .player-picker { padding: 6px; }
   .game-live .player-picker-heading { margin-bottom: 4px; }
-  .game-live .scoring-player-lists { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; column-gap: 40px; }
-  .game-live .scoring-player-lists.single-scorer-list { grid-template-columns: minmax(0, 1fr); }
   .game-live .scoring-player-list h3 { margin-bottom: 4px; }
   .game-live .shot-location-picker h3 { margin-bottom: 2px; font-size: 11px; }
   .game-live .backcourt-strip { min-height: 20px; font-size: 9px; }
@@ -954,7 +948,6 @@ h2 { margin-bottom: 0; font-size: 16px; }
   .game-live .action-card { min-height: 51px; font-size: 9px; }
   .game-live .player-picker-grid { gap: 6px; }
   .game-live .picker-player .player-choice-name { font-size: 10px; }
-  .game-live .scoring-player-lists { gap: 9px; column-gap: 40px; }
   .game-live .scoring-player-list .picker-player { gap: 0; padding: 0 5px 0 0; }
 }
 

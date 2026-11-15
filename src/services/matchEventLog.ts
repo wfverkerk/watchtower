@@ -59,7 +59,7 @@ function isShotLocation(value: unknown): value is ShotLocation {
 export function isGameAction(value: unknown): value is GameAction {
   return isRecord(value)
     && typeof value.id === 'string'
-    && (typeof value.playerId === 'string' || (value.playerId === null && value.type === 'score'))
+    && (typeof value.playerId === 'string' || (value.playerId === null && (value.type === 'score' || value.type === 'offensive_rebound' || value.type === 'defensive_rebound')))
     && typeof value.teamId === 'string'
     && typeof value.type === 'string'
     && statTypes.has(value.type)

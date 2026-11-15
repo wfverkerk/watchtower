@@ -11,6 +11,7 @@ import {
   parseGameState,
   startNextPeriod,
   undoLastAction,
+  updateMissedShotPlay,
   updateScoringPlay,
   type GameAction,
 } from './game'
@@ -47,6 +48,36 @@ describe('game domain rules', () => {
     expect(getScore({ ...restored, actions: undoLastAction(restored.actions) })[1].points).toBe(3)
     expect(() => parseGameState({ ...game, actions: [{ ...game.actions[0], type: 'foul' }] })).toThrow()
     expect(() => parseGameState({ ...game, actions: [{ ...game.actions[0], teamId: 'home' }] })).toThrow()
+  })
+
+  it('links a rebound to its missed shot and removes it again when no rebound is chosen', () => {
+    const ids = ['group-1', 'rebound-1']
+    const createId = () => ids.shift() ?? 'unused'
+    const missed: GameAction[] = [makeAction({ id: 'miss-1', type: 'missed_shot', teamId: 'home', playerId: 'home-2', value: 3 })]
+    const withRebound = updateMissedShotPlay(missed, {
+      actionId: 'miss-1', teamId: 'home', otherTeamId: 'away', shooterId: 'home-2', value: 3,
+      rebound: 'home-4', period: 1, createdAt: 2, createId,
+    })
+    expect(withRebound).toEqual([
+      expect.objectContaining({ id: 'miss-1', type: 'missed_shot', groupId: 'group-1' }),
+      expect.objectContaining({ id: 'rebound-1', type: 'offensive_rebound', teamId: 'home', playerId: 'home-4', groupId: 'group-1' }),
+    ])
+    const withoutRebound = updateMissedShotPlay(withRebound, {
+      actionId: 'miss-1', teamId: 'home', otherTeamId: 'away', shooterId: 'home-2', value: 3,
+      rebound: 'none', period: 1, createdAt: 3, createId,
+    })
+    expect(withoutRebound).toEqual([expect.objectContaining({ id: 'miss-1' })])
+    expect(withoutRebound[0].groupId).toBeUndefined()
+  })
+
+  it('records a rebound by the other team as a defensive rebound without a player', () => {
+    let nextId = 0
+    const actions = updateMissedShotPlay([], {
+      teamId: 'home', otherTeamId: 'away', shooterId: 'home-1', value: 2,
+      rebound: 'opponent', period: 1, createdAt: 1, createId: () => `id-${++nextId}`,
+    })
+    const restored = parseGameState({ ...createInitialGameState(), actions, gameStarted: true })
+    expect(restored.actions[1]).toMatchObject({ type: 'defensive_rebound', teamId: 'away', playerId: null })
   })
 
   it('calculates team scores and statistics from recorded actions', () => {

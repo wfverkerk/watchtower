@@ -8,6 +8,8 @@ De interface is beschikbaar in het Nederlands, Engels en Tsjechisch. De taalkeuz
 
 Bij rake en gemiste 2- en 3-puntsschoten kun je de locatie vastleggen op een halve veldkaart. Voor een schot vanaf eigen helft volstaat de aparte strook bij de middenlijn.
 
+Acties die natuurlijk op elkaar volgen worden als vragenreeks in de invoerpopup aangeboden, met een voortgangsbalk bovenaan: een raak schot vraagt eerst de scorer, daarna de assistgever (of geen assist) en dan de schotlocatie. Bij een gemist schot vraag je daarna wie de rebound pakte: een speler uit de vijf spelers in het veld, de tegenstander, of geen rebound. Een rebound van de tegenstander wordt zonder speler opgeslagen als verdedigende rebound. Missers en rebounds horen bij dezelfde actie, zodat ongedaan maken ze samen verwijdert.
+
 ## Ontwikkeling
 
 Vereist Node.js 26 LTS en npm. De aanbevolen Node-versie staat in `.nvmrc` (bij gebruik van nvm: `nvm install` en `nvm use`).
@@ -69,6 +71,7 @@ Afgesloten lokale wedstrijden en hun indienstatus staan onder `watchtower-local-
    - [`20261128000000_test_games_today.sql`](./supabase/migrations/20261128000000_test_games_today.sql) (testdata: een wedstrijd van vandaag die nog niet gestart is; draai daarna opnieuw `select public.refresh_test_games();`)
    - [`20261129000000_live_scores.sql`](./supabase/migrations/20261129000000_live_scores.sql) (live-stand in de sessielijst; zet de snapshot van de testwedstrijd die nu live is)
    - [`20261130000000_practice_games.sql`](./supabase/migrations/20261130000000_practice_games.sql) (markeert oefenwedstrijden in de teamstatistiekhistorie)
+   - [`20261201000000_event_flow_rebounds.sql`](./supabase/migrations/20261201000000_event_flow_rebounds.sql) (staat rebounds van de tegenstander zonder speler toe bij het indienen van een wedstrijd)
 
 De Edge Function `sync-zoebas-schedule` haalt het programma per competitie op uit de FOYS-API (met header `X-FederationId`). Een pg_cron-taak roept hem dagelijks om 03:00 Amsterdamse tijd aan; het `SYNC_SECRET` staat in de Supabase-secrets en in Vault (`sync_zoebas_schedule_secret`).
 3. Kopieer `.env.example` naar `.env.local` en vul de project-URL en publishable/anon key in. Deze client key is bedoeld voor gebruik in de browser; de database vertrouwt op RLS-beleid en anonieme Supabase Auth-sessies.

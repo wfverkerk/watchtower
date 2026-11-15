@@ -114,7 +114,7 @@ function actionIcon(action: GameAction) {
           :title="t('activity.editAction', { player: actionPlayer(item.action), action: actionLabel(item.action) })"
           @click="emit('edit-action', item.action)"
         >✎</button>
-        <button v-else-if="!readOnly" class="activity-edit" :aria-label="t(item.action.value === 1 ? 'activity.removeOpponentPoint' : 'activity.removeOpponentScore', { team: actionPlayer(item.action), count: item.action.value })" :title="t(item.action.value === 1 ? 'activity.removeOpponentPoint' : 'activity.removeOpponentScore', { team: actionPlayer(item.action), count: item.action.value })" @click="emit('remove-opponent-score', item.action)">×</button>
+        <button v-else-if="!readOnly && item.action.type === 'score'" class="activity-edit" :aria-label="t(item.action.value === 1 ? 'activity.removeOpponentPoint' : 'activity.removeOpponentScore', { team: actionPlayer(item.action), count: item.action.value })" :title="t(item.action.value === 1 ? 'activity.removeOpponentPoint' : 'activity.removeOpponentScore', { team: actionPlayer(item.action), count: item.action.value })" @click="emit('remove-opponent-score', item.action)">×</button>
         </template>
       </div>
       <div v-else class="activity-row" :style="{ '--activity-color': entry.item.type === 'substitution' ? teams[0]?.color : 'var(--muted)' }">
