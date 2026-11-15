@@ -71,9 +71,9 @@ export function turnoverTypeLabelKey(type: TurnoverType): TranslationKey {
   return turnoverTypeKeys[type]
 }
 
-// Official abbreviations shown on the turnover buttons; a plain turnover has none.
-const turnoverTypeAbbreviations: Record<TurnoverType, string | null> = {
-  turnover: null,
+// Official abbreviations shown on the turnover buttons.
+const turnoverTypeAbbreviations: Record<TurnoverType, string> = {
+  turnover: 'TO',
   second_dribble: 'DD',
   travel: 'TRAV',
   carry: 'CA',
@@ -85,7 +85,7 @@ const turnoverTypeAbbreviations: Record<TurnoverType, string | null> = {
   eight_seconds: '8S',
 }
 
-export function turnoverTypeAbbreviation(type: TurnoverType): string | null {
+export function turnoverTypeAbbreviation(type: TurnoverType): string {
   return turnoverTypeAbbreviations[type]
 }
 
