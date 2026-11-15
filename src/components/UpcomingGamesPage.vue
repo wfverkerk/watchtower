@@ -268,19 +268,21 @@ onUnmounted(() => {
     <section v-if="editing" class="panel statistics-card my-teams-editor">
       <h2>{{ t('sessions.pickMyTeams') }}</h2>
       <p class="statistics-hint">{{ t('sessions.myTeamsHint') }}</p>
-      <ul class="favorite-team-list">
-        <li v-for="name in teamNames" :key="name" class="favorite-team-row">
+      <div class="favorite-team-grid">
+        <button
+          v-for="name in teamNames"
+          :key="name"
+          type="button"
+          class="favorite-team-tile"
+          :class="{ 'is-favorite': draftFavorites.includes(name) }"
+          :aria-pressed="draftFavorites.includes(name) ? 'true' : 'false'"
+          :aria-label="name"
+          @click="toggleDraft(name)"
+        >
           <span>{{ name }}</span>
-          <button
-            type="button"
-            class="favorite-heart"
-            :class="{ 'is-favorite': draftFavorites.includes(name) }"
-            :aria-pressed="draftFavorites.includes(name) ? 'true' : 'false'"
-            :aria-label="name"
-            @click="toggleDraft(name)"
-          >♥</button>
-        </li>
-      </ul>
+          <span class="favorite-tile-heart" aria-hidden="true">♥</span>
+        </button>
+      </div>
       <div class="session-actions">
         <button type="button" class="match-sync-primary" @click="saveMyTeams">{{ t('sessions.saveMyTeams') }}</button>
       </div>
