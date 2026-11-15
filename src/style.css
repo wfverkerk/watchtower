@@ -6,12 +6,12 @@
 .statistics-hint { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .session-row { display: grid; gap: 6px; padding: 14px 0; border-top: 1px solid var(--line); }
 .session-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.schedule-match { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; }
+.schedule-match { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 10rem) minmax(0, 1fr); align-items: start; gap: 12px; }
 .schedule-side { display: grid; justify-items: center; gap: 6px; text-align: center; min-width: 0; }
 .schedule-side .team-logo { width: 56px; height: 56px; }
-.schedule-names { display: grid; justify-items: center; line-height: 1.2; min-width: 0; }
+.schedule-names { display: grid; justify-items: center; line-height: 1.2; min-width: 0; overflow-wrap: anywhere; }
 .schedule-names span { font-size: 0.85em; opacity: 0.75; }
-.schedule-center { display: grid; justify-items: center; gap: 4px; text-align: center; }
+.schedule-center { display: grid; justify-items: center; gap: 4px; text-align: center; min-width: 0; overflow-wrap: anywhere; }
 .schedule-time { font-size: 2em; line-height: 1.2; }
 .schedule-time.is-small { font-size: 0.9em; line-height: normal; }
 .schedule-venue { font-size: 0.9em; opacity: 0.75; }
