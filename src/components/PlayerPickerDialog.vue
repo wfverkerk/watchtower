@@ -210,36 +210,36 @@ function actionLabel(action: PendingAction) {
       />
 
       <section v-else-if="currentStep === 'foulType'" class="foul-type-picker" :aria-label="t('picker.foulType')">
-        <div class="foul-type-options">
+        <div class="event-flow-grid">
           <button
             v-for="type in foulOptions"
             :key="type"
             type="button"
-            class="foul-type-option"
+            class="event-flow-player"
             :class="{ selected: foulType === type }"
             :disabled="type === 'P' && personalLimitReached"
             :aria-pressed="foulType === type"
             @click="emit('select-foul-type', type)"
           >
-            <strong>{{ foulCode(type) }}</strong>
-            <span>{{ t(`picker.foulTypes.${foulSubtitle(type)}`) }}</span>
+            <span class="event-flow-number">{{ foulCode(type) }}</span>
+            <span class="event-flow-name">{{ t(`picker.foulTypes.${foulSubtitle(type)}`) }}</span>
           </button>
         </div>
       </section>
 
       <section v-else-if="currentStep === 'turnoverType'" class="foul-type-picker" :aria-label="t('picker.turnoverType')">
-        <div class="turnover-type-options">
+        <div class="event-flow-grid">
           <button
             v-for="type in turnoverTypes"
             :key="type"
             type="button"
-            class="foul-type-option"
+            class="event-flow-player"
             :class="{ selected: turnoverType === type }"
             :aria-pressed="turnoverType === type"
             @click="emit('select-turnover-type', type)"
           >
-            <strong v-if="turnoverTypeAbbreviation(type)">{{ turnoverTypeAbbreviation(type) }}</strong>
-            <span>{{ t(turnoverTypeLabelKey(type)) }}</span>
+            <span class="event-flow-number">{{ turnoverTypeAbbreviation(type) ?? '' }}</span>
+            <span class="event-flow-name">{{ t(turnoverTypeLabelKey(type)) }}</span>
           </button>
         </div>
       </section>
