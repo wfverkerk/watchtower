@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { getActionTranslation } from '../i18n/actionLabel'
+import { getActionTranslation, turnoverTypeLabelKey } from '../i18n/actionLabel'
 import { isAppLocale, useLocale } from '../i18n/useLocale'
 import { turnoverTypes, type FoulType, type Player, type ShotLocation, type StatType, type TurnoverType } from '../domain/game'
 import type { EventFlowStep } from '../domain/eventFlow'
@@ -225,7 +225,7 @@ function actionLabel(action: PendingAction) {
             :class="{ selected: turnoverType === type }"
             :aria-pressed="turnoverType === type"
             @click="emit('select-turnover-type', type)"
-          >{{ t(`picker.turnoverTypes.${type}`) }}</button>
+          >{{ t(turnoverTypeLabelKey(type)) }}</button>
         </div>
       </section>
 

@@ -15,7 +15,17 @@ export type StatType =
   | 'block'
   | 'steal'
 export type FoulType = 'P' | 'TF' | 'U' | 'D'
-export type TurnoverType = 'turnover' | 'second_dribble' | 'travel'
+export type TurnoverType =
+  | 'turnover'
+  | 'second_dribble'
+  | 'travel'
+  | 'three_seconds'
+  | 'eight_seconds'
+  | 'five_seconds'
+  | 'backcourt_violation'
+  | 'carry'
+  | 'out_of_bounds'
+  | 'kicked_ball'
 
 // club is set when the team name alone does not identify the club, such as a typed practice opponent.
 export type Team = { id: string; name: string; color: string; club?: string }
@@ -102,7 +112,18 @@ const statTypes: StatType[] = [
   'steal',
 ]
 const foulTypes: FoulType[] = ['P', 'TF', 'U', 'D']
-export const turnoverTypes = ['turnover', 'second_dribble', 'travel'] as const satisfies readonly TurnoverType[]
+export const turnoverTypes = [
+  'turnover',
+  'second_dribble',
+  'travel',
+  'three_seconds',
+  'eight_seconds',
+  'five_seconds',
+  'backcourt_violation',
+  'carry',
+  'out_of_bounds',
+  'kicked_ball',
+] as const satisfies readonly TurnoverType[]
 
 export function createInitialGameState(locale: AppLocale = 'nl'): GameState {
   const names = {
@@ -150,7 +171,7 @@ function isFoulType(value: unknown): value is FoulType {
 }
 
 export function isTurnoverType(value: unknown): value is TurnoverType {
-  return value === 'turnover' || value === 'second_dribble' || value === 'travel'
+  return (turnoverTypes as readonly unknown[]).includes(value)
 }
 
 function isUnusedLegacyDemoRoster(players: unknown[], actions: unknown[]) {

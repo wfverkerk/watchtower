@@ -15,6 +15,13 @@ type TranslationKey =
   | 'actions.turnover'
   | 'actions.secondDribble'
   | 'actions.travel'
+  | 'actions.threeSeconds'
+  | 'actions.eightSeconds'
+  | 'actions.fiveSeconds'
+  | 'actions.backcourtViolation'
+  | 'actions.carry'
+  | 'actions.outOfBounds'
+  | 'actions.kickedBall'
   | 'actions.foul'
   | 'actions.personalFoul'
   | 'actions.technicalFoul'
@@ -57,6 +64,17 @@ const turnoverTypeKeys: Record<TurnoverType, TranslationKey> = {
   turnover: 'actions.turnover',
   second_dribble: 'actions.secondDribble',
   travel: 'actions.travel',
+  three_seconds: 'actions.threeSeconds',
+  eight_seconds: 'actions.eightSeconds',
+  five_seconds: 'actions.fiveSeconds',
+  backcourt_violation: 'actions.backcourtViolation',
+  carry: 'actions.carry',
+  out_of_bounds: 'actions.outOfBounds',
+  kicked_ball: 'actions.kickedBall',
+}
+
+export function turnoverTypeLabelKey(type: TurnoverType): TranslationKey {
+  return turnoverTypeKeys[type]
 }
 
 export function getActionTranslation(action: Pick<GameAction, 'type' | 'value' | 'foulType' | 'turnoverType'>, locale: AppLocale) {

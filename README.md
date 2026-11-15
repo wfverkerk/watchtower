@@ -72,6 +72,7 @@ Afgesloten lokale wedstrijden en hun indienstatus staan onder `watchtower-local-
    - [`20261129000000_live_scores.sql`](./supabase/migrations/20261129000000_live_scores.sql) (live-stand in de sessielijst; zet de snapshot van de testwedstrijd die nu live is)
    - [`20261130000000_practice_games.sql`](./supabase/migrations/20261130000000_practice_games.sql) (markeert oefenwedstrijden in de teamstatistiekhistorie)
    - [`20261201000000_event_flow_rebounds.sql`](./supabase/migrations/20261201000000_event_flow_rebounds.sql) (staat rebounds van de tegenstander zonder speler toe bij het indienen van een wedstrijd)
+   - [`20261202000000_turnover_types.sql`](./supabase/migrations/20261202000000_turnover_types.sql) (staat de uitgebreide turnover-typen toe bij het indienen van een wedstrijd)
 
 De Edge Function `sync-zoebas-schedule` haalt het programma per competitie op uit de FOYS-API (met header `X-FederationId`). Een pg_cron-taak roept hem dagelijks om 03:00 Amsterdamse tijd aan; het `SYNC_SECRET` staat in de Supabase-secrets en in Vault (`sync_zoebas_schedule_secret`).
 3. Kopieer `.env.example` naar `.env.local` en vul de project-URL en publishable/anon key in. Deze client key is bedoeld voor gebruik in de browser; de database vertrouwt op RLS-beleid en anonieme Supabase Auth-sessies.

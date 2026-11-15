@@ -202,7 +202,7 @@ describe('statistics database authorization', () => {
     expect(saved.players[0].name).toBe('Speler 12')
   })
 
-  it('accepts a rebound by the other team without a player', async () => {
+  it('accepts a rebound without a player and the extended turnover types', async () => {
     const starts = '2026-11-13T12:00:00Z'
     const localId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
     const game = {
@@ -211,6 +211,7 @@ describe('statistics database authorization', () => {
       actions: [
         { id: 'miss-1', playerId: 'home-1', teamId: 'home', type: 'missed_shot', value: 2, createdAt: 1, groupId: 'group-1' },
         { id: 'rebound-1', playerId: null, teamId: 'away', type: 'defensive_rebound', value: 1, createdAt: 2, groupId: 'group-1' },
+        { id: 'turnover-1', playerId: 'home-1', teamId: 'home', type: 'turnover', value: 1, createdAt: 3, turnoverType: 'carry' },
       ],
       matchInfo: { id: 'manual-local', date: '2026-11-13', startTime: '12:00', venue: '', startsAt: starts },
     }
@@ -222,6 +223,10 @@ describe('statistics database authorization', () => {
       "select action_data from public.match_events where match_id = $1 and action_id = 'rebound-1'", [matchId],
     )).rows[0].action_data
     expect(rebound).toMatchObject({ playerId: null, type: 'defensive_rebound' })
+    const turnover = (await db.query<{ action_data: { turnoverType: string } }>(
+      "select action_data from public.match_events where match_id = $1 and action_id = 'turnover-1'", [matchId],
+    )).rows[0].action_data
+    expect(turnover).toMatchObject({ turnoverType: 'carry' })
   })
 
   it('creates an offline-only game exactly once with an official scorer snapshot', async () => {
