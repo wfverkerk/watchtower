@@ -13,6 +13,7 @@ export function useSharedJerseyNumbers(options: {
   catalogPlayerIds: Ref<string[]>
   initialBaselines?: Record<string, JerseyNumber[]>
   restoredDraft: boolean
+  useLocalOnly?: () => boolean
 }) {
   const { t } = useLocale()
   const loading = ref(false)
@@ -54,6 +55,7 @@ export function useSharedJerseyNumbers(options: {
       error.value = t('teamSetup.jerseyLoadError')
       return
     }
+    if (options.useLocalOnly?.()) return
     const currentRequest = ++request
     loading.value = true
     error.value = ''
@@ -105,6 +107,7 @@ export function useSharedJerseyNumbers(options: {
       error.value = t('teamSetup.jerseyLoadError')
       return false
     }
+    if (options.useLocalOnly?.()) return true
     const changedPlayers = options.rosterProfile
       ? profile.players.filter((player) =>
           player.catalogName && rosterBaseline.has(player.id) && player.jerseyNumber !== rosterBaseline.get(player.id),

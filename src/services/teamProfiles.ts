@@ -1,4 +1,5 @@
 import type { JerseyNumber } from './jerseyNumbers'
+import { isRecord } from '../domain/guards'
 
 export const teamProfilesStorageKey = 'watchtower-team-profiles-v1'
 export const teamProfileSelectionStorageKey = 'watchtower-team-profile-selection-v1'
@@ -9,6 +10,7 @@ export type TeamProfilePlayer = {
   name: string
   jerseyNumber: string
   catalogName?: string
+  statisticsPrivate?: boolean
   isParticipating: boolean
   isOnCourt: boolean
 }
@@ -84,10 +86,6 @@ export function createDefaultTeamProfiles(): TeamProfile[] {
   ]
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 export function parseTeamProfiles(value: unknown): TeamProfile[] {
   if (!Array.isArray(value) || !value.every((profile) =>
     isRecord(profile)
@@ -107,6 +105,7 @@ export function parseTeamProfiles(value: unknown): TeamProfile[] {
           && typeof player.name === 'string'
           && typeof player.jerseyNumber === 'string'
           && (player.catalogName === undefined || typeof player.catalogName === 'string')
+          && (player.statisticsPrivate === undefined || typeof player.statisticsPrivate === 'boolean')
           && (player.isParticipating === undefined || typeof player.isParticipating === 'boolean')
           && typeof player.isOnCourt === 'boolean'))) {
     throw new Error('Saved team profiles have an invalid format.')

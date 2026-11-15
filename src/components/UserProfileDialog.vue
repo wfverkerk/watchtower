@@ -5,12 +5,14 @@ import { useLocale } from '../i18n/useLocale'
 import type { UserProfile } from '../services/userProfile'
 import type { ZoebasTeam } from '../services/zoebasTeams'
 import BaseDialog from './BaseDialog.vue'
+import DialogHeader from './DialogHeader.vue'
 
 const props = defineProps<{
   profile: UserProfile | null
   teams: ZoebasTeam[]
   error: string
   theme: 'light' | 'dark'
+  isAdmin?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -19,6 +21,8 @@ const emit = defineEmits<{
   localeChange: [locale: AppLocale]
   themeChange: [theme: 'light' | 'dark']
   reset: []
+  coachLogin: []
+  admin: []
 }>()
 
 const { t, locale } = useLocale()
@@ -61,12 +65,7 @@ function save() {
     labelledby="user-profile-title"
     @close="emit('cancel')"
   >
-      <header class="match-dialog-header">
-        <div>
-          <h2 id="user-profile-title">{{ t(profile ? 'userProfile.editTitle' : 'userProfile.welcomeTitle') }}</h2>
-        </div>
-        <button v-if="profile" class="match-dialog-close" type="button" :aria-label="t('userProfile.cancel')" @click="emit('cancel')">×</button>
-      </header>
+      <DialogHeader title-id="user-profile-title" :title="t(profile ? 'userProfile.editTitle' : 'userProfile.welcomeTitle')" :close-label="profile ? t('userProfile.cancel') : undefined" @close="emit('cancel')" />
       <form class="user-profile-form" @submit.prevent="save">
         <label class="match-sync-field">
           <span>{{ t('userProfile.name') }}</span>
@@ -125,6 +124,8 @@ function save() {
         </label>
 
         <p class="profile-install-note">{{ t('userProfile.installStorageNote') }}</p>
+        <button v-if="profile" class="match-sync-secondary" type="button" @click="emit('coachLogin')">{{ t('statistics.coachLogin') }}</button>
+        <button v-if="profile && isAdmin" class="match-sync-secondary" type="button" @click="emit('admin')">{{ t('userProfile.adminDashboard') }}</button>
 
         <p v-if="error" class="match-sync-error" role="alert">{{ error }}</p>
         <button v-if="profile" class="user-profile-reset" type="button" @click="emit('reset')">{{ t('userProfile.reset') }}</button>

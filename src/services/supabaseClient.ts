@@ -1,6 +1,23 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { invalidMatchEventsStorageKey, loadMatchEvents, loadMatchLink } from './matchEventLog'
+import { loadPendingMatchSnapshots } from './matchSnapshots'
+import { loadLocalMatches } from './localMatches'
 
 let client: SupabaseClient | null = null
+
+export function isAuthCallbackBlocked() {
+  const url = new URL(window.location.href)
+  const callback = url.searchParams.has('code') || new URLSearchParams(url.hash.slice(1)).has('access_token')
+  if (!callback) return false
+  try {
+    return !!loadMatchLink() || loadMatchEvents().length > 0 || loadPendingMatchSnapshots().length > 0
+      || loadLocalMatches().some((match) => match.submission && !match.submission.resultMatchId)
+      || window.localStorage.getItem(invalidMatchEventsStorageKey) !== null
+  } catch (error) {
+    console.error('Cannot safely switch account because local match data could not be read.', error)
+    return true
+  }
+}
 
 export function isSupabaseConfigured() {
   return Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY)
@@ -14,7 +31,7 @@ export function getSupabaseClient() {
     throw new Error('Both VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be configured.')
   }
 
-  client ??= createClient(url, anonKey)
+  client ??= createClient(url, anonKey, { auth: { detectSessionInUrl: !isAuthCallbackBlocked() } })
   return client
 }
 

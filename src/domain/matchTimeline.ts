@@ -1,13 +1,10 @@
 import type { Player } from './game'
+import { isRecord } from './guards'
 
 export type TimelinePlayer = { id: string; name: string; jerseyNumber: string }
 export type MatchTimelineEvent =
   | { id: string; type: 'period_start' | 'period_end'; period: number; createdAt: number }
   | { id: string; type: 'substitution'; period: number; createdAt: number; out: TimelinePlayer[]; in: TimelinePlayer[] }
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function isTimelinePlayer(value: unknown): value is TimelinePlayer {
   return isRecord(value) && typeof value.id === 'string' && typeof value.name === 'string' && typeof value.jerseyNumber === 'string'

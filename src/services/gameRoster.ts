@@ -18,6 +18,7 @@ export function createGameRosterDraft(game: GameState, profile: TeamProfile): Te
     return [{
       ...player,
       ...(existing ? { name: existing.name, jerseyNumber: existing.jerseyNumber } : {}),
+      ...(existing?.statisticsPrivate ? { statisticsPrivate: true } : {}),
       isParticipating: !!existing && existing.isParticipating !== false,
       isOnCourt: existing?.isOnCourt ?? false,
     }]
@@ -36,7 +37,7 @@ export function createGameRosterDraft(game: GameState, profile: TeamProfile): Te
     if (player.isCoach) {
       coaches.push({ id: player.id, name: player.name, role: player.coachRole ?? 'coach', isParticipating: player.isParticipating !== false })
     } else {
-      players.push({ id: player.id, name: player.name, jerseyNumber: player.jerseyNumber, isParticipating: player.isParticipating !== false, isOnCourt: player.isOnCourt })
+      players.push({ id: player.id, name: player.name, jerseyNumber: player.jerseyNumber, isParticipating: player.isParticipating !== false, isOnCourt: player.isOnCourt, ...(player.statisticsPrivate ? { statisticsPrivate: true } : {}) })
     }
   }
   return { ...profile, players, coaches }
@@ -56,7 +57,9 @@ export function applyGameRoster(game: GameState, profile: TeamProfile): Player[]
       isOnCourt: false,
     }
     if (!existing) updated.push(player)
-    player.name = person.name.trim() || player.name
+    player.name = ('jerseyNumber' in person && (person.statisticsPrivate || player.statisticsPrivate))
+      ? `Speler ${person.jerseyNumber || player.jerseyNumber}`
+      : person.name.trim() || player.name
     player.isParticipating = person.isParticipating
     if (!person.isParticipating) player.isOnCourt = false
     if ('jerseyNumber' in person) player.jerseyNumber = person.jerseyNumber || player.jerseyNumber
@@ -64,6 +67,7 @@ export function applyGameRoster(game: GameState, profile: TeamProfile): Player[]
       player.isCoach = true
       player.coachRole = person.role
     }
+    if ('statisticsPrivate' in person && person.statisticsPrivate) player.statisticsPrivate = true
   }
   profile.players.forEach((player) => applyPerson(player, false))
   profile.coaches.forEach((coach) => applyPerson(coach, true))

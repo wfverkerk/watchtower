@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useLocale } from '../i18n/useLocale'
 import { loadTeamSetupDraft, saveTeamSetupDraft, type TeamProfile, type TeamProfileCoach, type TeamProfilePlayer, type TeamSetupDraft } from '../services/teamProfiles'
 import { getRecommendedMatch, loadZoebasMatches, type ZoebasMatch } from '../services/zoebasMatches'
 import type { ZoebasTeam } from '../services/zoebasTeams'
 import { useSharedJerseyNumbers } from '../composables/useSharedJerseyNumbers'
 import RosterEditor from './RosterEditor.vue'
+import OpponentTeamInput from './OpponentTeamInput.vue'
+import TeamLogo from './TeamLogo.vue'
+import { useOpponentTeams } from '../composables/useOpponentTeams'
 import BaseDialog from './BaseDialog.vue'
+import { loadStatisticsRoster, loadStatisticsTeams, type StatisticsPlayer } from '../services/statistics'
+import { getSupabaseClient } from '../services/supabaseClient'
 
 const props = defineProps<{
   profiles: TeamProfile[]
@@ -14,6 +19,8 @@ const props = defineProps<{
   catalogTeams: ZoebasTeam[]
   catalogLoading: boolean
   catalogError: string
+  catalogCached?: boolean
+  localOnly?: boolean
   canCancel: boolean
   error: string
   home?: boolean
@@ -23,7 +30,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   cancel: []
-  save: [profiles: TeamProfile[], selectedProfileIds: [string, string], match: ZoebasMatch | null, manualOpponentName: string]
+  save: [profiles: TeamProfile[], selectedProfileIds: [string, string], match: ZoebasMatch | null, manualOpponentName: string, manualStart: string]
   'save-roster': [profile: TeamProfile]
 }>()
 
@@ -60,8 +67,18 @@ const matchLoading = ref(false)
 const matchError = ref('')
 const selectedMatchId = ref('')
 const manualOpponentName = ref('')
+const { teams: opponentTeams, refreshOpponentTeams } = useOpponentTeams()
+const manualStart = ref('')
 const catalogPlayerIds = ref<string[]>([])
-const availableTeams = computed(() => props.catalogTeams.filter((team) => team.playerNames.length > 0))
+const sharedRoster = ref<StatisticsPlayer[]>([])
+const sharedRosterError = ref('')
+const sharedTeamIds = ref<string[]>([])
+const localTeamName = ref('')
+const availableTeams = computed(() => [
+  ...props.catalogTeams.filter((team) => team.playerNames.length > 0 || sharedTeamIds.value.includes(team.id)),
+  ...(props.localOnly ? draftProfiles.value.filter((profile) => profile.catalogTeamId?.startsWith('local-'))
+    .map((profile): ZoebasTeam => ({ id: profile.catalogTeamId!, name: profile.name, sourceTeamId: '', playerNames: [], staff: [] })) : []),
+])
 const currentProfile = computed(() =>
   draftProfiles.value.find((profile) => profile.id === selected.value[0]) ?? null,
 )
@@ -77,12 +94,13 @@ const {
 } = useSharedJerseyNumbers({
   rosterProfile: props.rosterProfile,
   getProfile: () => currentProfile.value,
-  getTeam: () => props.catalogTeams.find((team) =>
+  getTeam: () => availableTeams.value.find((team) =>
     team.id === (props.rosterProfile ? currentProfile.value?.catalogTeamId : selectedCatalogTeamId.value),
   ),
   catalogPlayerIds,
   initialBaselines: restoredDraft?.jerseyBaselines,
   restoredDraft: !!restoredDraft,
+  useLocalOnly: () => !!props.catalogCached || !navigator.onLine || selectedCatalogTeamId.value.startsWith('local-'),
 })
 const participatingPlayers = computed(() => currentProfile.value?.players.filter((player) => player.isParticipating) ?? [])
 const selectedMatch = computed(() => matches.value.find((match) => match.id === selectedMatchId.value) ?? null)
@@ -93,7 +111,34 @@ const upcomingMatches = computed(() => matches.value.filter((match) =>
 const pastMatches = computed(() => matches.value.filter((match) =>
   new Date(`${match.date}T${match.startTime}:00`).getTime() < Date.now(),
 ))
-const hasMatchSelection = computed(() => !!selectedMatch.value || !!manualOpponentName.value.trim())
+const hasMatchSelection = computed(() => !!selectedMatch.value || (
+  !!manualOpponentName.value.trim() && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(manualStart.value)
+  && Number.isFinite(new Date(manualStart.value).getTime())
+))
+
+onMounted(() => {
+  if (!props.rosterProfile) void refreshOpponentTeams()
+})
+
+onMounted(async () => {
+  if (!navigator.onLine || props.catalogCached) return
+  try {
+    const client = getSupabaseClient()
+    if (!client) return
+    const { data, error } = await client.auth.getSession()
+    if (error) throw error
+    if (data.session) {
+      sharedTeamIds.value = (await loadStatisticsTeams()).map((team) => team.id)
+      const rosterTeamId = props.rosterProfile?.catalogTeamId
+      if (rosterTeamId && sharedTeamIds.value.includes(rosterTeamId)) {
+        sharedRoster.value = await loadStatisticsRoster(rosterTeamId)
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load shared teams.', error)
+    sharedRosterError.value = t('statistics.rosterLoadError')
+  }
+})
 
 watch([draftProfiles, selected, selectedCatalogTeamId, jerseyBaselines], () => {
   if (props.rosterProfile || !selectedCatalogTeamId.value || draftLoadFailed) return
@@ -113,7 +158,7 @@ watch([draftProfiles, selected, selectedCatalogTeamId, jerseyBaselines], () => {
 
 function selectCatalogTeam(teamId: string) {
   selectedCatalogTeamId.value = teamId
-  const team = props.catalogTeams.find((item) => item.id === teamId)
+  const team = availableTeams.value.find((item) => item.id === teamId)
   if (!team) return
 
   let profile = draftProfiles.value.find((item) => item.catalogTeamId === team.id)
@@ -177,6 +222,21 @@ function selectCatalogTeam(teamId: string) {
   catalogPlayerIds.value = players.slice(0, team.playerNames.length).map((player) => player.id)
 }
 
+function addLocalTeam() {
+  const name = localTeamName.value.trim()
+  if (!name) return
+  const id = `local-${crypto.randomUUID()}`
+  draftProfiles.value.push({
+    id, name, catalogTeamId: id,
+    players: Array.from({ length: 5 }, (_, index) => ({
+      id: `${id}-player-${index + 1}`, name: '', jerseyNumber: '', isParticipating: false, isOnCourt: false,
+    })),
+    coaches: [],
+  })
+  selectedCatalogTeamId.value = id
+  localTeamName.value = ''
+}
+
 function selectMatch(match: ZoebasMatch) {
   if (match.status === 'Cancelled') return
   selectedMatchId.value = match.id
@@ -204,13 +264,30 @@ watch([selectedCatalogTeamId, () => props.catalogTeams], async ([teamId], previo
   }
   matchError.value = ''
   matchLoading.value = false
-  if (!props.catalogTeams.length) return
   if (!teamId) return
 
-  const team = props.catalogTeams.find((item) => item.id === teamId)
+  const team = availableTeams.value.find((item) => item.id === teamId)
   if (!team) return
   selectCatalogTeam(teamId)
+  sharedRoster.value = []
+  sharedRosterError.value = ''
+  if (!props.catalogCached && navigator.onLine && !team.id.startsWith('local-')) {
+    try {
+      const client = getSupabaseClient()
+      const { data, error } = client ? await client.auth.getSession() : { data: { session: null }, error: null }
+      if (error) throw error
+      if (data.session && (await loadStatisticsTeams()).some((item) => item.id === teamId)) {
+        const roster = await loadStatisticsRoster(teamId)
+        if (request === matchRequest) sharedRoster.value = roster
+      }
+    } catch (error) {
+      console.error('Failed to load the shared roster.', error)
+      if (request === matchRequest) sharedRosterError.value = t('statistics.rosterLoadError')
+    }
+  }
+  if (request !== matchRequest) return
   void loadJerseys(team, false)
+  if (props.catalogCached || !navigator.onLine || team.id.startsWith('local-')) return
   matchLoading.value = true
   try {
     const fetchedMatches = await loadZoebasMatches(team.sourceTeamId)
@@ -223,6 +300,27 @@ watch([selectedCatalogTeamId, () => props.catalogTeams], async ([teamId], previo
     if (request === matchRequest) matchLoading.value = false
   }
 }, { immediate: true })
+
+function useSharedRoster() {
+  const profile = currentProfile.value
+  if (!profile) return
+  const sharedIds = new Set(sharedRoster.value.map((player) => player.id))
+  const shared = sharedRoster.value.map((player): TeamProfilePlayer => {
+    const saved = profile.players.find((item) => item.id === player.id || item.id === `home-${player.id}`)
+    const number = saved?.jerseyNumber || player.jerseyNumber
+    return {
+      id: player.id,
+      name: player.isPrivate ? `Speler ${number}` : player.name ?? '',
+      jerseyNumber: number,
+      ...(player.isPrivate ? { statisticsPrivate: true } : {}),
+      isParticipating: saved?.isParticipating ?? !props.rosterProfile,
+      isOnCourt: saved?.isOnCourt ?? false,
+    }
+  })
+  profile.players = [...shared, ...profile.players.filter((player) =>
+    !sharedIds.has(player.id) && !(player.id.startsWith('home-') && sharedIds.has(player.id.slice(5))))
+    .map((player) => props.rosterProfile ? { ...player } : { ...player, isParticipating: false, isOnCourt: false })]
+}
 
 function participantError(profile: TeamProfile | undefined) {
   if (!profile?.name.trim()) return t('teamSetup.teamNameRequired')
@@ -246,7 +344,8 @@ const currentStepError = computed(() => {
   }
   return ''
 })
-const validTeam = computed(() => !props.catalogError && !jerseyLoading.value && !jerseyError.value && !!availableTeams.value.find((team) => team.id === selectedCatalogTeamId.value))
+const validTeam = computed(() => (!props.catalogError || selectedCatalogTeamId.value.startsWith('local-'))
+  && !jerseyLoading.value && !jerseyError.value && !!availableTeams.value.find((team) => team.id === selectedCatalogTeamId.value))
 const canAdvance = computed(() => {
   if (props.rosterProfile) return !currentStepError.value
   if (step.value === 0) return validTeam.value
@@ -276,7 +375,7 @@ function save() {
     })),
     coaches: [],
   }
-  emit('save', [...draftProfiles.value.filter((profile) => profile.id !== opponentId), opponent], [selected.value[0], opponentId], selectedMatch.value, manualOpponentName.value.trim())
+  emit('save', [...draftProfiles.value.filter((profile) => profile.id !== opponentId), opponent], [selected.value[0], opponentId], selectedMatch.value, manualOpponentName.value.trim(), manualStart.value)
 }
 
 function advance() {
@@ -348,18 +447,25 @@ function stepCompleted(index: number) {
         <template v-if="step === 0">
           <h3>{{ t('teamSetup.chooseClubTeam') }}</h3>
           <p v-if="catalogLoading" class="team-setup-hint" role="status">{{ t('teamSetup.loadingClubTeams') }}</p>
+          <p v-if="catalogCached" class="team-setup-hint" role="status">{{ t('teamSetup.cachedTeams') }}</p>
           <p v-else-if="!catalogError && !availableTeams.length" class="team-setup-hint" role="status">{{ t('teamSetup.noTeamsWithPlayers') }}</p>
           <div class="team-setup-team-grid" role="group" :aria-label="t('teamSetup.chooseClubTeam')">
             <button v-for="team in availableTeams" :key="team.id" type="button"
               :aria-pressed="selectedCatalogTeamId === team.id" :disabled="jerseySaving"
-              @click="selectedCatalogTeamId = team.id">{{ team.name }}</button>
+              @click="selectedCatalogTeamId = team.id"><TeamLogo :name="team.name" /><span>{{ team.name }}</span></button>
+          </div>
+          <div v-if="localOnly" class="team-setup-field">
+            <label for="local-team-name">{{ t('sessions.localTeam') }}</label>
+            <input id="local-team-name" v-model="localTeamName" type="text" maxlength="60">
+            <button type="button" class="match-sync-secondary" :disabled="!localTeamName.trim()" @click="addLocalTeam">{{ t('sessions.addLocalTeam') }}</button>
           </div>
         </template>
         <section v-if="step === 2" class="team-setup-matches" aria-labelledby="team-match-heading">
           <h3 id="team-match-heading">{{ t('teamSetup.chooseMatch') }}</h3>
-          <label class="team-setup-field">
-            <span>{{ t('teamSetup.manualOpponent') }}</span>
-            <input v-model="manualOpponentName" type="text" maxlength="60" :placeholder="t('teamSetup.manualOpponent')" @input="selectManualMatch">
+          <OpponentTeamInput v-model="manualOpponentName" :teams="opponentTeams" :label="t('teamSetup.manualOpponent')" :placeholder="t('teamSetup.manualOpponent')" @update:model-value="selectManualMatch" />
+          <label v-if="manualOpponentName.trim()" class="team-setup-field">
+            <span>{{ t('teamSetup.startTime') }}</span>
+            <input v-model="manualStart" type="datetime-local" required>
           </label>
           <p v-if="matchLoading" class="team-setup-hint" role="status">{{ t('teamSetup.loadingMatches') }}</p>
           <p v-if="matchError" class="team-setup-error" role="alert">{{ matchError }}</p>
@@ -377,7 +483,7 @@ function stepCompleted(index: number) {
               @click="selectMatch(match)"
             >
               <span class="team-setup-match-date">{{ formatMatchDate(match) }}</span>
-              <strong>{{ match.homeTeamName }} – {{ match.awayTeamName }}</strong>
+              <strong class="team-setup-match-teams"><TeamLogo :name="match.homeTeamName" />{{ match.homeTeamName }} – <TeamLogo :name="match.awayTeamName" />{{ match.awayTeamName }}</strong>
               <span v-if="match.venue">{{ t('teamSetup.venue', { venue: match.venue }) }}</span>
               <span v-if="match.id === recommendedMatch?.id" class="team-setup-match-badge">{{ t('teamSetup.recommendedMatch') }}</span>
               <span v-if="match.status === 'Cancelled'" class="team-setup-match-badge">{{ t('teamSetup.cancelledMatch') }}</span>
@@ -395,7 +501,7 @@ function stepCompleted(index: number) {
               @click="selectMatch(match)"
             >
               <span class="team-setup-match-date">{{ formatMatchDate(match) }}</span>
-              <strong>{{ match.homeTeamName }} {{ match.homeScore ?? '–' }} – {{ match.awayScore ?? '–' }} {{ match.awayTeamName }}</strong>
+              <strong class="team-setup-match-teams"><TeamLogo :name="match.homeTeamName" />{{ match.homeTeamName }} {{ match.homeScore ?? '–' }} – {{ match.awayScore ?? '–' }} <TeamLogo :name="match.awayTeamName" />{{ match.awayTeamName }}</strong>
               <span v-if="match.venue">{{ t('teamSetup.venue', { venue: match.venue }) }}</span>
               <span v-if="match.id === recommendedMatch?.id" class="team-setup-match-badge">{{ t('teamSetup.recommendedMatch') }}</span>
               <span v-if="match.status === 'Cancelled'" class="team-setup-match-badge">{{ t('teamSetup.cancelledMatch') }}</span>
@@ -406,11 +512,13 @@ function stepCompleted(index: number) {
         </section>
 
         <div v-if="currentProfile" v-show="step === 1">
+          <p v-if="sharedRosterError" class="team-setup-error" role="alert">{{ sharedRosterError }}</p>
+          <button v-if="sharedRoster.length" type="button" class="team-setup-add-player" @click="useSharedRoster">{{ t('statistics.useRoster') }}</button>
           <RosterEditor
             :profile="currentProfile"
             :disabled="jerseySaving || jerseyLoading"
             :clear-court-on-absence="!rosterProfile"
-            :show-shared-jerseys-hint="!rosterProfile || !!currentProfile.catalogTeamId"
+            :show-shared-jerseys-hint="(!rosterProfile || !!currentProfile.catalogTeamId) && !currentProfile.catalogTeamId?.startsWith('local-')"
             :error="currentStepError"
           />
         </div>

@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './supabaseClient'
+import { isRecord } from '../domain/guards'
 
 export type ZoebasStaff = { name: string; role: 'coach' | 'assistant' }
 
@@ -10,9 +11,7 @@ export type ZoebasTeam = {
   staff: ZoebasStaff[]
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
+export const teamCatalogStorageKey = 'watchtower-team-catalog-v1'
 
 export function parseZoebasTeams(value: unknown): ZoebasTeam[] {
   if (!Array.isArray(value) || !value.every((team) =>
@@ -57,4 +56,18 @@ export async function loadZoebasTeams() {
     .order('sort_order')
   if (error) throw error
   return parseZoebasTeams(data)
+}
+
+export function saveCachedZoebasTeams(teams: ZoebasTeam[], storage: Pick<Storage, 'setItem'> = window.localStorage) {
+  const rows = teams.map((team) => ({
+    id: team.id, name: team.name, source_team_id: team.sourceTeamId, player_names: team.playerNames,
+    coach_names: team.staff.map((member) => member.name), coach_roles: team.staff.map((member) => member.role),
+  }))
+  parseZoebasTeams(rows)
+  storage.setItem(teamCatalogStorageKey, JSON.stringify(rows))
+}
+
+export function loadCachedZoebasTeams(storage: Pick<Storage, 'getItem'> = window.localStorage): ZoebasTeam[] | null {
+  const saved = storage.getItem(teamCatalogStorageKey)
+  return saved === null ? null : parseZoebasTeams(JSON.parse(saved))
 }

@@ -1,6 +1,7 @@
 import type { AppLocale } from '../i18n/types'
 import { foulPeriodGroup, type GameClock } from './gameClock'
 import { parseMatchTimeline, type MatchTimelineEvent } from './matchTimeline'
+import { isRecord } from './guards'
 
 export type StatType =
   | 'score'
@@ -26,6 +27,7 @@ export type Player = {
   isParticipating?: boolean
   isCoach?: boolean
   coachRole?: 'coach' | 'assistant'
+  statisticsPrivate?: boolean
 }
 
 export function getCoachMarker(player: Player | undefined, playerId: string): 'C' | 'AC' | null {
@@ -54,13 +56,17 @@ export type GameMatchInfo = {
   date: string
   startTime: string
   venue: string
+  startsAt?: string
 }
 export type GameState = {
   teams: Team[]
   players: Player[]
   actions: GameAction[]
   gameStarted: boolean
+  localMatchId?: string
+  localFinishedAt?: string
   matchInfo?: GameMatchInfo
+  catalogTeamId?: string
   period?: number
   youth?: boolean
   clock?: GameClock
@@ -116,10 +122,6 @@ export function createInitialGameState(locale: AppLocale = 'nl'): GameState {
   )
 
   return { teams, players, actions: [], gameStarted: false }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function isStatType(value: unknown): value is StatType {
@@ -197,6 +199,7 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       || typeof player.id !== 'string'
       || typeof player.name !== 'string'
       || typeof player.teamId !== 'string'
+      || (player.statisticsPrivate !== undefined && typeof player.statisticsPrivate !== 'boolean')
       || (player.isParticipating !== undefined && typeof player.isParticipating !== 'boolean')
       || !teams.some((team) => team.id === player.teamId)) {
       throw new Error('Opgeslagen spelersgegevens zijn ongeldig.')
@@ -216,6 +219,7 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       ...(player.isParticipating === false ? { isParticipating: false } : {}),
       ...(player.isCoach === true ? { isCoach: true } : {}),
       ...(player.coachRole === 'coach' || player.coachRole === 'assistant' ? { coachRole: player.coachRole } : {}),
+      ...(player.statisticsPrivate === true ? { statisticsPrivate: true } : {}),
     }
   })
 
@@ -256,6 +260,14 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
   if (value.matchInfo !== undefined && !isGameMatchInfo(value.matchInfo)) {
     throw new Error('Opgeslagen wedstrijdinformatie is ongeldig.')
   }
+  if (value.catalogTeamId !== undefined && typeof value.catalogTeamId !== 'string') {
+    throw new Error('Opgeslagen teamidentiteit is ongeldig.')
+  }
+  if ((value.localMatchId !== undefined && (typeof value.localMatchId !== 'string' || !value.localMatchId))
+    || (value.localFinishedAt !== undefined && (typeof value.localFinishedAt !== 'string'
+      || !Number.isFinite(Date.parse(value.localFinishedAt)) || typeof value.localMatchId !== 'string'))) {
+    throw new Error('Opgeslagen lokale wedstrijdidentiteit is ongeldig.')
+  }
   if (value.period !== undefined && (typeof value.period !== 'number' || !Number.isSafeInteger(value.period) || value.period < 0)) {
     throw new Error('Opgeslagen periode is ongeldig.')
   }
@@ -273,7 +285,10 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
     players,
     actions,
     gameStarted: value.gameStarted,
+    ...(typeof value.localMatchId === 'string' ? { localMatchId: value.localMatchId } : {}),
+    ...(typeof value.localFinishedAt === 'string' ? { localFinishedAt: value.localFinishedAt } : {}),
     ...(isGameMatchInfo(value.matchInfo) ? { matchInfo: value.matchInfo } : {}),
+    ...(typeof value.catalogTeamId === 'string' ? { catalogTeamId: value.catalogTeamId } : {}),
     ...(typeof value.period === 'number' ? { period: value.period } : {}),
     ...(typeof value.youth === 'boolean' ? { youth: value.youth } : {}),
     ...(isRecord(value.clock) ? { clock: value.clock as GameClock } : {}),
@@ -289,6 +304,7 @@ function isGameMatchInfo(value: unknown): value is GameMatchInfo {
     && typeof value.startTime === 'string'
     && /^\d{2}:\d{2}$/.test(value.startTime)
     && typeof value.venue === 'string'
+    && (value.startsAt === undefined || (typeof value.startsAt === 'string' && Number.isFinite(Date.parse(value.startsAt))))
 }
 
 export function canStartGame(game: GameState) {
@@ -435,6 +451,7 @@ export function updateScoringPlay(
     value: number
     assistPlayerId: string | null
     shotLocation?: ShotLocation
+    period?: number
     createdAt: number
     createId: () => string
   },
@@ -472,6 +489,7 @@ export function updateScoringPlay(
       type: 'score',
       value: input.value,
       createdAt: input.createdAt,
+      ...(input.period !== undefined ? { period: input.period } : {}),
       ...(input.shotLocation ? { shotLocation: input.shotLocation } : {}),
       ...(groupId ? { groupId } : {}),
     })
@@ -490,6 +508,8 @@ export function updateScoringPlay(
         type: 'assist',
         value: 1,
         createdAt: input.createdAt,
+        ...((existingScore ? existingScore.period : input.period) !== undefined
+          ? { period: existingScore ? existingScore.period : input.period } : {}),
         groupId: groupId!,
       })
     }

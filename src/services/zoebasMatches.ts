@@ -1,3 +1,4 @@
+import { isRecord } from '../domain/guards'
 export type ZoebasMatch = {
   id: string
   date: string
@@ -15,10 +16,6 @@ type MatchRange = 'program' | 'results'
 const apiBaseUrl = 'https://api.foys.io/competition/public-api/v1'
 const organisationId = 'F7729CA8-4E22-4AE3-BEDE-6E36C2F507EB'
 const pageSize = 100
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function parseScore(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null

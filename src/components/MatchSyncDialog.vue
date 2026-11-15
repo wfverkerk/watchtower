@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useLocale } from '../i18n/useLocale'
 import type { MatchLink } from '../services/matchEventLog'
 import BaseDialog from './BaseDialog.vue'
+import DialogHeader from './DialogHeader.vue'
 
 const props = defineProps<{
   configured: boolean
@@ -41,13 +42,7 @@ function joinMatch() {
     close-on-backdrop
     @close="emit('close')"
   >
-      <header class="match-dialog-header">
-        <div>
-          <p class="eyebrow">{{ t('sync.eyebrow') }}</p>
-          <h2>{{ t('sync.title') }}</h2>
-        </div>
-        <button class="match-dialog-close" type="button" :aria-label="t('picker.cancel')" @click="emit('close')">×</button>
-      </header>
+      <DialogHeader :eyebrow="t('sync.eyebrow')" :title="t('sync.title')" :close-label="t('picker.cancel')" @close="emit('close')" />
       <p class="match-dialog-description">{{ t('sync.description') }}</p>
 
       <p v-if="!configured" class="match-sync-message" role="status">{{ t('sync.notConfigured') }}</p>
