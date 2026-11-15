@@ -53,9 +53,8 @@ const foulOptions = computed<FoulType[]>(() => {
 const personalNumber = computed(() => (props.playerFouls[props.scorerId] ?? 0) + (props.editing && props.foulType === 'P' ? 0 : 1))
 const personalLimitReached = computed(() => (props.playerFouls[props.scorerId] ?? 0) >= 5 && !(props.editing && props.foulType === 'P'))
 function foulSubtitle(type: FoulType) {
-  if (type === 'P' || type === 'U') return type
-  if (type === 'D' && !isFoulCoachId(props.scorerId)) return 'D'
-  return 'T'
+  if (type === 'BD') return 'D'
+  return type === 'B' || type === 'C' ? 'T' : type
 }
 const questionLabel = computed(() => {
   switch (currentStep.value) {

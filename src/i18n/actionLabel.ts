@@ -1,4 +1,4 @@
-import { foulCode, isFoulCoachId, type GameAction, type StatType, type TurnoverType } from '../domain/game'
+import { foulCode, type GameAction, type StatType, type TurnoverType } from '../domain/game'
 import type { AppLocale } from './types'
 
 type TranslationKey =
@@ -94,8 +94,8 @@ type LabelTranslation = { key: TranslationKey; params?: Record<string, string | 
 function foulTranslation(action: Pick<GameAction, 'foulType'> & { playerId?: string | null }, personalFoulNumber?: number): LabelTranslation {
   if (action.foulType === 'P') return { key: 'actions.personalFoul' as const, params: { number: personalFoulNumber ?? '' } }
   if (action.foulType === 'U') return { key: 'actions.unsportsmanlikeFoul' as const, params: undefined }
-  // A disqualifying foul by a field player is D; coaches and bench players get technical fouls only.
-  if (action.foulType === 'D' && !isFoulCoachId(action.playerId ?? null)) return { key: 'actions.disqualifyingFoul' as const, params: undefined }
+  // Every D is a disqualifying foul, also when a coach or bench player commits it. Only C and B are technical.
+  if (action.foulType === 'D' || action.foulType === 'BD') return { key: 'actions.disqualifyingFoul' as const, params: undefined }
   return { key: 'actions.technicalFoul' as const, params: { code: foulCode(action.foulType ?? 'T') } }
 }
 
