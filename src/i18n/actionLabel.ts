@@ -77,6 +77,24 @@ export function turnoverTypeLabelKey(type: TurnoverType): TranslationKey {
   return turnoverTypeKeys[type]
 }
 
+// Official abbreviations shown on the turnover buttons; a plain turnover has none.
+const turnoverTypeAbbreviations: Record<TurnoverType, string | null> = {
+  turnover: null,
+  second_dribble: 'DD',
+  travel: 'TRAV',
+  carry: 'CA',
+  out_of_bounds: 'OOB',
+  backcourt_violation: 'BC',
+  kicked_ball: 'KB',
+  three_seconds: '3S',
+  five_seconds: '5S',
+  eight_seconds: '8S',
+}
+
+export function turnoverTypeAbbreviation(type: TurnoverType): string | null {
+  return turnoverTypeAbbreviations[type]
+}
+
 export function getActionTranslation(action: Pick<GameAction, 'type' | 'value' | 'foulType' | 'turnoverType'>, locale: AppLocale) {
   if (action.type === 'score') {
     return { key: pointsKey('score', action.value, locale), params: { value: action.value } }
