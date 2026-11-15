@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   canStartGame,
   createInitialGameState,
+  foulCoachId,
   getRecentActions,
-  getCoachMarker,
   getScore,
   getPlayerFouls,
   getPeriodTeamFouls,
@@ -27,16 +27,6 @@ function makeAction(overrides: Partial<GameAction> & Pick<GameAction, 'type' | '
 }
 
 describe('game domain rules', () => {
-  it('identifies coaches in the match overview, including legacy coach actions', () => {
-    const player = { id: 'p1', name: 'Alex', teamId: 'home', jerseyNumber: '5', isOnCourt: false }
-    expect(getCoachMarker({ ...player, isCoach: true, coachRole: 'coach' }, 'p1')).toBe('C')
-    expect(getCoachMarker({ ...player, isCoach: true, coachRole: 'assistant' }, 'p1')).toBe('AC')
-    expect(getCoachMarker({ ...player, isCoach: true }, 'p1')).toBe('C')
-    expect(getCoachMarker(player, 'p1')).toBeNull()
-    expect(getCoachMarker(undefined, 'coach-home')).toBe('C')
-    expect(getCoachMarker(undefined, 'unknown')).toBeNull()
-  })
-
   it('stores unattributed opponent scores without inventing a player', () => {
     const game = createInitialGameState()
     game.actions = [1, 2, 3].map((value) => makeAction({
@@ -305,25 +295,15 @@ describe('game domain rules', () => {
     expect(parseGameState(game).players[0].id).toBe('h1')
   })
 
-  it('does not count selected coaches as roster players when starting a game', () => {
-    const game = createInitialGameState()
-    game.players.push({
-      id: 'home-coach-1',
-      name: 'Willem',
-      teamId: 'home',
-      jerseyNumber: '',
-      isOnCourt: false,
-      isCoach: true,
-      coachRole: 'assistant',
+  it('moves fouls of legacy coach players to the fixed coach of their team', () => {
+    const initial = createInitialGameState()
+    const restored = parseGameState({
+      ...initial,
+      players: [...initial.players, { id: 'home-coach-1', name: 'Willem', teamId: 'home', jerseyNumber: '', isOnCourt: false, isCoach: true }],
+      actions: [{ id: 'foul-1', teamId: 'home', playerId: 'home-coach-1', type: 'foul', value: 1, createdAt: 1, foulType: 'P' }],
     })
-
-    expect(canStartGame(game)).toBe(true)
-    expect(parseGameState(game).players[parseGameState(game).players.length - 1]).toMatchObject({
-      id: 'home-coach-1',
-      name: 'Willem',
-      isCoach: true,
-      coachRole: 'assistant',
-    })
+    expect(restored.players.some((player) => player.id === 'home-coach-1')).toBe(false)
+    expect(restored.actions[0].playerId).toBe(foulCoachId('home'))
   })
 
   it('normalizes older saved rosters and rejects malformed game data', () => {

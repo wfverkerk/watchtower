@@ -13,10 +13,10 @@ const { t, displayPlayerName } = useLocale()
 </script>
 
 <template>
-  <button type="button" class="player-choice picker-player" :class="{ 'coach-choice': player.isCoach && !noAssist }">
-    <span v-if="!noAssist" class="jersey-number">{{ player.isCoach ? t(player.coachRole === 'assistant' ? 'picker.assistantCoach' : 'picker.coach') : player.jerseyNumber || '—' }}</span>
+  <button type="button" class="player-choice picker-player">
+    <span v-if="!noAssist" class="jersey-number">{{ player.jerseyNumber || '—' }}</span>
     <span class="player-choice-name">{{ noAssist ? t('picker.noAssist') : displayPlayerName(player.name) }}</span>
-    <FoulMarker v-if="!noAssist && !player.isCoach" :count="foulCount" />
+    <FoulMarker v-if="!noAssist" :count="foulCount" />
     <slot />
   </button>
 </template>

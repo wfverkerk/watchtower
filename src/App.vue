@@ -264,7 +264,7 @@ async function updateApp() {
   }
 }
 const homeCourtPlayers = computed(() => game.players.filter((player) =>
-  player.teamId === game.teams[0].id && player.isOnCourt && !player.isCoach,
+  player.teamId === game.teams[0].id && player.isOnCourt,
 ))
 const nextPeriodLabel = computed(() => {
   const period = (game.period ?? 1) + 1
@@ -620,7 +620,6 @@ watch(locale, (value) => {
         :timeline="game.timeline ?? []"
         :youth="game.youth ?? false"
         :team-stats="teamStats"
-        :players="game.players"
         :player-name="playerName"
         :can-undo="game.actions.length > 0"
         :player-fouls="playerFouls"

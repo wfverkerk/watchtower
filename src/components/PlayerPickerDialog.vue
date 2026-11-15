@@ -104,7 +104,7 @@ function actionLabel(action: PendingAction) {
             <h3>{{ t('picker.fieldPlayers') }}</h3>
             <div class="event-flow-grid">
               <EventFlowPlayerButton
-                v-for="player in players.filter((item) => item.isOnCourt && !item.isCoach)"
+                v-for="player in players.filter((item) => item.isOnCourt)"
                 :key="player.id"
                 :player="player"
                 :foul-count="playerFouls[player.id] ?? 0"

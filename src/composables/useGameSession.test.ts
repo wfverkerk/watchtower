@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp, h, type App } from 'vue'
-import { createInitialGameState } from '../domain/game'
+import { createInitialGameState, foulCoachId } from '../domain/game'
 import { saveGameState } from '../services/gameStorage'
 import { loadMatchEvents, saveMatchLink } from '../services/matchEventLog'
 import { loadPendingMatchSnapshots } from '../services/matchSnapshots'
@@ -105,6 +105,13 @@ describe('event flows', () => {
     session.selectRebound('none')
     expect(session.game.actions).toMatchObject([{ type: 'missed_shot', playerId: 'home-1', value: 1 }])
     expect(session.game.actions[0].groupId).toBeUndefined()
+  })
+  it('assigns a foul to the fixed coach of the team', async () => {
+    const session = await mountStartedGame()
+    session.addAction('foul', 1)
+    session.selectPlayer(foulCoachId('home'))
+    session.chooseFoulType('P')
+    expect(session.game.actions).toMatchObject([{ type: 'foul', playerId: 'coach-home', foulType: 'P' }])
   })
 })
 

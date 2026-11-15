@@ -15,7 +15,6 @@ const team: ZoebasTeam = {
   name: 'Team',
   sourceTeamId: 'source',
   playerNames: ['Sam', 'Sam'],
-  staff: [],
 }
 
 function profile(): TeamProfile {
@@ -28,7 +27,6 @@ function profile(): TeamProfile {
       { id: 'b', name: 'Sam', catalogName: 'Sam', jerseyNumber: '2', isParticipating: true, isOnCourt: false },
       { id: 'local', name: 'Local', jerseyNumber: '9', isParticipating: true, isOnCourt: false },
     ],
-    coaches: [],
   }
 }
 

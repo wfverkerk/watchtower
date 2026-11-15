@@ -36,14 +36,16 @@ export type Player = {
   jerseyNumber: string
   isOnCourt: boolean
   isParticipating?: boolean
-  isCoach?: boolean
-  coachRole?: 'coach' | 'assistant'
   statisticsPrivate?: boolean
 }
 
-export function getCoachMarker(player: Player | undefined, playerId: string): 'C' | 'AC' | null {
-  if (player?.isCoach) return player.coachRole === 'assistant' ? 'AC' : 'C'
-  return !player && playerId.startsWith('coach-') ? 'C' : null
+// A coach is no longer a team member. Fouls can still be assigned to one fixed coach per team, with the id coach-<teamId>.
+export function foulCoachId(teamId: string) {
+  return `coach-${teamId}`
+}
+
+export function isFoulCoachId(playerId: string | null) {
+  return playerId !== null && playerId.startsWith('coach-')
 }
 
 export type ShotLocation =
@@ -207,8 +209,17 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
     throw new Error('Een wedstrijd moet precies twee verschillende teams hebben.')
   }
 
-  const rawPlayers = value.players
-  const rawActions = value.actions
+  // Legacy saves can contain coaches as players; they are dropped and their fouls move to the team's fixed coach.
+  const legacyCoachIds = new Map<string, string>()
+  for (const player of value.players) {
+    if (isRecord(player) && player.isCoach === true && typeof player.id === 'string' && typeof player.teamId === 'string') {
+      legacyCoachIds.set(player.id, foulCoachId(player.teamId))
+    }
+  }
+  const rawPlayers = value.players.filter((player) => !(isRecord(player) && player.isCoach === true))
+  const rawActions = value.actions.map((action) => isRecord(action) && typeof action.playerId === 'string' && legacyCoachIds.has(action.playerId)
+    ? { ...action, playerId: legacyCoachIds.get(action.playerId) }
+    : action)
   if (value.period === undefined && value.youth === undefined && value.clock === undefined && isUnusedLegacyDemoRoster(rawPlayers, rawActions)) {
     return {
       ...createInitialGameState(locale),
@@ -242,8 +253,6 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       jerseyNumber: typeof player.jerseyNumber === 'string' ? player.jerseyNumber : '',
       isOnCourt,
       ...(player.isParticipating === false ? { isParticipating: false } : {}),
-      ...(player.isCoach === true ? { isCoach: true } : {}),
-      ...(player.coachRole === 'coach' || player.coachRole === 'assistant' ? { coachRole: player.coachRole } : {}),
       ...(player.statisticsPrivate === true ? { statisticsPrivate: true } : {}),
     }
   })
@@ -343,7 +352,7 @@ export function isPracticeGame(game: Pick<GameState, 'matchInfo'>) {
 
 export function canStartGame(game: GameState) {
   return game.teams.every((team) => {
-    const teamPlayers = game.players.filter((player) => player.teamId === team.id && !player.isCoach && player.isParticipating !== false)
+    const teamPlayers = game.players.filter((player) => player.teamId === team.id && player.isParticipating !== false)
     const active = teamPlayers.filter((player) => player.isOnCourt).length
     return active >= 2 && active <= 5
       && teamPlayers.every((player) => player.jerseyNumber !== '')
@@ -351,7 +360,7 @@ export function canStartGame(game: GameState) {
 }
 
 export function startNextPeriod(game: GameState, playerIds: string[]) {
-  const players = game.players.filter((player) => player.teamId === game.teams[0].id && !player.isCoach && player.isParticipating !== false)
+  const players = game.players.filter((player) => player.teamId === game.teams[0].id && player.isParticipating !== false)
   const selected = new Set(playerIds)
   if (selected.size < 2 || selected.size > 5 || selected.size !== playerIds.length || !playerIds.every((id) => players.some((player) => player.id === id))) {
     return false

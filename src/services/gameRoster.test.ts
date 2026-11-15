@@ -11,7 +11,6 @@ function profile(): TeamProfile {
       { id: '1', name: 'Oud', jerseyNumber: '1', isParticipating: true, isOnCourt: false },
       { id: '6', name: 'Reserve', jerseyNumber: '6', isParticipating: false, isOnCourt: false },
     ],
-    coaches: [],
   }
 }
 
@@ -39,17 +38,6 @@ describe('game roster editing', () => {
     expect(startNextPeriod(restored, ['home-1', 'home-2'])).toBe(false)
     expect(canStartGame(restored)).toBe(true)
     expect(createGameRosterDraft(restored, draft).players.find((item) => item.id === '1')?.isParticipating).toBe(false)
-  })
-
-  it('preserves existing non-prefixed player and coach ids', () => {
-    const game = createInitialGameState()
-    game.players.push({ id: 'custom', name: 'Coach', teamId: 'home', jerseyNumber: '', isOnCourt: false, isCoach: true, coachRole: 'assistant' })
-    const draft = createGameRosterDraft(game, profile())
-    const coach = draft.coaches.find((item) => item.id === 'custom')!
-    coach.isParticipating = false
-    const players = applyGameRoster(game, draft)
-    expect(players.filter((item) => item.id === 'custom')).toHaveLength(1)
-    expect(players.find((item) => item.id === 'custom')).toMatchObject({ isCoach: true, isParticipating: false })
   })
 
   it('does not duplicate migrated players stored with and without a team prefix', () => {

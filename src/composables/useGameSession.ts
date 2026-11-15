@@ -2,6 +2,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   canStartGame as isReadyToStart,
   createInitialGameState,
+  foulCoachId,
   getPlayerName,
   getPlayerFouls,
   getPeriodTeamFouls,
@@ -120,14 +121,23 @@ export function useGameSession() {
   )
   const allTeamPeople = computed(() => game.players.filter((player) => player.teamId === selectedTeamId.value))
   const teamPeople = computed(() => allTeamPeople.value.filter((player) => player.isParticipating !== false))
-  const teamPlayers = computed(() => teamPeople.value.filter((player) => !player.isCoach))
+  const teamPlayers = computed(() => teamPeople.value)
   const onCourtPlayers = computed(() => teamPlayers.value.filter((player) => player.isOnCourt))
+  const foulCoach = computed<Player>(() => ({
+    id: foulCoachId(selectedTeamId.value),
+    name: t('controls.coach'),
+    teamId: selectedTeamId.value,
+    jerseyNumber: '',
+    isOnCourt: false,
+  }))
   const pickerPlayers = computed(() => {
-    if (pendingAction.value?.type === 'foul') return editingActionId.value ? allTeamPeople.value : teamPeople.value
-    return editingActionId.value ? allTeamPeople.value.filter((player) => !player.isCoach) : onCourtPlayers.value
+    if (pendingAction.value?.type === 'foul') {
+      return [...(editingActionId.value ? allTeamPeople.value : teamPeople.value), foulCoach.value]
+    }
+    return editingActionId.value ? allTeamPeople.value : onCourtPlayers.value
   })
   const canStart = computed(() => teamSetupComplete.value && (game.period === 0
-    ? game.players.filter((player) => player.teamId === game.teams[0].id && !player.isCoach && player.isParticipating !== false).length >= 2
+    ? game.players.filter((player) => player.teamId === game.teams[0].id && player.isParticipating !== false).length >= 2
     : isReadyToStart(game)))
   const canCancelTeamSetup = computed(() => game.period !== undefined || game.gameStarted || game.actions.length > 0)
   const canStartNewMatch = computed(() => !game.gameStarted && (!!game.localFinishedAt || !!matchLink.value?.finished))
@@ -141,7 +151,7 @@ export function useGameSession() {
   const storageError = computed(() => storageErrorKey.value ? t(storageErrorKey.value) : '')
   const rosterEditProfile = computed(() => {
     const home = game.teams[0]
-    const homePlayers = game.players.filter((player) => player.teamId === home.id && !player.isCoach)
+    const homePlayers = game.players.filter((player) => player.teamId === home.id)
     const matchesGame = (profile: TeamProfile) =>
       profile.id !== selectedTeamProfileIds.value[1]
       && profile.name.trim().toLocaleLowerCase() === home.name.trim().toLocaleLowerCase()
@@ -155,7 +165,6 @@ export function useGameSession() {
           id: crypto.randomUUID(),
           name: home.name,
           players: [],
-          coaches: [],
         }
     return createGameRosterDraft(game, profile)
   })
@@ -647,15 +656,6 @@ export function useGameSession() {
         ...(player.statisticsPrivate ? { statisticsPrivate: true } : {}),
         isOnCourt: index === 1 && playerIndex < 5,
       })),
-      ...(profile.coaches ?? []).filter((coach) => coach.isParticipating).map((coach) => ({
-        id: `${teams[index].id}-coach-${coach.id}`,
-        name: coach.name.trim(),
-        teamId: teams[index].id,
-        jerseyNumber: '',
-        isOnCourt: false,
-        isCoach: true,
-        coachRole: coach.role,
-      })),
     ])
     const now = new Date()
     const matchInfo: GameMatchInfo | undefined = practice
@@ -691,7 +691,7 @@ export function useGameSession() {
       ...(matchInfo ? { matchInfo } : {}),
     }
     const isValidRoster = (teamId: string) => {
-      const teamPlayers = players.filter((player) => player.teamId === teamId && !player.isCoach)
+      const teamPlayers = players.filter((player) => player.teamId === teamId)
       return teamPlayers.length >= 2
         && teamPlayers.every((player) => player.name && /^\d{1,2}$/.test(player.jerseyNumber))
         && new Set(teamPlayers.map((player) => Number(player.jerseyNumber))).size === teamPlayers.length
@@ -742,7 +742,7 @@ export function useGameSession() {
         player.isParticipating = false
         player.isOnCourt = false
       }
-      for (const player of game.players.filter((item) => item.teamId === teamId && !item.isCoach)) {
+      for (const player of game.players.filter((item) => item.teamId === teamId)) {
         const profilePlayer = profile.players.find((item) => item.id === player.id)
           ?? profile.players.find((item) => `${teamId}-${item.id}` === player.id)
         const profilePlayerId = profilePlayer?.id ?? player.id
@@ -776,7 +776,7 @@ export function useGameSession() {
   function saveGameRoster(profile: TeamProfile) {
     const nextPlayers = applyGameRoster(game, profile)
     const homeId = game.teams[0].id
-    const onCourt = nextPlayers.filter((player) => player.teamId === homeId && !player.isCoach && player.isOnCourt)
+    const onCourt = nextPlayers.filter((player) => player.teamId === homeId && player.isOnCourt)
     if ((game.period ?? 0) > 0 && onCourt.length < 2) {
       storageErrorKey.value = 'errors.minOnCourt'
       return false
@@ -1035,7 +1035,6 @@ export function useGameSession() {
               isParticipating: true,
               isOnCourt: player.isOnCourt,
             })),
-          coaches: [],
         }))
         selectedTeamProfileIds.value = [teamProfiles.value[0].id, teamProfiles.value[1].id]
         try {

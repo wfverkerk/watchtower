@@ -37,12 +37,11 @@ describe('shared team roster', () => {
     const profile = {
       id: 'profile', name: 'Team', catalogTeamId: 'team',
       players: [{ id: 'public', name: 'Public', jerseyNumber: '1', isParticipating: true, isOnCourt: false }],
-      coaches: [],
     }
     app = createApp({ render: () => h(TeamSetupDialog, {
-      profiles: [profile, { id: 'away', name: 'Away', players: [], coaches: [] }],
+      profiles: [profile, { id: 'away', name: 'Away', players: [] }],
       selectedProfileIds: ['profile', 'away'],
-      catalogTeams: [{ id: 'team', name: 'Team', sourceTeamId: 'source', playerNames: ['Public'], staff: [] }],
+      catalogTeams: [{ id: 'team', name: 'Team', sourceTeamId: 'source', playerNames: ['Public'] }],
       catalogLoading: false, catalogError: '', canCancel: false, error: '', home: true,
     }) })
     app.mount(document.body.appendChild(document.createElement('div')))
@@ -114,7 +113,7 @@ describe('shared team roster', () => {
     let saved: unknown[] | undefined
     app = createApp({ render: () => h(TeamSetupDialog, {
       profiles: [], selectedProfileIds: ['', ''],
-      catalogTeams: [{ id: 'team', name: 'Team', sourceTeamId: 'source', playerNames: ['Anna', 'Bob'], staff: [] }],
+      catalogTeams: [{ id: 'team', name: 'Team', sourceTeamId: 'source', playerNames: ['Anna', 'Bob'] }],
       catalogLoading: false, catalogError: '', catalogCached: true, practice: true,
       canCancel: true, error: '', onSave: (...args: unknown[]) => { saved = args },
     }) })

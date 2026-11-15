@@ -39,7 +39,6 @@ describe('team profile storage', () => {
   it('round-trips profiles and selected teams through storage', () => {
     const storage = createStorage()
     const profiles = createDefaultTeamProfiles()
-    profiles[0].coaches.push({ id: 'coach-1', name: 'Willem', role: 'coach', isParticipating: true })
     saveTeamProfiles(profiles, storage)
     saveTeamProfileSelection([profiles[0].id, profiles[1].id], storage)
 
@@ -49,10 +48,10 @@ describe('team profile storage', () => {
     expect(storage.getItem(teamProfileSelectionStorageKey)).not.toBeNull()
   })
 
-  it('loads older saved profiles without a coaches list', () => {
+  it('ignores coaches in older saved profiles', () => {
     const profile = createDefaultTeamProfiles()[0]
-    const { coaches: _coaches, ...legacyProfile } = profile
-    expect(parseTeamProfiles([legacyProfile])[0].coaches).toEqual([])
+    const legacyProfile = { ...profile, coaches: [{ id: 'coach-1', name: 'Willem', role: 'coach', isParticipating: true }] }
+    expect(parseTeamProfiles([legacyProfile])[0]).not.toHaveProperty('coaches')
   })
 
   it('migrates saved rosters to participant selection and first-name display', () => {
@@ -92,7 +91,6 @@ describe('team profile storage', () => {
     const storage = createStorage()
     const profiles = createDefaultTeamProfiles()
     profiles[0].players[0].jerseyNumber = '23'
-    profiles[0].coaches.push({ id: 'custom-coach', name: 'Coach', role: 'assistant', isParticipating: false })
     const draft = { profiles, selectedProfileIds: [profiles[0].id, profiles[1].id] as [string, string], catalogTeamId: 'x12-1', jerseyBaselines: { 'x12-1': [{ position: 1, name: 'Marley', number: '23' }] } }
     saveTeamSetupDraft(draft, storage)
     expect(loadTeamSetupDraft(storage)).toEqual(draft)

@@ -1,19 +1,17 @@
 import type { GameState, Player } from '../domain/game'
-import type { TeamProfile, TeamProfileCoach, TeamProfilePlayer } from './teamProfiles'
+import type { TeamProfile, TeamProfilePlayer } from './teamProfiles'
 
-function findPlayer(players: Player[], teamId: string, id: string, coach: boolean) {
-  const prefix = coach ? `${teamId}-coach-` : `${teamId}-`
-  return players.find((player) => player.teamId === teamId && !!player.isCoach === coach && player.id === id)
-    ?? players.find((player) => player.teamId === teamId && !!player.isCoach === coach && player.id === `${prefix}${id}`)
+function findPlayer(players: Player[], teamId: string, id: string) {
+  return players.find((player) => player.teamId === teamId && player.id === id)
+    ?? players.find((player) => player.teamId === teamId && player.id === `${teamId}-${id}`)
 }
 
 export function createGameRosterDraft(game: GameState, profile: TeamProfile): TeamProfile {
   const teamId = game.teams[0].id
   const matched = new Set<string>()
   const players = profile.players.flatMap((player) => {
-    const existing = findPlayer(game.players, teamId, player.id, false)
+    const existing = findPlayer(game.players, teamId, player.id)
     if (existing && matched.has(existing.id)) return []
-    if (!existing && findPlayer(game.players, teamId, player.id, true)) return []
     if (existing) matched.add(existing.id)
     return [{
       ...player,
@@ -23,53 +21,34 @@ export function createGameRosterDraft(game: GameState, profile: TeamProfile): Te
       isOnCourt: existing?.isOnCourt ?? false,
     }]
   })
-  const coaches = profile.coaches.flatMap((coach) => {
-    const existing = findPlayer(game.players, teamId, coach.id, true)
-    if (existing && matched.has(existing.id)) return []
-    if (existing) matched.add(existing.id)
-    return [{
-      ...coach,
-      ...(existing ? { name: existing.name, role: existing.coachRole ?? 'coach' } : {}),
-      isParticipating: !!existing && existing.isParticipating !== false,
-    }]
-  })
   for (const player of game.players.filter((item) => item.teamId === teamId && !matched.has(item.id))) {
-    if (player.isCoach) {
-      coaches.push({ id: player.id, name: player.name, role: player.coachRole ?? 'coach', isParticipating: player.isParticipating !== false })
-    } else {
-      players.push({ id: player.id, name: player.name, jerseyNumber: player.jerseyNumber, isParticipating: player.isParticipating !== false, isOnCourt: player.isOnCourt, ...(player.statisticsPrivate ? { statisticsPrivate: true } : {}) })
-    }
+    players.push({ id: player.id, name: player.name, jerseyNumber: player.jerseyNumber, isParticipating: player.isParticipating !== false, isOnCourt: player.isOnCourt, ...(player.statisticsPrivate ? { statisticsPrivate: true } : {}) })
   }
-  return { ...profile, players, coaches }
+  return { ...profile, players }
 }
 
 export function applyGameRoster(game: GameState, profile: TeamProfile): Player[] {
   const teamId = game.teams[0].id
   const updated = game.players.map((player) => ({ ...player }))
-  const applyPerson = (person: TeamProfilePlayer | TeamProfileCoach, coach: boolean) => {
-    const existing = findPlayer(updated, teamId, person.id, coach)
+  const applyPlayer = (person: TeamProfilePlayer) => {
+    const existing = findPlayer(updated, teamId, person.id)
     if (!existing && !person.isParticipating) return
     const player: Player = existing ?? {
-      id: `${teamId}-${coach ? 'coach-' : ''}${person.id}`,
+      id: `${teamId}-${person.id}`,
       name: person.name.trim(),
       teamId,
       jerseyNumber: '',
       isOnCourt: false,
     }
     if (!existing) updated.push(player)
-    player.name = ('jerseyNumber' in person && (person.statisticsPrivate || player.statisticsPrivate))
+    player.name = (person.statisticsPrivate || player.statisticsPrivate)
       ? `Speler ${person.jerseyNumber || player.jerseyNumber}`
       : person.name.trim() || player.name
     player.isParticipating = person.isParticipating
     if (!person.isParticipating) player.isOnCourt = false
-    if ('jerseyNumber' in person) player.jerseyNumber = person.jerseyNumber || player.jerseyNumber
-    else {
-      player.isCoach = true
-      player.coachRole = person.role
-    }
-    if ('statisticsPrivate' in person && person.statisticsPrivate) player.statisticsPrivate = true
+    player.jerseyNumber = person.jerseyNumber || player.jerseyNumber
+    if (person.statisticsPrivate) player.statisticsPrivate = true
   }
-  profile.players.forEach((player) => applyPerson(player, false))
-  profile.coaches.forEach((coach) => applyPerson(coach, true))
+  profile.players.forEach(applyPlayer)
   return updated
 }
