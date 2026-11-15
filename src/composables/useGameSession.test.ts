@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp, h, type App } from 'vue'
-import { createInitialGameState } from '../domain/game'
+import { createInitialGameState, foulCoachId } from '../domain/game'
 import { saveGameState } from '../services/gameStorage'
 import { loadMatchEvents, saveMatchLink } from '../services/matchEventLog'
 import { loadPendingMatchSnapshots } from '../services/matchSnapshots'
@@ -59,9 +59,73 @@ describe('finishing a shared match', () => {
     session.selectPlayer('home-1')
     session.addAction('score', 2)
     session.selectPlayer('home-1')
-    session.finishShotAction()
+    session.selectAssist('none')
+    session.commitPendingAction()
     session.addOpponentScore(2)
     expect(session.game.actions.filter((action) => action.type === 'score').map((action) => action.period)).toEqual([1, 1, 1])
+  })
+})
+
+describe('event flows', () => {
+  async function mountStartedGame() {
+    const game = createInitialGameState()
+    game.gameStarted = true
+    game.period = 1
+    saveGameState(game)
+    let session!: ReturnType<typeof useGameSession>
+    app = createApp({ setup() { session = useGameSession(); return () => h('div') } })
+    app.mount(document.body.appendChild(document.createElement('div')))
+    await vi.waitFor(() => expect(session.game.gameStarted).toBe(true))
+    return session
+  }
+
+  it('asks for the rebound after a missed home shot and records a defensive rebound for the opponent', async () => {
+    const session = await mountStartedGame()
+    session.addAction('missed_shot', 2)
+    session.selectPlayer('home-2')
+    expect(session.pendingFlow.value).toEqual(['player', 'rebound', 'location'])
+    expect(session.pendingFlowIndex.value).toBe(1)
+    session.selectRebound('opponent')
+    session.commitPendingAction()
+
+    const [miss, rebound] = session.game.actions
+    expect(miss).toMatchObject({ type: 'missed_shot', playerId: 'home-2', value: 2 })
+    expect(rebound).toMatchObject({ type: 'defensive_rebound', playerId: null, teamId: 'away' })
+    expect(rebound.groupId).toBeDefined()
+    expect(rebound.groupId).toBe(miss.groupId)
+    session.undoLastAction()
+    expect(session.game.actions).toEqual([])
+  })
+
+  it('keeps a missed free throw without a location and without a rebound when none is chosen', async () => {
+    const session = await mountStartedGame()
+    session.addAction('missed_shot', 1)
+    session.selectPlayer('home-1')
+    expect(session.pendingFlow.value).toEqual(['player', 'rebound'])
+    session.selectRebound('none')
+    expect(session.game.actions).toMatchObject([{ type: 'missed_shot', playerId: 'home-1', value: 1 }])
+    expect(session.game.actions[0].groupId).toBeUndefined()
+  })
+  it('assigns a foul to the fixed coach of the team', async () => {
+    const session = await mountStartedGame()
+    session.addAction('foul', 1)
+    session.selectPlayer(foulCoachId('home'))
+    session.chooseFoulType('P')
+    expect(session.game.actions).toMatchObject([{ type: 'foul', playerId: 'coach-home', foulType: 'P' }])
+  })
+  it('limits a field player to five personal fouls', async () => {
+    const session = await mountStartedGame()
+    for (let index = 0; index < 5; index++) {
+      session.addAction('foul', 1)
+      session.selectPlayer('home-1')
+      session.chooseFoulType('P')
+    }
+    session.addAction('foul', 1)
+    session.selectPlayer('home-1')
+    session.chooseFoulType('P')
+    expect(session.game.actions.filter((action) => action.foulType === 'P')).toHaveLength(5)
+    session.chooseFoulType('U')
+    expect(session.game.actions.at(-1)).toMatchObject({ type: 'foul', foulType: 'U', playerId: 'home-1' })
   })
 })
 

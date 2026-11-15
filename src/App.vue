@@ -116,6 +116,9 @@ const {
   pendingAction,
   pendingScorerId,
   pendingAssistId,
+  pendingReboundId,
+  pendingFlow,
+  pendingFlowIndex,
   pendingShotLocation,
   pendingFoulType,
   pendingTurnoverType,
@@ -144,10 +147,12 @@ const {
   addOpponentScore,
   removeOpponentScore,
   selectPlayer,
-  selectScorer,
-  finishShotAction,
-  finishFoulAction,
-  finishTurnoverAction,
+  selectAssist,
+  selectRebound,
+  chooseFoulType,
+  chooseTurnoverType,
+  goToFlowStep,
+  commitPendingAction,
   cancelPendingAction,
   editAction,
   undoLastAction,
@@ -259,7 +264,7 @@ async function updateApp() {
   }
 }
 const homeCourtPlayers = computed(() => game.players.filter((player) =>
-  player.teamId === game.teams[0].id && player.isOnCourt && !player.isCoach,
+  player.teamId === game.teams[0].id && player.isOnCourt,
 ))
 const nextPeriodLabel = computed(() => {
   const period = (game.period ?? 1) + 1
@@ -615,7 +620,6 @@ watch(locale, (value) => {
         :timeline="game.timeline ?? []"
         :youth="game.youth ?? false"
         :team-stats="teamStats"
-        :players="game.players"
         :player-name="playerName"
         :can-undo="game.actions.length > 0"
         :player-fouls="playerFouls"
@@ -635,24 +639,28 @@ watch(locale, (value) => {
 
     <PlayerPickerDialog
       v-if="pendingAction"
-      v-model:assist-player-id="pendingAssistId"
-      v-model:shot-location="pendingShotLocation"
       :action="pendingAction"
+      :flow="pendingFlow"
+      :step-index="pendingFlowIndex"
       :team-name="displayTeamName(selectedTeam)"
       :players="pickerPlayers"
       :scorer-id="pendingScorerId"
+      :assist-player-id="pendingAssistId"
+      :rebound-id="pendingReboundId"
       :editing="editingActionId !== null"
       :foul-type="pendingFoulType"
       :turnover-type="pendingTurnoverType"
+      :shot-location="pendingShotLocation"
       :player-fouls="playerFouls"
       @cancel="cancelPendingAction"
+      @go-to-step="goToFlowStep"
       @select-player="selectPlayer"
-      @select-scorer="selectScorer"
-      @update:foul-type="pendingFoulType = $event"
-      @update:turnover-type="pendingTurnoverType = $event"
-      @finish-shot="finishShotAction"
-      @finish-foul="finishFoulAction"
-      @finish-turnover="finishTurnoverAction"
+      @select-assist="selectAssist"
+      @select-rebound="selectRebound"
+      @update:shot-location="pendingShotLocation = $event"
+      @select-foul-type="chooseFoulType"
+      @select-turnover-type="chooseTurnoverType"
+      @finish="commitPendingAction"
     />
     <LineupDialog
       v-if="lineupEditorOpen"

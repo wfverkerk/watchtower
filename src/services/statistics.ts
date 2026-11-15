@@ -95,7 +95,6 @@ export async function restoreMyMatchSnapshot(matchId: string, initialGame: GameS
         name: old?.name ?? `Speler ${typeof player.jerseyNumber === 'string' ? player.jerseyNumber : ''}`,
         isOnCourt: old?.isOnCourt ?? false,
         isParticipating: old?.isParticipating ?? true,
-        ...(old?.coachRole ? { coachRole: old.coachRole } : {}),
       }
     }),
     actions: value.snapshot.actions,

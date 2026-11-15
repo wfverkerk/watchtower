@@ -320,7 +320,7 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
         <article v-for="match in visibleHistory" :key="match.id" class="statistics-match">
           <strong>{{ matchLabel(match) }}</strong>
           <p class="statistics-hint">{{ t('statistics.snapshotTime', { date: new Date(match.snapshotUpdatedAt).toLocaleString() }) }}</p>
-          <div v-for="player in match.game.players.filter((p) => p.teamId === match.game.teams[0].id && !p.isCoach)" :key="player.id" class="statistics-link">
+          <div v-for="player in match.game.players.filter((p) => p.teamId === match.game.teams[0].id)" :key="player.id" class="statistics-link">
             <span>#{{ player.jerseyNumber || '—' }}</span>
             <select :value="matchPlayerId(match, player.id, roster) ?? ''" :disabled="!match.canEdit || busy" :aria-label="t('statistics.linkPlayer', { number: player.jerseyNumber })" @change="updateLink(match, player.id, $event)">
               <option value="">{{ t('statistics.unlinked') }}</option>

@@ -44,7 +44,7 @@ export function matchPlayerId(match: Pick<StatisticsMatch, 'links'>, localId: st
 
 export function playerMatchStats(match: StatisticsMatch, playerId: string, roster: StatisticsPlayer[]) {
   const localPlayer = match.game.players.find((player) =>
-    player.teamId === match.game.teams[0].id && !player.isCoach
+    player.teamId === match.game.teams[0].id
     && matchPlayerId(match, player.id, roster) === playerId)
   return localPlayer
     ? calculatePlayerStats(match.game.actions.filter((action) => action.teamId === match.game.teams[0].id), localPlayer.id)

@@ -2,16 +2,19 @@ import { describe, expect, it } from 'vitest'
 import {
   canStartGame,
   createInitialGameState,
+  foulCoachId,
   getRecentActions,
-  getCoachMarker,
   getScore,
   getPlayerFouls,
   getPeriodTeamFouls,
   getTeamStats,
   parseGameState,
+  personalFoulNumbers,
   startNextPeriod,
   undoLastAction,
+  updateMissedShotPlay,
   updateScoringPlay,
+  type FoulType,
   type GameAction,
 } from './game'
 import { gameStorageKey, loadGameState, saveGameState } from '../services/gameStorage'
@@ -26,16 +29,6 @@ function makeAction(overrides: Partial<GameAction> & Pick<GameAction, 'type' | '
 }
 
 describe('game domain rules', () => {
-  it('identifies coaches in the match overview, including legacy coach actions', () => {
-    const player = { id: 'p1', name: 'Alex', teamId: 'home', jerseyNumber: '5', isOnCourt: false }
-    expect(getCoachMarker({ ...player, isCoach: true, coachRole: 'coach' }, 'p1')).toBe('C')
-    expect(getCoachMarker({ ...player, isCoach: true, coachRole: 'assistant' }, 'p1')).toBe('AC')
-    expect(getCoachMarker({ ...player, isCoach: true }, 'p1')).toBe('C')
-    expect(getCoachMarker(player, 'p1')).toBeNull()
-    expect(getCoachMarker(undefined, 'coach-home')).toBe('C')
-    expect(getCoachMarker(undefined, 'unknown')).toBeNull()
-  })
-
   it('stores unattributed opponent scores without inventing a player', () => {
     const game = createInitialGameState()
     game.actions = [1, 2, 3].map((value) => makeAction({
@@ -47,6 +40,36 @@ describe('game domain rules', () => {
     expect(getScore({ ...restored, actions: undoLastAction(restored.actions) })[1].points).toBe(3)
     expect(() => parseGameState({ ...game, actions: [{ ...game.actions[0], type: 'foul' }] })).toThrow()
     expect(() => parseGameState({ ...game, actions: [{ ...game.actions[0], teamId: 'home' }] })).toThrow()
+  })
+
+  it('links a rebound to its missed shot and removes it again when no rebound is chosen', () => {
+    const ids = ['group-1', 'rebound-1']
+    const createId = () => ids.shift() ?? 'unused'
+    const missed: GameAction[] = [makeAction({ id: 'miss-1', type: 'missed_shot', teamId: 'home', playerId: 'home-2', value: 3 })]
+    const withRebound = updateMissedShotPlay(missed, {
+      actionId: 'miss-1', teamId: 'home', otherTeamId: 'away', shooterId: 'home-2', value: 3,
+      rebound: 'home-4', period: 1, createdAt: 2, createId,
+    })
+    expect(withRebound).toEqual([
+      expect.objectContaining({ id: 'miss-1', type: 'missed_shot', groupId: 'group-1' }),
+      expect.objectContaining({ id: 'rebound-1', type: 'offensive_rebound', teamId: 'home', playerId: 'home-4', groupId: 'group-1' }),
+    ])
+    const withoutRebound = updateMissedShotPlay(withRebound, {
+      actionId: 'miss-1', teamId: 'home', otherTeamId: 'away', shooterId: 'home-2', value: 3,
+      rebound: 'none', period: 1, createdAt: 3, createId,
+    })
+    expect(withoutRebound).toEqual([expect.objectContaining({ id: 'miss-1' })])
+    expect(withoutRebound[0].groupId).toBeUndefined()
+  })
+
+  it('records a rebound by the other team as a defensive rebound without a player', () => {
+    let nextId = 0
+    const actions = updateMissedShotPlay([], {
+      teamId: 'home', otherTeamId: 'away', shooterId: 'home-1', value: 2,
+      rebound: 'opponent', period: 1, createdAt: 1, createId: () => `id-${++nextId}`,
+    })
+    const restored = parseGameState({ ...createInitialGameState(), actions, gameStarted: true })
+    expect(restored.actions[1]).toMatchObject({ type: 'defensive_rebound', teamId: 'away', playerId: null })
   })
 
   it('calculates team scores and statistics from recorded actions', () => {
@@ -229,7 +252,7 @@ describe('game domain rules', () => {
     const game = createInitialGameState()
     game.youth = true
     game.actions = [1, 1, 2, 2, 3, 7, 8, 9].map((period, index) => makeAction({
-      id: String(index), playerId: 'home-1', teamId: 'home', type: 'foul', period,
+      id: String(index), playerId: 'home-1', teamId: 'home', type: 'foul', period, foulType: 'P',
     }))
     expect(getPlayerFouls(game.actions)['home-1']).toBe(8)
     game.period = 2
@@ -243,6 +266,29 @@ describe('game domain rules', () => {
     expect(getPeriodTeamFouls(game)['home']).toBe(1)
     game.period = 5
     expect(getPeriodTeamFouls(game)['home']).toBe(3)
+  })
+
+  it('counts only field-player fouls other than technicals toward team fouls, and personal fouls per player', () => {
+    const game = createInitialGameState()
+    const foul = (id: string, playerId: string, foulType: FoulType) => makeAction({
+      id, playerId, teamId: 'home', type: 'foul', foulType, period: 1,
+    })
+    game.actions = [
+      foul('p1', 'home-1', 'P'),
+      foul('p2', 'home-1', 'P'),
+      foul('u', 'home-2', 'U'),
+      foul('d', 'home-3', 'D'),
+      foul('t', 'home-4', 'T'),
+      foul('b', 'home-5', 'B'),
+      foul('bd', 'home-5', 'BD'),
+      foul('c', 'coach-home', 'C'),
+      foul('cd', 'coach-home', 'D'),
+    ]
+    expect(getPeriodTeamFouls(game).home).toBe(4)
+    expect(getTeamStats(game)[0].fouls).toBe(4)
+    expect(getPlayerFouls(game.actions)).toMatchObject({ 'home-1': 2 })
+    expect(getPlayerFouls(game.actions)['home-4']).toBeUndefined()
+    expect(personalFoulNumbers(game.actions).get('p2')).toBe(2)
   })
 
   it('round-trips period, clock and fouls and rejects invalid stored values', () => {
@@ -274,25 +320,15 @@ describe('game domain rules', () => {
     expect(parseGameState(game).players[0].id).toBe('h1')
   })
 
-  it('does not count selected coaches as roster players when starting a game', () => {
-    const game = createInitialGameState()
-    game.players.push({
-      id: 'home-coach-1',
-      name: 'Willem',
-      teamId: 'home',
-      jerseyNumber: '',
-      isOnCourt: false,
-      isCoach: true,
-      coachRole: 'assistant',
+  it('moves fouls of legacy coach players to the fixed coach of their team', () => {
+    const initial = createInitialGameState()
+    const restored = parseGameState({
+      ...initial,
+      players: [...initial.players, { id: 'home-coach-1', name: 'Willem', teamId: 'home', jerseyNumber: '', isOnCourt: false, isCoach: true }],
+      actions: [{ id: 'foul-1', teamId: 'home', playerId: 'home-coach-1', type: 'foul', value: 1, createdAt: 1, foulType: 'P' }],
     })
-
-    expect(canStartGame(game)).toBe(true)
-    expect(parseGameState(game).players[parseGameState(game).players.length - 1]).toMatchObject({
-      id: 'home-coach-1',
-      name: 'Willem',
-      isCoach: true,
-      coachRole: 'assistant',
-    })
+    expect(restored.players.some((player) => player.id === 'home-coach-1')).toBe(false)
+    expect(restored.actions[0].playerId).toBe(foulCoachId('home'))
   })
 
   it('normalizes older saved rosters and rejects malformed game data', () => {
@@ -342,13 +378,13 @@ describe('game domain rules', () => {
       type: 'foul',
       teamId: 'home',
       playerId: 'coach-home',
-      foulType: 'TF',
+      foulType: 'TF' as unknown as FoulType,
     }))
 
     expect(parseGameState(game).actions[0]).toMatchObject({
       type: 'foul',
       playerId: 'coach-home',
-      foulType: 'TF',
+      foulType: 'T',
     })
     const legacy = { ...game, actions: [{ ...game.actions[0], foulType: undefined }] }
     expect(parseGameState(legacy).actions[0]).not.toHaveProperty('foulType')

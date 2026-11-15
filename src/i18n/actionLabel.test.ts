@@ -33,17 +33,16 @@ describe('localization', () => {
     expect(getActionTranslation({ type: 'score', value: 5 }, 'cs').key).toBe('actions.scoreOther')
   })
 
-  it('labels each foul type in the activity feed', () => {
-    const expected = {
-      P: 'actions.personalFoul',
-      TF: 'actions.technicalFoul',
-      U: 'actions.unsportsmanlikeFoul',
-      D: 'actions.disqualifyingFoul',
-    } as const
-
-    for (const [foulType, key] of Object.entries(expected)) {
-      expect(getActionTranslation({ type: 'foul', value: 1, foulType: foulType as keyof typeof expected }, 'nl').key).toBe(key)
-    }
+  it('labels each foul type by player role in the activity feed', () => {
+    const field = { type: 'foul' as const, value: 1, playerId: 'home-1' }
+    expect(getActionTranslation({ ...field, foulType: 'P' }, 'nl', 2)).toEqual({ key: 'actions.personalFoul', params: { number: 2 } })
+    expect(getActionTranslation({ ...field, foulType: 'U' }, 'nl').key).toBe('actions.unsportsmanlikeFoul')
+    expect(getActionTranslation({ ...field, foulType: 'T' }, 'nl')).toEqual({ key: 'actions.technicalFoul', params: { code: 'T' } })
+    expect(getActionTranslation({ ...field, foulType: 'D' }, 'nl').key).toBe('actions.disqualifyingFoul')
+    expect(getActionTranslation({ ...field, playerId: 'coach-home', foulType: 'D' }, 'nl').key).toBe('actions.disqualifyingFoul')
+    expect(getActionTranslation({ ...field, playerId: 'coach-home', foulType: 'C' }, 'nl')).toEqual({ key: 'actions.technicalFoul', params: { code: 'C' } })
+    expect(getActionTranslation({ ...field, foulType: 'BD' }, 'nl').key).toBe('actions.disqualifyingFoul')
+    expect(getActionTranslation({ ...field, foulType: 'B' }, 'nl')).toEqual({ key: 'actions.technicalFoul', params: { code: 'B' } })
     expect(getActionTranslation({ type: 'foul', value: 1 }, 'nl').key).toBe('actions.foul')
   })
 

@@ -2,6 +2,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   canStartGame as isReadyToStart,
   createInitialGameState,
+  foulCoachId,
   getPlayerName,
   getPlayerFouls,
   getPeriodTeamFouls,
@@ -11,7 +12,9 @@ import {
   parseGameState,
   startNextPeriod,
   undoLastAction as undoActions,
+  isReboundType,
   updateActionPlayer,
+  updateMissedShotPlay,
   updateScoringPlay,
   type GameAction,
   type FoulType,
@@ -24,6 +27,7 @@ import {
 } from '../domain/game'
 import { clockRemaining, formatClock, isYouthTeam, newPeriodClock, pauseClock, reconcileClock, startClock } from '../domain/gameClock'
 import { lineupChanges } from '../domain/matchTimeline'
+import { getEventFlow } from '../domain/eventFlow'
 import { localDateKey } from '../domain/schedule'
 import { loadGameState, saveGameState } from '../services/gameStorage'
 import { loadLocalMatches, saveLocalMatch } from '../services/localMatches'
@@ -74,8 +78,11 @@ export function useGameSession() {
   const game = reactive<GameState>(createInitialGameState(currentLocale.value))
   const selectedTeamId = ref(game.teams[0].id)
   const pendingAction = ref<PendingAction | null>(null)
+  const pendingFlow = computed(() => pendingAction.value ? getEventFlow(pendingAction.value) : [])
+  const pendingFlowIndex = ref(0)
   const pendingScorerId = ref('')
   const pendingAssistId = ref<string | 'none' | null>(null)
+  const pendingReboundId = ref<string | 'opponent' | 'none' | null>(null)
   const pendingShotLocation = ref<ShotLocation | null>(null)
   const pendingFoulType = ref<FoulType | null>(null)
   const pendingTurnoverType = ref<TurnoverType>('turnover')
@@ -114,14 +121,23 @@ export function useGameSession() {
   )
   const allTeamPeople = computed(() => game.players.filter((player) => player.teamId === selectedTeamId.value))
   const teamPeople = computed(() => allTeamPeople.value.filter((player) => player.isParticipating !== false))
-  const teamPlayers = computed(() => teamPeople.value.filter((player) => !player.isCoach))
+  const teamPlayers = computed(() => teamPeople.value)
   const onCourtPlayers = computed(() => teamPlayers.value.filter((player) => player.isOnCourt))
+  const foulCoach = computed<Player>(() => ({
+    id: foulCoachId(selectedTeamId.value),
+    name: t('controls.coach'),
+    teamId: selectedTeamId.value,
+    jerseyNumber: '',
+    isOnCourt: false,
+  }))
   const pickerPlayers = computed(() => {
-    if (pendingAction.value?.type === 'foul') return editingActionId.value ? allTeamPeople.value : teamPeople.value
-    return editingActionId.value ? allTeamPeople.value.filter((player) => !player.isCoach) : onCourtPlayers.value
+    if (pendingAction.value?.type === 'foul') {
+      return [...(editingActionId.value ? allTeamPeople.value : teamPeople.value), foulCoach.value]
+    }
+    return editingActionId.value ? allTeamPeople.value : onCourtPlayers.value
   })
   const canStart = computed(() => teamSetupComplete.value && (game.period === 0
-    ? game.players.filter((player) => player.teamId === game.teams[0].id && !player.isCoach && player.isParticipating !== false).length >= 2
+    ? game.players.filter((player) => player.teamId === game.teams[0].id && player.isParticipating !== false).length >= 2
     : isReadyToStart(game)))
   const canCancelTeamSetup = computed(() => game.period !== undefined || game.gameStarted || game.actions.length > 0)
   const canStartNewMatch = computed(() => !game.gameStarted && (!!game.localFinishedAt || !!matchLink.value?.finished))
@@ -135,7 +151,7 @@ export function useGameSession() {
   const storageError = computed(() => storageErrorKey.value ? t(storageErrorKey.value) : '')
   const rosterEditProfile = computed(() => {
     const home = game.teams[0]
-    const homePlayers = game.players.filter((player) => player.teamId === home.id && !player.isCoach)
+    const homePlayers = game.players.filter((player) => player.teamId === home.id)
     const matchesGame = (profile: TeamProfile) =>
       profile.id !== selectedTeamProfileIds.value[1]
       && profile.name.trim().toLocaleLowerCase() === home.name.trim().toLocaleLowerCase()
@@ -149,7 +165,6 @@ export function useGameSession() {
           id: crypto.randomUUID(),
           name: home.name,
           players: [],
-          coaches: [],
         }
     return createGameRosterDraft(game, profile)
   })
@@ -366,8 +381,10 @@ export function useGameSession() {
 
   function cancelPendingAction() {
     pendingAction.value = null
+    pendingFlowIndex.value = 0
     pendingScorerId.value = ''
     pendingAssistId.value = null
+    pendingReboundId.value = null
     pendingShotLocation.value = null
     pendingFoulType.value = null
     pendingTurnoverType.value = 'turnover'
@@ -380,10 +397,12 @@ export function useGameSession() {
     selectedTeamId.value = game.teams[0].id
     editingActionId.value = null
     pendingAction.value = { type, value }
+    pendingFlowIndex.value = 0
     pendingScorerId.value = ''
-    pendingAssistId.value = type === 'score' && value > 1 ? 'none' : null
+    pendingAssistId.value = null
+    pendingReboundId.value = null
     pendingShotLocation.value = null
-    pendingFoulType.value = type === 'foul' ? 'P' : null
+    pendingFoulType.value = null
     pendingTurnoverType.value = 'turnover'
   }
 
@@ -410,46 +429,125 @@ export function useGameSession() {
     game.actions = game.actions.filter((item) => item.id !== action.id)
   }
 
-  function selectPlayer(playerId: string) {
-    const action = pendingAction.value
-    if (!action || (!game.gameStarted && !matchLink.value?.finished)) return
-    if (action.type === 'foul' || action.type === 'turnover') {
-      pendingScorerId.value = playerId
+  // Each answer moves to the next question; the last question saves the event.
+  function advanceFlow() {
+    if (pendingFlowIndex.value < pendingFlow.value.length - 1) {
+      pendingFlowIndex.value += 1
       return
     }
-    if (action.type === 'score') {
-      selectScorer(playerId)
-      return
-    }
-    if (action.type === 'missed_shot' && action.value > 1) {
-      pendingScorerId.value = playerId
-      return
-    }
+    commitPendingAction()
+  }
 
-    if (editingActionId.value) {
-      game.actions = updateActionPlayer(game.actions, editingActionId.value, playerId)
+  function goToFlowStep(index: number) {
+    if (index >= 0 && index <= pendingFlowIndex.value) pendingFlowIndex.value = index
+  }
+
+  function selectPlayer(playerId: string) {
+    if (!pendingAction.value || (!game.gameStarted && !matchLink.value?.finished)) return
+    pendingScorerId.value = playerId
+    if (pendingAssistId.value === playerId) pendingAssistId.value = null
+    advanceFlow()
+  }
+
+  function selectAssist(playerId: string | 'none') {
+    if (!pendingAction.value) return
+    pendingAssistId.value = playerId
+    advanceFlow()
+  }
+
+  function selectRebound(playerId: string | 'opponent' | 'none') {
+    if (!pendingAction.value) return
+    pendingReboundId.value = playerId
+    advanceFlow()
+  }
+
+  function chooseFoulType(foulType: FoulType) {
+    if (pendingAction.value?.type !== 'foul') return
+    if (foulType === 'P' && (playerFouls.value[pendingScorerId.value] ?? 0) >= 5
+      && !(editingActionId.value && pendingFoulType.value === 'P')) return
+    pendingFoulType.value = foulType
+    advanceFlow()
+  }
+
+  function chooseTurnoverType(turnoverType: TurnoverType) {
+    if (pendingAction.value?.type !== 'turnover') return
+    pendingTurnoverType.value = turnoverType
+    advanceFlow()
+  }
+
+  function commitPendingAction() {
+    const action = pendingAction.value
+    if (!action || !pendingScorerId.value || (!game.gameStarted && !matchLink.value?.finished)) return
+    if (action.type === 'foul' && !pendingFoulType.value) return
+    if (action.type === 'score') {
+      commitScore(action)
+    } else if (action.type === 'missed_shot') {
+      commitMissedShot(action)
     } else {
-      game.actions.push({
-        id: crypto.randomUUID(),
-        playerId,
-        teamId: selectedTeamId.value,
-        type: action.type,
-        value: action.value,
-        createdAt: Date.now(),
-      })
+      commitPlayerAction(action)
     }
     cancelPendingAction()
   }
 
-  function finishFoulAction() {
-    const action = pendingAction.value
-    if (action?.type !== 'foul' || !pendingScorerId.value || !pendingFoulType.value) return
+  function commitScore(action: PendingAction) {
+    if (action.value === 1) {
+      if (editingActionId.value) {
+        game.actions = updateActionPlayer(game.actions, editingActionId.value, pendingScorerId.value)
+        return
+      }
+      game.actions.push({
+        id: crypto.randomUUID(),
+        playerId: pendingScorerId.value,
+        teamId: selectedTeamId.value,
+        type: 'score',
+        value: action.value,
+        createdAt: Date.now(),
+        period: Math.max(1, game.period ?? 1),
+      })
+      notifyScore(selectedTeamId.value, 1)
+      return
+    }
+    const shotLocation = pendingShotLocation.value ?? undefined
+    game.actions = updateScoringPlay(game.actions, {
+      actionId: editingActionId.value ?? undefined,
+      teamId: selectedTeamId.value,
+      scorerId: pendingScorerId.value,
+      value: action.value,
+      assistPlayerId: pendingAssistId.value === 'none' ? null : pendingAssistId.value,
+      ...(shotLocation ? { shotLocation } : {}),
+      period: Math.max(1, game.period ?? 1),
+      createdAt: Date.now(),
+      createId: () => crypto.randomUUID(),
+    })
+    if (!editingActionId.value && (action.value === 2 || action.value === 3)) {
+      notifyScore(selectedTeamId.value, action.value)
+    }
+  }
 
-    if (editingActionId.value) {
-      game.actions = game.actions.map((item) => item.id === editingActionId.value
-        ? { ...item, playerId: pendingScorerId.value, foulType: pendingFoulType.value ?? undefined }
-        : item)
-    } else {
+  function commitMissedShot(action: PendingAction) {
+    const shotLocation = pendingShotLocation.value ?? undefined
+    game.actions = updateMissedShotPlay(game.actions, {
+      actionId: editingActionId.value ?? undefined,
+      teamId: selectedTeamId.value,
+      otherTeamId: game.teams.find((team) => team.id !== selectedTeamId.value)?.id ?? selectedTeamId.value,
+      shooterId: pendingScorerId.value,
+      value: action.value,
+      rebound: pendingReboundId.value,
+      ...(shotLocation ? { shotLocation } : {}),
+      period: Math.max(1, game.period ?? 1),
+      createdAt: Date.now(),
+      createId: () => crypto.randomUUID(),
+    })
+  }
+
+  function commitPlayerAction(action: PendingAction) {
+    if (action.type === 'foul') {
+      if (editingActionId.value) {
+        game.actions = game.actions.map((item) => item.id === editingActionId.value
+          ? { ...item, playerId: pendingScorerId.value, foulType: pendingFoulType.value ?? undefined }
+          : item)
+        return
+      }
       game.actions.push({
         id: crypto.randomUUID(),
         playerId: pendingScorerId.value,
@@ -457,109 +555,48 @@ export function useGameSession() {
         type: action.type,
         value: action.value,
         createdAt: Date.now(),
-        foulType: pendingFoulType.value,
+        foulType: pendingFoulType.value ?? undefined,
         period: Math.max(1, game.period ?? 1),
       })
+      return
     }
-    cancelPendingAction()
-  }
-
-  function finishTurnoverAction() {
-    if (pendingAction.value?.type !== 'turnover' || !pendingScorerId.value) return
-    if (editingActionId.value) {
-      game.actions = game.actions.map((item) => item.id === editingActionId.value
-        ? { ...item, playerId: pendingScorerId.value, turnoverType: pendingTurnoverType.value }
-        : item)
-    } else {
+    if (action.type === 'turnover') {
+      if (editingActionId.value) {
+        game.actions = game.actions.map((item) => item.id === editingActionId.value
+          ? { ...item, playerId: pendingScorerId.value, turnoverType: pendingTurnoverType.value }
+          : item)
+        return
+      }
       game.actions.push({
         id: crypto.randomUUID(),
         playerId: pendingScorerId.value,
         teamId: selectedTeamId.value,
         type: 'turnover',
-        value: pendingAction.value.value,
+        value: action.value,
         createdAt: Date.now(),
         turnoverType: pendingTurnoverType.value,
       })
-    }
-    cancelPendingAction()
-  }
-
-  function selectScorer(playerId: string) {
-    const action = pendingAction.value
-    if (!action || action.type !== 'score') return
-    if (action.value === 1) {
-      if (editingActionId.value) {
-        game.actions = updateActionPlayer(game.actions, editingActionId.value, playerId)
-      } else {
-        game.actions.push({
-          id: crypto.randomUUID(),
-          playerId,
-          teamId: selectedTeamId.value,
-          type: 'score',
-          value: action.value,
-          createdAt: Date.now(),
-          period: Math.max(1, game.period ?? 1),
-        })
-        notifyScore(selectedTeamId.value, 1)
-      }
-      cancelPendingAction()
       return
     }
-    pendingScorerId.value = playerId
-    if (pendingAssistId.value === playerId) pendingAssistId.value = null
-  }
-
-  function finishShotAction() {
-    const action = pendingAction.value
-    if (
-      !action
-      || (action.type !== 'score' && action.type !== 'missed_shot')
-      || action.value <= 1
-      || !pendingScorerId.value
-      || (action.type === 'score' && pendingAssistId.value === null)
-    ) return
-
-    const shotLocation = pendingShotLocation.value ?? undefined
-    if (action.type === 'score') {
-      game.actions = updateScoringPlay(game.actions, {
-        actionId: editingActionId.value ?? undefined,
-        teamId: selectedTeamId.value,
-        scorerId: pendingScorerId.value,
-        value: action.value,
-        assistPlayerId: pendingAssistId.value === 'none' ? null : pendingAssistId.value,
-        ...(shotLocation ? { shotLocation } : {}),
-        period: Math.max(1, game.period ?? 1),
-        createdAt: Date.now(),
-        createId: () => crypto.randomUUID(),
-      })
-      if (!editingActionId.value && (action.value === 2 || action.value === 3)) {
-        notifyScore(selectedTeamId.value, action.value)
-      }
-    } else if (editingActionId.value) {
-      game.actions = game.actions.map((item) => {
-        if (item.id !== editingActionId.value) return item
-        const updated = { ...item, playerId: pendingScorerId.value }
-        delete updated.shotLocation
-        return { ...updated, ...(shotLocation ? { shotLocation } : {}) }
-      })
-    } else {
-      game.actions.push({
-        id: crypto.randomUUID(),
-        playerId: pendingScorerId.value,
-        teamId: selectedTeamId.value,
-        type: 'missed_shot',
-        value: action.value,
-        createdAt: Date.now(),
-        shotLocation,
-      })
+    if (editingActionId.value) {
+      game.actions = updateActionPlayer(game.actions, editingActionId.value, pendingScorerId.value)
+      return
     }
-    cancelPendingAction()
+    game.actions.push({
+      id: crypto.randomUUID(),
+      playerId: pendingScorerId.value,
+      teamId: selectedTeamId.value,
+      type: action.type,
+      value: action.value,
+      createdAt: Date.now(),
+    })
   }
 
   function editAction(action: GameAction) {
     if (action.playerId === null) return
     selectedTeamId.value = action.teamId
     pendingAction.value = { type: action.type, value: action.value }
+    pendingFlowIndex.value = 0
     editingActionId.value = action.id
     pendingScorerId.value = action.playerId
     const assist = action.groupId
@@ -567,6 +604,12 @@ export function useGameSession() {
       : undefined
     pendingAssistId.value = action.type === 'score' && action.value > 1
       ? assist?.playerId ?? 'none'
+      : null
+    const rebound = action.type === 'missed_shot' && action.groupId
+      ? game.actions.find((item) => item.groupId === action.groupId && isReboundType(item.type))
+      : undefined
+    pendingReboundId.value = action.type === 'missed_shot'
+      ? rebound ? rebound.playerId ?? 'opponent' : 'none'
       : null
     pendingShotLocation.value = (action.type === 'score' || action.type === 'missed_shot') && action.value > 1
       ? action.shotLocation ?? null
@@ -616,15 +659,6 @@ export function useGameSession() {
         ...(player.statisticsPrivate ? { statisticsPrivate: true } : {}),
         isOnCourt: index === 1 && playerIndex < 5,
       })),
-      ...(profile.coaches ?? []).filter((coach) => coach.isParticipating).map((coach) => ({
-        id: `${teams[index].id}-coach-${coach.id}`,
-        name: coach.name.trim(),
-        teamId: teams[index].id,
-        jerseyNumber: '',
-        isOnCourt: false,
-        isCoach: true,
-        coachRole: coach.role,
-      })),
     ])
     const now = new Date()
     const matchInfo: GameMatchInfo | undefined = practice
@@ -660,7 +694,7 @@ export function useGameSession() {
       ...(matchInfo ? { matchInfo } : {}),
     }
     const isValidRoster = (teamId: string) => {
-      const teamPlayers = players.filter((player) => player.teamId === teamId && !player.isCoach)
+      const teamPlayers = players.filter((player) => player.teamId === teamId)
       return teamPlayers.length >= 2
         && teamPlayers.every((player) => player.name && /^\d{1,2}$/.test(player.jerseyNumber))
         && new Set(teamPlayers.map((player) => Number(player.jerseyNumber))).size === teamPlayers.length
@@ -711,7 +745,7 @@ export function useGameSession() {
         player.isParticipating = false
         player.isOnCourt = false
       }
-      for (const player of game.players.filter((item) => item.teamId === teamId && !item.isCoach)) {
+      for (const player of game.players.filter((item) => item.teamId === teamId)) {
         const profilePlayer = profile.players.find((item) => item.id === player.id)
           ?? profile.players.find((item) => `${teamId}-${item.id}` === player.id)
         const profilePlayerId = profilePlayer?.id ?? player.id
@@ -745,7 +779,7 @@ export function useGameSession() {
   function saveGameRoster(profile: TeamProfile) {
     const nextPlayers = applyGameRoster(game, profile)
     const homeId = game.teams[0].id
-    const onCourt = nextPlayers.filter((player) => player.teamId === homeId && !player.isCoach && player.isOnCourt)
+    const onCourt = nextPlayers.filter((player) => player.teamId === homeId && player.isOnCourt)
     if ((game.period ?? 0) > 0 && onCourt.length < 2) {
       storageErrorKey.value = 'errors.minOnCourt'
       return false
@@ -1004,7 +1038,6 @@ export function useGameSession() {
               isParticipating: true,
               isOnCourt: player.isOnCourt,
             })),
-          coaches: [],
         }))
         selectedTeamProfileIds.value = [teamProfiles.value[0].id, teamProfiles.value[1].id]
         try {
@@ -1200,6 +1233,9 @@ export function useGameSession() {
     pendingAction,
     pendingScorerId,
     pendingAssistId,
+    pendingReboundId,
+    pendingFlow,
+    pendingFlowIndex,
     pendingShotLocation,
     editingActionId,
     lineupEditorOpen,
@@ -1229,10 +1265,12 @@ export function useGameSession() {
     selectPlayer,
     pendingFoulType,
     pendingTurnoverType,
-    finishFoulAction,
-    finishTurnoverAction,
-    selectScorer,
-    finishShotAction,
+    selectAssist,
+    selectRebound,
+    chooseFoulType,
+    chooseTurnoverType,
+    goToFlowStep,
+    commitPendingAction,
     cancelPendingAction,
     editAction,
     undoLastAction,

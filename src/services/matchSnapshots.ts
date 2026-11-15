@@ -9,7 +9,7 @@ export type MatchSnapshot = {
   revision: number
   baseRevision: number
   teams: { id: string; name: string }[]
-  players: { id: string; teamId: string; jerseyNumber: string; isCoach: boolean; statisticsPrivate: boolean }[]
+  players: { id: string; teamId: string; jerseyNumber: string; statisticsPrivate: boolean }[]
   actions: GameAction[]
   matchDate: string | null
   catalogTeamId: string | null
@@ -28,7 +28,7 @@ function validSnapshot(value: unknown) {
     || !value.teams.every((team) => isRecord(team) && typeof team.id === 'string' && typeof team.name === 'string')
     || !value.players.every((player) => isRecord(player) && typeof player.id === 'string'
       && typeof player.teamId === 'string' && typeof player.jerseyNumber === 'string'
-      && typeof player.isCoach === 'boolean' && typeof player.statisticsPrivate === 'boolean' && !('name' in player))) return false
+      && typeof player.statisticsPrivate === 'boolean' && !('name' in player))) return false
   try {
     parseGameState({
       teams: value.teams.map((team) => ({ ...team, color: '#000000' })),
@@ -69,8 +69,8 @@ export function queueMatchSnapshot(matchId: string, trackerId: string, game: Gam
     revision,
     baseRevision: store.bases[key] ?? 0,
     teams: game.teams.map(({ id, name }) => ({ id, name })),
-    players: game.players.map(({ id, teamId, jerseyNumber, isCoach, statisticsPrivate }) => ({
-      id, teamId, jerseyNumber, isCoach: !!isCoach, statisticsPrivate: !!statisticsPrivate,
+    players: game.players.map(({ id, teamId, jerseyNumber, statisticsPrivate }) => ({
+      id, teamId, jerseyNumber, statisticsPrivate: !!statisticsPrivate,
     })),
     actions: game.actions.map((action) => ({ ...action })),
     matchDate: game.matchInfo?.date ?? null,

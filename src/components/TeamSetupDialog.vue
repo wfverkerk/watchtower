@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useLocale } from '../i18n/useLocale'
-import { loadTeamSetupDraft, saveTeamSetupDraft, type TeamProfile, type TeamProfileCoach, type TeamProfilePlayer, type TeamSetupDraft } from '../services/teamProfiles'
+import { loadTeamSetupDraft, saveTeamSetupDraft, type TeamProfile, type TeamProfilePlayer, type TeamSetupDraft } from '../services/teamProfiles'
 import { getRecommendedMatch, loadZoebasMatches, type ZoebasMatch } from '../services/zoebasMatches'
 import type { ZoebasTeam } from '../services/zoebasTeams'
 import { useSharedJerseyNumbers } from '../composables/useSharedJerseyNumbers'
@@ -56,7 +56,6 @@ if (!props.rosterProfile) {
 const draftProfiles = ref((props.rosterProfile ? [props.rosterProfile] : restoredDraft?.profiles ?? props.profiles).map((profile) => ({
   ...profile,
   players: profile.players.map((player) => ({ ...player, isParticipating: restoredDraft || props.rosterProfile ? player.isParticipating : !!player.name.trim() })),
-  coaches: (profile.coaches ?? []).map((coach) => ({ ...coach, isParticipating: coach.isParticipating ?? true })),
 })))
 const selected = ref<[string, string]>(props.rosterProfile
   ? [props.rosterProfile.id, props.selectedProfileIds[1]]
@@ -100,7 +99,7 @@ const localTeamName = ref('')
 const availableTeams = computed(() => [
   ...props.catalogTeams.filter((team) => team.playerNames.length > 0 || sharedTeamIds.value.includes(team.id)),
   ...(props.localOnly ? draftProfiles.value.filter((profile) => profile.catalogTeamId?.startsWith('local-'))
-    .map((profile): ZoebasTeam => ({ id: profile.catalogTeamId!, name: profile.name, sourceTeamId: '', playerNames: [], staff: [] })) : []),
+    .map((profile): ZoebasTeam => ({ id: profile.catalogTeamId!, name: profile.name, sourceTeamId: '', playerNames: [] })) : []),
 ])
 // Same sections as the favorite team picker; the catalog has no test teams.
 const teamSections = computed(() => groupTeams([...new Set(availableTeams.value.map((team) => team.name))], new Set())
@@ -222,27 +221,11 @@ function selectCatalogTeam(teamId: string) {
       .filter((player) => !usedPlayerIds.has(player.id))
       .map((player) => ({ ...player })))
   }
-  const rosterCoachNames = new Set(team.staff.map((member) => member.name.toLocaleLowerCase()))
-  const coaches = team.staff.map((member, index): TeamProfileCoach => {
-    const saved = legacyProfile?.coaches.find((coach) => coach.name.toLocaleLowerCase() === member.name.toLocaleLowerCase())
-    return {
-      id: saved?.id ?? `${team.id}-coach-${index + 1}`,
-      name: member.name,
-      role: member.role,
-      isParticipating: saved?.isParticipating ?? false,
-    }
-  })
-  if (legacyProfile) {
-    coaches.push(...legacyProfile.coaches
-      .filter((coach) => !rosterCoachNames.has(coach.name.toLocaleLowerCase()))
-      .map((coach) => ({ ...coach })))
-  }
   profile = {
     id: legacyProfile?.id ?? `zoebas-${team.id}`,
     name: team.name,
     catalogTeamId: team.id,
     players,
-    coaches,
   }
   const profileIndex = draftProfiles.value.findIndex((item) => item.id === profile?.id)
   if (profileIndex >= 0) draftProfiles.value.splice(profileIndex, 1, profile)
@@ -260,7 +243,6 @@ function addLocalTeam() {
     players: Array.from({ length: 5 }, (_, index) => ({
       id: `${id}-player-${index + 1}`, name: '', jerseyNumber: '', isParticipating: false, isOnCourt: false,
     })),
-    coaches: [],
   })
   selectedCatalogTeamId.value = id
   localTeamName.value = ''
@@ -410,7 +392,6 @@ function save() {
           isParticipating: true,
           isOnCourt: true,
         })),
-    coaches: [],
   }
   emit('save', [...draftProfiles.value.filter((profile) => profile.id !== opponentId), opponent], [selected.value[0], opponentId], props.practice ? null : selectedMatch.value, props.practice ? practiceOpponentName.value : manualOpponentName.value.trim(), props.practice ? '' : manualStart.value, props.practice ? manualOpponentName.value.trim() : '')
 }

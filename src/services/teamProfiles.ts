@@ -15,19 +15,11 @@ export type TeamProfilePlayer = {
   isOnCourt: boolean
 }
 
-export type TeamProfileCoach = {
-  id: string
-  name: string
-  role: 'coach' | 'assistant'
-  isParticipating: boolean
-}
-
 export type TeamProfile = {
   id: string
   name: string
   catalogTeamId?: string
   players: TeamProfilePlayer[]
-  coaches: TeamProfileCoach[]
 }
 
 type StringStorage = Pick<Storage, 'getItem' | 'setItem'>
@@ -69,7 +61,6 @@ export function createDefaultTeamProfiles(): TeamProfile[] {
         isParticipating: Boolean(name),
         isOnCourt: false,
       })),
-      coaches: [],
     },
     {
       id: 'opponent-default',
@@ -81,7 +72,6 @@ export function createDefaultTeamProfiles(): TeamProfile[] {
         isParticipating: false,
         isOnCourt: false,
       })),
-      coaches: [],
     },
   ]
 }
@@ -93,12 +83,6 @@ export function parseTeamProfiles(value: unknown): TeamProfile[] {
       && typeof profile.name === 'string'
       && (profile.catalogTeamId === undefined || typeof profile.catalogTeamId === 'string')
       && Array.isArray(profile.players)
-      && (profile.coaches === undefined || (Array.isArray(profile.coaches) && profile.coaches.every((coach) =>
-        isRecord(coach)
-          && typeof coach.id === 'string'
-          && typeof coach.name === 'string'
-          && (coach.role === undefined || coach.role === 'coach' || coach.role === 'assistant')
-          && (coach.isParticipating === undefined || typeof coach.isParticipating === 'boolean'))))
       && profile.players.every((player) =>
         isRecord(player)
           && typeof player.id === 'string'
@@ -119,11 +103,6 @@ export function parseTeamProfiles(value: unknown): TeamProfile[] {
     id: profile.id,
     name: profile.name,
     ...(profile.catalogTeamId ? { catalogTeamId: profile.catalogTeamId } : {}),
-    coaches: (profile.coaches ?? []).map((coach) => ({
-      ...coach,
-      role: coach.role ?? 'coach',
-      isParticipating: coach.isParticipating ?? true,
-    })),
     players: profile.players.map((player) => {
       const zoebasIndex = Number(player.id.replace('zoebas-player-', '')) - 1
       const isLegacyZoebasName = profile.id === 'zoebas-x12-1'
