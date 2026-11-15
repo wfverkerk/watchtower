@@ -59,4 +59,17 @@ describe('game roster editing', () => {
     const draft = createGameRosterDraft(game, roster)
     expect(draft.players.filter((player) => player.jerseyNumber === '1')).toHaveLength(1)
   })
+
+  it('keeps private names redacted when editing a shared roster', () => {
+    const game = createInitialGameState()
+    game.players[0].statisticsPrivate = true
+    game.players[0].name = 'Speler 1'
+    const draft = createGameRosterDraft(game, profile())
+    const player = draft.players.find((item) => item.id === '1')!
+    expect(player.statisticsPrivate).toBe(true)
+    player.name = 'Private name'
+    expect(applyGameRoster(game, draft).find((item) => item.id === 'home-1')).toMatchObject({
+      name: 'Speler 1', statisticsPrivate: true,
+    })
+  })
 })

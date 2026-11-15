@@ -97,6 +97,19 @@ describe('game domain rules', () => {
     expect(getTeamStats(game)[0].assists).toBe(1)
   })
 
+  it('retains the original scoring period when an assist is added later', () => {
+    const actions = updateScoringPlay([], {
+      teamId: 'home', scorerId: 'home-1', value: 2, assistPlayerId: null,
+      period: 1, createdAt: 1, createId: () => 'score',
+    })
+    let id = 0
+    const edited = updateScoringPlay(actions, {
+      actionId: 'score', teamId: 'home', scorerId: 'home-1', value: 2, assistPlayerId: 'home-2',
+      period: 2, createdAt: 2, createId: () => ['group', 'assist'][id++],
+    })
+    expect(edited.map((action) => action.period)).toEqual([1, 1])
+  })
+
   it('updates scorer and assist together, and can remove the assist', () => {
     const actions = [
       makeAction({ id: 'score', type: 'score', teamId: 'home', playerId: 'home-1', value: 2, groupId: 'play' }),

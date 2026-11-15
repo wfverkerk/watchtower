@@ -18,6 +18,7 @@ const props = defineProps<{
   playerName: (playerId: string) => string
   canUndo: boolean
   playerFouls: Record<string, number>
+  readOnly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -85,7 +86,7 @@ function actionIcon(action: GameAction) {
         <h2>{{ t('activity.recent') }} <span class="count">{{ activityItems.length }}</span></h2>
       </div>
       <div class="activity-header-actions">
-        <button class="text-button activity-undo" :disabled="!canUndo" @click="emit('undo')">
+        <button v-if="!readOnly" class="text-button activity-undo" :disabled="!canUndo" @click="emit('undo')">
           <span aria-hidden="true">↶</span><span class="activity-undo-label">{{ t('app.undo') }}</span>
         </button>
         <span class="activity-mark" aria-hidden="true">↗</span>
@@ -96,7 +97,7 @@ function actionIcon(action: GameAction) {
       <template v-for="entry in activityItems" :key="`${entry.kind}-${entry.kind === 'action' ? entry.item.action.id : entry.item.id}`">
       <div v-if="entry.kind === 'action'" class="activity-row" :style="{ '--activity-color': teams.find((team) => team.id === entry.item.action.teamId)?.color ?? 'var(--muted)' }">
         <template v-for="item in [entry.item]" :key="item.action.id">
-        <span class="activity-dot" :class="item.action.teamId === 'home' ? 'orange' : 'blue'"></span>
+        <span class="activity-dot" :class="item.action.teamId === teams[0]?.id ? 'orange' : 'blue'"></span>
         <span class="activity-action-icon" :class="`activity-action-icon-${item.action.type}`" aria-hidden="true">{{ actionIcon(item.action) }}</span>
         <div class="activity-description">
           <strong>
@@ -108,12 +109,12 @@ function actionIcon(action: GameAction) {
         <time>{{ actionTime(item.action.createdAt) }}</time>
         <button
           class="activity-edit"
-          v-if="item.action.playerId !== null"
+          v-if="!readOnly && item.action.playerId !== null"
           :aria-label="t('activity.editAction', { player: actionPlayer(item.action), action: actionLabel(item.action) })"
           :title="t('activity.editAction', { player: actionPlayer(item.action), action: actionLabel(item.action) })"
           @click="emit('edit-action', item.action)"
         >✎</button>
-        <button v-else class="activity-edit" :aria-label="t(item.action.value === 1 ? 'activity.removeOpponentPoint' : 'activity.removeOpponentScore', { team: actionPlayer(item.action), count: item.action.value })" :title="t(item.action.value === 1 ? 'activity.removeOpponentPoint' : 'activity.removeOpponentScore', { team: actionPlayer(item.action), count: item.action.value })" @click="emit('remove-opponent-score', item.action)">×</button>
+        <button v-else-if="!readOnly" class="activity-edit" :aria-label="t(item.action.value === 1 ? 'activity.removeOpponentPoint' : 'activity.removeOpponentScore', { team: actionPlayer(item.action), count: item.action.value })" :title="t(item.action.value === 1 ? 'activity.removeOpponentPoint' : 'activity.removeOpponentScore', { team: actionPlayer(item.action), count: item.action.value })" @click="emit('remove-opponent-score', item.action)">×</button>
         </template>
       </div>
       <div v-else class="activity-row" :style="{ '--activity-color': entry.item.type === 'substitution' ? teams[0]?.color : 'var(--muted)' }">
@@ -144,7 +145,7 @@ function actionIcon(action: GameAction) {
     <div class="team-stats">
       <div v-for="team in teams" :key="team.id" class="team-stat-row">
         <div class="team-stat-name">
-          <span class="team-dot" :class="team.id === 'home' ? 'orange' : 'blue'"></span>
+          <span class="team-dot" :class="team.id === teams[0]?.id ? 'orange' : 'blue'"></span>
           <strong>{{ displayTeamName(team) }}</strong>
         </div>
         <div class="stat-values">

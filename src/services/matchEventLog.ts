@@ -1,4 +1,5 @@
 import { isTurnoverType, type GameAction, type ShotLocation } from '../domain/game'
+import { errorMessage, isRecord } from '../domain/guards'
 
 export const matchLinkStorageKey = 'watchtower-shared-match-v1'
 export const matchEventsStorageKey = 'watchtower-match-events-v1'
@@ -9,6 +10,7 @@ export type MatchLink = {
   joinCode: string
   trackerId: string
   displayName: string
+  finished?: boolean
 }
 
 export type MatchEventType = 'action_added' | 'action_updated' | 'action_removed'
@@ -26,10 +28,6 @@ export type MatchEvent = {
 }
 
 type StringStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 const statTypes = new Set<string>([
   'score',
@@ -58,7 +56,7 @@ function isShotLocation(value: unknown): value is ShotLocation {
     && value.y <= 100
 }
 
-function isGameAction(value: unknown): value is GameAction {
+export function isGameAction(value: unknown): value is GameAction {
   return isRecord(value)
     && typeof value.id === 'string'
     && (typeof value.playerId === 'string' || (value.playerId === null && value.type === 'score'))
@@ -108,7 +106,8 @@ export function loadMatchLink(storage: StringStorage = window.localStorage): Mat
     || typeof value.matchId !== 'string'
     || typeof value.joinCode !== 'string'
     || typeof value.trackerId !== 'string'
-    || typeof value.displayName !== 'string') {
+    || typeof value.displayName !== 'string'
+    || (value.finished !== undefined && typeof value.finished !== 'boolean')) {
     throw new Error('Saved shared-match information has an invalid format.')
   }
   return {
@@ -116,6 +115,7 @@ export function loadMatchLink(storage: StringStorage = window.localStorage): Mat
     joinCode: value.joinCode,
     trackerId: value.trackerId,
     displayName: value.displayName,
+    ...(value.finished === true ? { finished: true } : {}),
   }
 }
 
@@ -158,7 +158,31 @@ export function removeMatchEvents(ids: string[], storage: StringStorage = window
   saveMatchEvents(events, storage)
 }
 
-// Drops queued events that belong to a match other than the active one, so they cannot pile up.
-export function discardMatchEventsExcept(matchId: string, storage: StringStorage = window.localStorage) {
-  saveMatchEvents(loadMatchEvents(storage).filter((event) => event.matchId === matchId), storage)
+export async function syncQueuedMatchEvents(
+  trackerId: string,
+  upload: (events: MatchEvent[]) => Promise<void>,
+  storage: StringStorage = window.localStorage,
+) {
+  const events = loadMatchEvents(storage)
+  const completed = events.filter((event) => event.trackerId === trackerId && event.synced)
+  if (completed.length) removeMatchEvents(completed.map((event) => event.id), storage)
+
+  const pending = events.filter((event) => event.trackerId === trackerId && !event.synced)
+  const matchIds = [...new Set(pending.map((event) => event.matchId))]
+  const failures: unknown[] = []
+  for (const matchId of matchIds) {
+    const batch = pending.filter((event) => event.matchId === matchId)
+    try {
+      await upload(batch)
+      removeMatchEvents(batch.map((event) => event.id), storage)
+    } catch (error) {
+      failures.push(error)
+    }
+  }
+  if (events.some((event) => event.trackerId !== trackerId && !event.synced)) {
+    failures.push(new Error('Queued events belong to a different tracker. Sign in as that tracker to sync them.'))
+  }
+  if (failures.length) {
+    throw new AggregateError(failures, failures.map((error) => errorMessage(error)).join('; '))
+  }
 }

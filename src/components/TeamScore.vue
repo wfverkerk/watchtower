@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Team } from '../domain/game'
 import { useLocale } from '../i18n/useLocale'
+import TeamLogo from './TeamLogo.vue'
 
 defineProps<{
   team: Team
@@ -31,9 +32,12 @@ const { t, displayTeamName } = useLocale()
       @input="emit('name-change', team.id, ($event.target as HTMLInputElement).value)"
     >
     <span v-if="fouls >= 5" class="foul-marker" role="img" :aria-label="t('scoreboard.teamFoulLimit')" :title="t('scoreboard.teamFoulLimit')"></span>
-    <div class="score-value">
-      <strong>{{ points }}</strong>
-      <span v-for="notification in notifications" :key="notification.id" class="score-increment" aria-hidden="true" @animationend="emit('notification-end', notification.id)">+{{ notification.value }}</span>
+    <div class="score-row">
+      <TeamLogo :name="team.name" class="scoreboard-logo" />
+      <div class="score-value">
+        <strong>{{ points }}</strong>
+        <span v-for="notification in notifications" :key="notification.id" class="score-increment" aria-hidden="true" @animationend="emit('notification-end', notification.id)">+{{ notification.value }}</span>
+      </div>
     </div>
   </div>
 </template>

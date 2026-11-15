@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   appendMatchEvents,
-  discardMatchEventsExcept,
   invalidMatchEventsStorageKey,
   loadMatchEvents,
   matchEventsStorageKey,
   removeMatchEvents,
+  syncQueuedMatchEvents,
   type MatchEvent,
 } from './matchEventLog'
 
@@ -102,15 +102,33 @@ describe('shared match event log', () => {
     expect(loadMatchEvents(storage)).toEqual([])
   })
 
-  it('discards events that belong to other matches', () => {
+  it('syncs queued events for previous matches without removing other trackers’ events', async () => {
+    const storage = createStorage()
+    const uploaded: MatchEvent[][] = []
+    appendMatchEvents([
+      createEvent({ id: 'old', matchId: 'match-old' }),
+      createEvent({ id: 'current', matchId: 'match-1' }),
+      createEvent({ id: 'other', matchId: 'match-2', trackerId: 'tracker-2' }),
+    ], storage)
+
+    await expect(syncQueuedMatchEvents('tracker-1', async (events) => { uploaded.push(events) }, storage))
+      .rejects.toThrow('different tracker')
+
+    expect(uploaded.map((batch) => batch.map((event) => event.id))).toEqual([['old'], ['current']])
+    expect(loadMatchEvents(storage).map((event) => event.id)).toEqual(['other'])
+  })
+
+  it('keeps failed batches and continues syncing other matches', async () => {
     const storage = createStorage()
     appendMatchEvents([
       createEvent({ id: 'old', matchId: 'match-old' }),
       createEvent({ id: 'current', matchId: 'match-1' }),
     ], storage)
 
-    discardMatchEventsExcept('match-1', storage)
+    await expect(syncQueuedMatchEvents('tracker-1', async (events) => {
+      if (events[0].matchId === 'match-old') throw new Error('upload failed')
+    }, storage)).rejects.toThrow('upload failed')
 
-    expect(loadMatchEvents(storage).map((event) => event.id)).toEqual(['current'])
+    expect(loadMatchEvents(storage).map((event) => event.id)).toEqual(['old'])
   })
 })

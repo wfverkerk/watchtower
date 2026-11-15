@@ -25,6 +25,7 @@ import {
 import { clockRemaining, formatClock, isYouthTeam, newPeriodClock, pauseClock, reconcileClock, startClock } from '../domain/gameClock'
 import { lineupChanges } from '../domain/matchTimeline'
 import { loadGameState, saveGameState } from '../services/gameStorage'
+import { loadLocalMatches, saveLocalMatch } from '../services/localMatches'
 import { applyGameRoster, createGameRosterDraft } from '../services/gameRoster'
 import {
   createDefaultTeamProfiles,
@@ -38,22 +39,33 @@ import {
 } from '../services/teamProfiles'
 import {
   appendMatchEvents,
-  discardMatchEventsExcept,
+  invalidMatchEventsStorageKey,
   loadMatchEvents,
   loadMatchLink,
-  removeMatchEvents,
   saveMatchLink,
+  syncQueuedMatchEvents,
   type MatchEvent,
   type MatchEventType,
   type MatchLink,
 } from '../services/matchEventLog'
-import { createSharedMatch as createSharedMatchRecord, joinSharedMatch as joinSharedMatchRecord, uploadMatchEvents } from '../services/sharedMatch'
+import {
+  createMatchSession, createSharedMatch as createSharedMatchRecord, joinMatchSession,
+  joinSharedMatch as joinSharedMatchRecord, uploadMatchEvents, uploadMatchSnapshot,
+} from '../services/sharedMatch'
+import { loadPendingMatchSnapshots, queueMatchSnapshot, setMatchSnapshotBase, syncQueuedMatchSnapshots } from '../services/matchSnapshots'
 import { ensureAnonymousUser, isSupabaseConfigured } from '../services/supabaseClient'
-import { loadZoebasTeams, type ZoebasTeam } from '../services/zoebasTeams'
+import { loadCachedZoebasTeams, loadZoebasTeams, saveCachedZoebasTeams, type ZoebasTeam } from '../services/zoebasTeams'
+import { loadMatchScorers, restoreMyMatchSnapshot } from '../services/statistics'
+import { currentLiveActions, loadLiveMatch } from '../services/liveMatch'
 import type { ZoebasMatch } from '../services/zoebasMatches'
 import { isAppLocale, useLocale } from '../i18n/useLocale'
+import { errorMessage } from '../domain/guards'
 
 type PendingAction = { type: StatType; value: number }
+
+function cloneProfiles(profiles: TeamProfile[]) {
+  return profiles.map((profile) => ({ ...profile, players: profile.players.map((player) => ({ ...player })) }))
+}
 
 export function useGameSession() {
   const { t, locale, displayPlayerName } = useLocale()
@@ -80,6 +92,7 @@ export function useGameSession() {
   const teamCatalog = ref<ZoebasTeam[]>([])
   const teamCatalogLoading = ref(true)
   const teamCatalogError = ref('')
+  const teamCatalogCached = ref(false)
   const lineupErrorKey = ref('')
   const storageErrorKey = ref('')
   const matchLink = ref<MatchLink | null>(null)
@@ -110,7 +123,7 @@ export function useGameSession() {
     ? game.players.filter((player) => player.teamId === game.teams[0].id && !player.isCoach && player.isParticipating !== false).length >= 2
     : isReadyToStart(game)))
   const canCancelTeamSetup = computed(() => game.period !== undefined || game.gameStarted || game.actions.length > 0)
-  const canStartNewMatch = computed(() => !game.gameStarted && (game.period !== undefined || game.actions.length > 0))
+  const canStartNewMatch = computed(() => !game.gameStarted && (!!game.localFinishedAt || !!matchLink.value?.finished))
   const scores = computed(() => getScore(game))
   const teamStats = computed(() => getTeamStats(game))
   const playerFouls = computed(() => getPlayerFouls(game.actions))
@@ -174,44 +187,39 @@ export function useGameSession() {
       return
     }
     const link = matchLink.value
-    if (!link || !matchSyncConfigured) return
-    if (!navigator.onLine) {
-      matchSyncStatus.value = 'offline'
-      return
-    }
-
+    if (!matchSyncConfigured) return
     syncInProgress = true
     try {
-      const currentTrackerId = await ensureAnonymousUser()
-      if (currentTrackerId !== link.trackerId) {
-        throw new Error('This device is signed in as a different tracker. Rejoin the match to continue syncing.')
-      }
-
       const queuedEvents = loadMatchEvents()
-      const completedEvents = queuedEvents.filter((event) =>
-        event.matchId === link.matchId && event.trackerId === link.trackerId && event.synced,
-      )
-      const pendingEvents = queuedEvents.filter((event) =>
-        event.matchId === link.matchId && event.trackerId === link.trackerId && !event.synced,
-      )
-      if (pendingEvents.length === 0) {
-        if (completedEvents.length) removeMatchEvents(completedEvents.map((event) => event.id))
-        matchSyncStatus.value = 'synced'
+      const queuedSnapshots = loadPendingMatchSnapshots()
+      if (!link && !queuedEvents.length && !queuedSnapshots.length) {
+        matchSyncStatus.value = 'local'
         matchSyncError.value = ''
         return
       }
+      if (!navigator.onLine) {
+        matchSyncStatus.value = 'offline'
+        return
+      }
+      const currentTrackerId = await ensureAnonymousUser()
+      if (link && currentTrackerId !== link.trackerId) {
+        throw new Error('This device is signed in as a different tracker. Rejoin the match to continue syncing.')
+      }
 
-      matchSyncStatus.value = 'syncing'
+      if (queuedEvents.length || queuedSnapshots.length) matchSyncStatus.value = 'syncing'
       matchSyncError.value = ''
-      await uploadMatchEvents(pendingEvents)
-      removeMatchEvents([
-        ...completedEvents.map((event) => event.id),
-        ...pendingEvents.map((event) => event.id),
-      ])
-      matchSyncStatus.value = 'synced'
+      await syncQueuedMatchEvents(currentTrackerId, uploadMatchEvents)
+      await syncQueuedMatchSnapshots(currentTrackerId, uploadMatchSnapshot)
+      if (link && !link.finished && matchLink.value?.matchId === link.matchId) {
+        const status = await loadMatchScorers(link.matchId)
+        if (status.finishedAt && matchLink.value?.matchId === link.matchId) markMatchFinished()
+      }
+      const hasPending = loadMatchEvents().some((event) => !event.synced) || loadPendingMatchSnapshots().length > 0
+      matchSyncStatus.value = hasPending ? 'syncing' : matchLink.value ? 'synced' : 'local'
+      if (hasPending) syncRequested = true
     } catch (error) {
       console.error('Failed to sync match events.', error)
-      matchSyncError.value = error instanceof Error ? error.message : String(error)
+      matchSyncError.value = errorMessage(error)
       matchSyncStatus.value = 'error'
     } finally {
       syncInProgress = false
@@ -221,7 +229,7 @@ export function useGameSession() {
     }
   }
 
-  async function createSharedMatch(displayName: string) {
+  async function createSharedMatch(displayName: string, startsAt?: string) {
     if (!matchSyncConfigured) {
       matchSyncError.value = t('sync.notConfigured')
       return false
@@ -232,38 +240,76 @@ export function useGameSession() {
         players: game.players.map((player) => ({ ...player })),
         actions: game.actions.map((action) => ({ ...action })),
         gameStarted: game.gameStarted,
+        ...(game.catalogTeamId ? { catalogTeamId: game.catalogTeamId } : {}),
         ...(game.matchInfo ? { matchInfo: { ...game.matchInfo } } : {}),
         ...(game.period !== undefined ? { period: game.period } : {}),
         ...(game.youth !== undefined ? { youth: game.youth } : {}),
         ...(game.clock ? { clock: { ...game.clock } } : {}),
         ...(game.timeline ? { timeline: game.timeline.map((event) => ({ ...event })) } : {}),
       }
-      const created = await createSharedMatchRecord(gameData, displayName)
+      const created = startsAt
+        ? await createMatchSession(gameData, displayName, startsAt)
+        : await createSharedMatchRecord(gameData, displayName)
       saveMatchLink(created.link)
-      discardMatchEventsExcept(created.link.matchId)
       matchLink.value = created.link
       matchSyncError.value = ''
       const initialEvents = game.actions.map((action) => makeMatchEvent(action, 'action_added', created.link))
       appendMatchEvents(initialEvents)
+      queueMatchSnapshot(created.link.matchId, created.link.trackerId, game)
       matchSyncStatus.value = initialEvents.length ? 'syncing' : 'synced'
       scheduleMatchSync()
       return true
     } catch (error) {
       console.error('Failed to create a shared match.', error)
-      matchSyncError.value = error instanceof Error ? error.message : String(error)
+      matchSyncError.value = errorMessage(error)
       matchSyncStatus.value = 'error'
       return false
     }
   }
 
-  async function joinSharedMatch(joinCode: string, displayName: string) {
+  async function joinSharedMatch(joinCode: string, displayName: string, bySessionId = false, side: 'home' | 'away' = 'home') {
     if (!matchSyncConfigured) {
       matchSyncError.value = t('sync.notConfigured')
       return false
     }
     try {
-      const joined = await joinSharedMatchRecord(joinCode, displayName)
-      const sharedGame = parseGameState(joined.gameData, currentLocale.value)
+      if (!game.localFinishedAt && !matchLink.value?.finished && (game.period !== undefined || game.actions.length)) {
+        throw new Error(t('sessions.finishFirst'))
+      }
+      const joined = bySessionId
+        ? await joinMatchSession(joinCode, displayName)
+        : await joinSharedMatchRecord(joinCode, displayName)
+      const initialGame = parseGameState(joined.gameData, currentLocale.value)
+      if (loadMatchEvents().some((event) => event.matchId === joined.link.matchId && !event.synced)) {
+        throw new Error('Pending actions must be synchronized before rejoining this match.')
+      }
+      const sessionTeams = initialGame.teams.map((team) => ({ ...team }))
+      const restored = await restoreMyMatchSnapshot(joined.link.matchId, initialGame)
+      if (restored.revision === 0 && side === 'away') {
+        restored.game.teams = [{ ...restored.game.teams[1] }, { ...restored.game.teams[0] }]
+      }
+      const awaySide = restored.game.teams[0].id !== sessionTeams[0].id
+      if (bySessionId && restored.revision === 0) {
+        const live = await loadLiveMatch(joined.link.matchId)
+        const opponentId = restored.game.teams[1].id
+        restored.game.actions = currentLiveActions(initialGame, live)
+          .filter((item) => item.trackerId === live.sourceId)
+          .flatMap(({ action }) => !awaySide ? [action]
+            : action.type === 'score' && action.teamId === opponentId ? [{ ...action, playerId: null }] : [])
+      }
+      if (awaySide) {
+        restored.game.teams[0].color = sessionTeams[0].color
+        restored.game.teams[1].color = sessionTeams[1].color
+        restored.game.catalogTeamId = undefined
+      }
+      const scorerStatus = await loadMatchScorers(joined.link.matchId)
+      setMatchSnapshotBase(joined.link.matchId, joined.link.trackerId, restored.revision)
+      const sharedGame = restored.game
+      if (scorerStatus.finishedAt) {
+        joined.link.finished = true
+        sharedGame.gameStarted = false
+        if (sharedGame.clock) sharedGame.clock = pauseClock(sharedGame.clock, Date.now())
+      }
       initializing = true
       game.teams = sharedGame.teams
       game.players = sharedGame.players
@@ -271,23 +317,40 @@ export function useGameSession() {
       game.gameStarted = sharedGame.gameStarted
       game.period = sharedGame.period
       game.matchInfo = sharedGame.matchInfo
+      game.catalogTeamId = sharedGame.catalogTeamId
       game.youth = sharedGame.youth
       game.clock = sharedGame.clock
       game.timeline = sharedGame.timeline ?? []
+      game.localMatchId = undefined
+      game.localFinishedAt = undefined
+      teamSetupOpen.value = false
+      teamSetupComplete.value = true
       initializeClock()
       saveMatchLink(joined.link)
-      discardMatchEventsExcept(joined.link.matchId)
       matchLink.value = joined.link
-      selectedTeamId.value = 'home'
+      if (bySessionId && restored.revision === 0 && game.actions.length) {
+        appendMatchEvents(game.actions.map((action) => makeMatchEvent(action, 'action_added', joined.link)))
+      }
+      selectedTeamId.value = game.teams[0].id
       previousActions = JSON.parse(JSON.stringify(game.actions)) as GameAction[]
       initializing = false
+      if (matchLink.value) {
+        try {
+          queueMatchSnapshot(matchLink.value.matchId, matchLink.value.trackerId, game)
+        } catch (error) {
+          console.error('Failed to store a match snapshot locally.', error)
+          storageErrorKey.value = 'errors.saveMatchEvents'
+          matchSyncStatus.value = 'error'
+        }
+      }
       matchSyncError.value = ''
       matchSyncStatus.value = 'synced'
+      scheduleMatchSync()
       return true
     } catch (error) {
       initializing = false
       console.error('Failed to join a shared match.', error)
-      matchSyncError.value = error instanceof Error ? error.message : String(error)
+      matchSyncError.value = errorMessage(error)
       matchSyncStatus.value = 'error'
       return false
     }
@@ -312,7 +375,7 @@ export function useGameSession() {
   }
 
   function addAction(type: StatType, value = 1) {
-    if (!game.gameStarted) return
+    if (!game.gameStarted && !matchLink.value?.finished) return
     selectedTeamId.value = game.teams[0].id
     editingActionId.value = null
     pendingAction.value = { type, value }
@@ -328,7 +391,7 @@ export function useGameSession() {
   }
 
   function addOpponentScore(value: 1 | 2 | 3) {
-    if (!game.gameStarted) return
+    if (!game.gameStarted && !matchLink.value?.finished) return
     game.actions.push({
       id: crypto.randomUUID(),
       playerId: null,
@@ -348,7 +411,7 @@ export function useGameSession() {
 
   function selectPlayer(playerId: string) {
     const action = pendingAction.value
-    if (!action || !game.gameStarted) return
+    if (!action || (!game.gameStarted && !matchLink.value?.finished)) return
     if (action.type === 'foul' || action.type === 'turnover') {
       pendingScorerId.value = playerId
       return
@@ -434,6 +497,7 @@ export function useGameSession() {
           type: 'score',
           value: action.value,
           createdAt: Date.now(),
+          period: Math.max(1, game.period ?? 1),
         })
         notifyScore(selectedTeamId.value, 1)
       }
@@ -463,6 +527,7 @@ export function useGameSession() {
         value: action.value,
         assistPlayerId: pendingAssistId.value === 'none' ? null : pendingAssistId.value,
         ...(shotLocation ? { shotLocation } : {}),
+        period: Math.max(1, game.period ?? 1),
         createdAt: Date.now(),
         createId: () => crypto.randomUUID(),
       })
@@ -518,6 +583,7 @@ export function useGameSession() {
     profileIds: [string, string],
     selectedMatch: ZoebasMatch | null = null,
     manualOpponentName = '',
+    manualStart = '',
   ) {
     const homeProfile = profiles.find((profile) => profile.id === profileIds[0])
     const awayProfile = profiles.find((profile) => profile.id === profileIds[1])
@@ -544,6 +610,7 @@ export function useGameSession() {
         name: player.name.trim(),
         teamId: teams[index].id,
         jerseyNumber: player.jerseyNumber,
+        ...(player.statisticsPrivate ? { statisticsPrivate: true } : {}),
         isOnCourt: index === 1,
       })),
       ...(profile.coaches ?? []).filter((coach) => coach.isParticipating).map((coach) => ({
@@ -562,15 +629,20 @@ export function useGameSession() {
           date: selectedMatch.date,
           startTime: selectedMatch.startTime,
           venue: selectedMatch.venue,
+          startsAt: new Date(`${selectedMatch.date}T${selectedMatch.startTime}:00`).toISOString(),
         }
-      : undefined
+      : /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(manualStart) && Number.isFinite(new Date(manualStart).getTime())
+        ? { id: `manual-${crypto.randomUUID()}`, date: manualStart.slice(0, 10), startTime: manualStart.slice(11, 16), venue: '', startsAt: new Date(manualStart).toISOString() }
+        : undefined
     const nextGame: GameState = {
       teams,
       players,
       actions: [],
       timeline: [],
       gameStarted: false,
+      localMatchId: crypto.randomUUID(),
       period: 0,
+      ...(!homeProfile.catalogTeamId.startsWith('local-') ? { catalogTeamId: homeProfile.catalogTeamId } : {}),
       youth: isYouthTeam(homeProfile.catalogTeamId) || isYouthTeam(homeProfile.name),
       ...(matchInfo ? { matchInfo } : {}),
     }
@@ -597,27 +669,22 @@ export function useGameSession() {
       return false
     }
 
-    teamProfiles.value = profiles.map((profile) => ({
-      ...profile,
-      players: profile.players.map((player) => ({ ...player })),
-    }))
+    teamProfiles.value = cloneProfiles(profiles)
     selectedTeamProfileIds.value = [...profileIds]
     teamSetupComplete.value = true
     teamSetupOpen.value = false
     matchLink.value = null
     matchSyncStatus.value = 'local'
     matchSyncError.value = ''
-    Object.assign(game, nextGame, { matchInfo, clock: undefined })
+    Object.assign(game, nextGame, { matchInfo, catalogTeamId: nextGame.catalogTeamId, clock: undefined, localFinishedAt: undefined })
     selectedTeamId.value = 'home'
     beginPeriod()
+    if (matchSyncConfigured) scheduleMatchSync()
     return true
   }
 
   function updateSelectedProfilesFromGame() {
-    const profiles = teamProfiles.value.map((profile) => ({
-      ...profile,
-      players: profile.players.map((player) => ({ ...player })),
-    }))
+    const profiles = cloneProfiles(teamProfiles.value)
     for (const [index, teamId] of ['home', 'away'].entries()) {
       const profile = profiles.find((item) => item.id === selectedTeamProfileIds.value[index])
       const team = game.teams.find((item) => item.id === teamId)
@@ -636,6 +703,7 @@ export function useGameSession() {
           name: player.name.trim(),
           jerseyNumber: player.jerseyNumber,
           ...(profilePlayer?.catalogName ? { catalogName: profilePlayer.catalogName } : {}),
+          ...(profilePlayer?.statisticsPrivate || player.statisticsPrivate ? { statisticsPrivate: true } : {}),
           isParticipating: player.isParticipating !== false,
           isOnCourt: player.isOnCourt,
         }
@@ -686,29 +754,85 @@ export function useGameSession() {
     return true
   }
 
-  function openTeamSetup() {
-    if (!game.gameStarted) teamSetupOpen.value = true
-  }
 
   function cancelTeamSetup() {
     if (canCancelTeamSetup.value) teamSetupOpen.value = false
   }
 
   function toggleGame() {
+    if (matchLink.value?.finished) return
     if (!game.gameStarted) {
       if (!canStart.value) return
       if (game.period === 0) {
         beginPeriod()
         return
       }
+
       if (!updateSelectedProfilesFromGame()) return
-      selectedTeamId.value = 'home'
+      selectedTeamId.value = game.teams[0].id
     }
     if (game.gameStarted && game.clock) {
       updateClock()
       game.clock = pauseClock(game.clock, Date.now())
     }
     game.gameStarted = !game.gameStarted
+  }
+
+  function markMatchFinished() {
+    if (!matchLink.value || matchLink.value.finished) return
+    const finishedLink = { ...matchLink.value, finished: true }
+    try {
+      saveMatchLink(finishedLink)
+    } catch (error) {
+      console.error('Failed to save match completion locally.', error)
+      storageErrorKey.value = 'errors.saveMatchEvents'
+    }
+    if (game.gameStarted) toggleGame()
+    matchLink.value = finishedLink
+  }
+
+  function finishLocalMatch() {
+    if (matchLink.value || game.localFinishedAt) return false
+    const finishedAt = new Date().toISOString()
+    const id = game.localMatchId ?? crypto.randomUUID()
+    const finishedGame = parseGameState({
+      ...game,
+      localMatchId: id,
+      localFinishedAt: finishedAt,
+      gameStarted: false,
+      ...(game.clock ? { clock: pauseClock(game.clock, Date.now()) } : {}),
+    }, currentLocale.value)
+    try {
+      saveLocalMatch({ id, finishedAt, game: finishedGame })
+      Object.assign(game, finishedGame)
+      storageErrorKey.value = ''
+      return true
+    } catch (error) {
+      console.error('Failed to archive the local match.', error)
+      storageErrorKey.value = 'errors.saveGame'
+      return false
+    }
+  }
+
+  async function releaseFinishedMatch() {
+    const link = matchLink.value
+    if (loadLocalMatches().some((match) => match.submission && !match.submission.resultMatchId)) {
+      throw new Error(t('statistics.syncBeforeSwitch'))
+    }
+    if (!link) {
+      if (loadMatchEvents().length || loadPendingMatchSnapshots().length
+        || window.localStorage.getItem(invalidMatchEventsStorageKey) !== null) throw new Error(t('statistics.syncBeforeSwitch'))
+      return
+    }
+    if (matchSyncStatus.value !== 'synced') throw new Error(t('statistics.syncBeforeSwitch'))
+    const status = await loadMatchScorers(link.matchId)
+    if (!status.finishedAt || loadMatchEvents().length || loadPendingMatchSnapshots().length
+      || window.localStorage.getItem(invalidMatchEventsStorageKey) !== null) {
+      throw new Error(t('statistics.finishBeforeSwitch'))
+    }
+    saveMatchLink(null)
+    matchLink.value = null
+    matchSyncStatus.value = 'local'
   }
 
   function openLineupEditor() {
@@ -855,6 +979,7 @@ export function useGameSession() {
               id: player.id,
               name: player.name,
               jerseyNumber: player.jerseyNumber,
+              ...(player.statisticsPrivate ? { statisticsPrivate: true } : {}),
               isParticipating: true,
               isOnCourt: player.isOnCourt,
             })),
@@ -895,8 +1020,13 @@ export function useGameSession() {
 
     try {
       matchLink.value = loadMatchLink()
-      if (matchLink.value) {
+      if (matchLink.value?.finished) {
+        game.gameStarted = false
+        if (game.clock) game.clock = pauseClock(game.clock, Date.now())
+      }
+      if (matchLink.value || loadMatchEvents().length || loadPendingMatchSnapshots().length) {
         matchSyncStatus.value = !matchSyncConfigured ? 'error' : navigator.onLine ? 'syncing' : 'offline'
+        if (!matchSyncConfigured) matchSyncError.value = t('sync.notConfigured')
       }
     } catch (error) {
       console.error('Failed to load shared-match information.', error)
@@ -904,15 +1034,37 @@ export function useGameSession() {
     }
     previousActions = JSON.parse(JSON.stringify(game.actions)) as GameAction[]
     initializing = false
-    if (matchLink.value && matchSyncConfigured && navigator.onLine) scheduleMatchSync()
+    if (matchSyncConfigured && navigator.onLine) scheduleMatchSync()
     teamSetupInitializing.value = false
     clockTimer = window.setInterval(updateClock, 250)
 
     try {
-      teamCatalog.value = await loadZoebasTeams()
+      if (!navigator.onLine) {
+        const cached = loadCachedZoebasTeams()
+        if (!cached) throw new Error('No cached team catalog is available.')
+        teamCatalog.value = cached
+        teamCatalogCached.value = true
+      } else {
+        teamCatalog.value = await loadZoebasTeams()
+        try {
+          saveCachedZoebasTeams(teamCatalog.value)
+        } catch (error) {
+          console.error('Failed to cache the team catalog.', error)
+          storageErrorKey.value = 'errors.saveTeams'
+        }
+      }
     } catch (error) {
       console.error('Failed to load the Zoebas team catalog.', error)
-      teamCatalogError.value = t('errors.loadTeamCatalog')
+      try {
+        const cached = loadCachedZoebasTeams()
+        if (cached) {
+          teamCatalog.value = cached
+          teamCatalogCached.value = true
+        } else teamCatalogError.value = t('errors.loadTeamCatalog')
+      } catch (cacheError) {
+        console.error('Failed to load the cached team catalog.', cacheError)
+        teamCatalogError.value = t('errors.loadTeamCatalog')
+      }
     } finally {
       teamCatalogLoading.value = false
     }
@@ -979,8 +1131,26 @@ export function useGameSession() {
     { deep: true },
   )
 
+  watch(
+    () => [game.teams, game.players, game.actions, game.matchInfo],
+    () => {
+      const link = matchLink.value
+      if (initializing || !link) return
+      try {
+        queueMatchSnapshot(link.matchId, link.trackerId, game)
+        matchSyncStatus.value = navigator.onLine ? 'syncing' : 'offline'
+        scheduleMatchSync()
+      } catch (error) {
+        console.error('Failed to store a match snapshot locally.', error)
+        storageErrorKey.value = 'errors.saveMatchEvents'
+        matchSyncStatus.value = 'error'
+      }
+    },
+    { deep: true, flush: 'sync' },
+  )
+
   function handleOnline() {
-    if (matchLink.value) scheduleMatchSync()
+    if (matchSyncConfigured) scheduleMatchSync()
   }
 
   onMounted(() => window.addEventListener('online', handleOnline))
@@ -1024,6 +1194,7 @@ export function useGameSession() {
     teamCatalog,
     teamCatalogLoading,
     teamCatalogError,
+    teamCatalogCached,
     lineupError,
     storageError,
     matchLink,
@@ -1048,13 +1219,15 @@ export function useGameSession() {
     toggleClock,
     applyTeamSetup,
     saveGameRoster,
-    openTeamSetup,
     cancelTeamSetup,
     openLineupEditor,
     beginPeriod,
     toggleDraftCourtPlayer,
     saveLineup,
     cancelLineupEdit,
+    markMatchFinished,
+    finishLocalMatch,
+    releaseFinishedMatch,
     createSharedMatch,
     joinSharedMatch,
   }

@@ -1,4 +1,5 @@
 import { isAppLocale, type AppLocale } from '../i18n/types'
+import { isRecord } from '../domain/guards'
 
 export const userProfileStorageKey = 'watchtower-user-profile-v1'
 
@@ -10,10 +11,6 @@ export type UserProfile = {
 }
 
 type StringStorage = Pick<Storage, 'getItem' | 'setItem'>
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 export function parseUserProfile(value: unknown): UserProfile {
   if (!isRecord(value)

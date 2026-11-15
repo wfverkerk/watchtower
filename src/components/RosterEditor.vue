@@ -60,7 +60,7 @@ function toggleParticipation(player: TeamProfilePlayer) {
   <div class="team-setup-roster">
     <div v-for="player in profile.players" :key="player.id" class="team-setup-player">
       <input v-model="player.jerseyNumber" class="team-setup-jersey-input" type="text" inputmode="numeric" maxlength="2" :disabled="disabled" :aria-label="t('teamSetup.jerseyNumber')" placeholder="#" @input="player.jerseyNumber = player.jerseyNumber.replace(/\D/g, '').slice(0, 2)">
-      <input v-model="player.name" type="text" :disabled="disabled" :aria-label="t('teamSetup.playerName')" :placeholder="t('teamSetup.playerName')" maxlength="60">
+      <input v-model="player.name" type="text" :disabled="disabled || player.statisticsPrivate" :aria-label="t('teamSetup.playerName')" :placeholder="t('teamSetup.playerName')" maxlength="60">
       <button
         class="team-setup-court-toggle"
         type="button"

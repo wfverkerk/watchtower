@@ -14,6 +14,8 @@ const props = defineProps<{
   scores: { id: string; points: number }[]
   scoreNotification: ScoreNotification | null
   gameStarted: boolean
+  matchFinished?: boolean
+  canFinishMatch?: boolean
   canStart: boolean
   canStartNewMatch: boolean
   period?: number
@@ -40,6 +42,7 @@ const emit = defineEmits<{
   'new-match': []
   'next-period': []
   'toggle-clock': []
+  'finish-match': []
 }>()
 </script>
 
@@ -49,7 +52,7 @@ const emit = defineEmits<{
     <div class="score-middle">
       <div class="score-status">
         <span class="live-pill" :class="{ active: gameStarted }">
-          <span></span>{{ gameStarted ? t('scoreboard.live') : t('scoreboard.ready') }}
+          <span></span>{{ t(matchFinished ? 'statistics.finished' : gameStarted ? 'scoreboard.live' : 'scoreboard.ready') }}
         </span>
         <span v-if="period !== undefined && period > 0" class="period-label">{{ formatPeriod(period, youth) }}</span>
       </div>
@@ -61,7 +64,7 @@ const emit = defineEmits<{
         </button>
       </div>
       <button
-        v-if="!gameStarted"
+        v-if="!gameStarted && !matchFinished"
         class="start-button"
         :disabled="!canStart"
         @click="emit('toggle-game')"
@@ -69,8 +72,11 @@ const emit = defineEmits<{
         {{ t('scoreboard.start') }}
         <span aria-hidden="true">▶</span>
       </button>
-      <button v-if="period !== 0" class="new-match-button" type="button" @click="emit('next-period')">
+      <button v-if="period !== 0 && !matchFinished" class="new-match-button" type="button" @click="emit('next-period')">
         {{ t(period !== undefined && period >= regulationPeriods(youth) ? 'scoreboard.nextOvertime' : 'scoreboard.nextPeriod') }}
+      </button>
+      <button v-if="canFinishMatch && !matchFinished" class="new-match-button" type="button" @click="emit('finish-match')">
+        {{ t('statistics.finishMatch') }}
       </button>
       <button v-if="canStartNewMatch" class="new-match-button" type="button" @click="emit('new-match')">
         {{ t('teamSetup.newGame') }}

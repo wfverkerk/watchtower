@@ -2,7 +2,7 @@
 
 Watchtower is een Vue-app om basketbalwedstrijden live statistieken bij te houden. Wedstrijdgegevens worden lokaal in de browser opgeslagen, zodat de logger zonder netwerkverbinding bruikbaar blijft.
 
-Je kunt een wedstrijd delen met een code. Andere scorers nemen anoniem deel vanaf hun eigen apparaat en houden een onafhankelijke registratie bij. Nieuwe acties, correcties en ongedaan gemaakte acties worden als afzonderlijke events met scorer-ID opgeslagen; offline events worden later gesynchroniseerd. De eventgegevens vormen de basis voor latere vergelijking, maar een vergelijkingsscherm is nog niet aanwezig.
+Na het instellen van je profiel zie je op de startpagina de wedstrijden van vandaag en de aankomende wedstrijden uit het programma. Tik op een wedstrijd en kies je thuis- of uitteam om te registreren. Een wedstrijd start en sluit vanzelf: de sessie wordt geopend bij de eerste registratie, en sluit na drie uur of na dertig minuten zonder events. Andere scorers houden een onafhankelijke registratie bij; acties en correcties worden als events opgeslagen en na netwerkherstel gesynchroniseerd.
 
 De interface is beschikbaar in het Nederlands, Engels en Tsjechisch. De taalkeuze wordt apart van wedstrijdgegevens op dit apparaat bewaard.
 
@@ -37,7 +37,8 @@ npm run build
 - `src/domain/game.test.ts` test de wedstrijdregels en opslagcompatibiliteit.
 
 De lokale wedstrijd wordt opgeslagen onder `watchtower-game-v1`. Verwijder deze browseropslag niet om bestaande wedstrijden te behouden.
-De actieve gedeelde wedstrijd en de niet-gesynchroniseerde eventwachtrij staan onder `watchtower-shared-match-v1` en `watchtower-match-events-v1`.
+De actieve gedeelde wedstrijd en de niet-gesynchroniseerde wachtrijen staan onder `watchtower-shared-match-v1`, `watchtower-match-events-v1` en `watchtower-match-snapshots-v1`.
+Afgesloten lokale wedstrijden en hun indienstatus staan onder `watchtower-local-matches-v1`. Wis de browseropslag niet zolang er gegevens zijn die je wilt bewaren of synchroniseren.
 
 ## Gedeelde wedstrijden instellen
 
@@ -49,10 +50,33 @@ De actieve gedeelde wedstrijd en de niet-gesynchroniseerde eventwachtrij staan o
    - [`20261111000100_zoebas_team_staff.sql`](./supabase/migrations/20261111000100_zoebas_team_staff.sql)
    - [`20261111000200_zoebas_team_staff_roles.sql`](./supabase/migrations/20261111000200_zoebas_team_staff_roles.sql)
    - [`20261111000300_shared_jersey_numbers.sql`](./supabase/migrations/20261111000300_shared_jersey_numbers.sql)
+   - [`20261112000000_statistics.sql`](./supabase/migrations/20261112000000_statistics.sql)
+   - [`20261113000000_match_sessions.sql`](./supabase/migrations/20261113000000_match_sessions.sql)
+   - [`20261114000000_statistics_contributions.sql`](./supabase/migrations/20261114000000_statistics_contributions.sql)
+   - [`20261115000000_opponent_teams.sql`](./supabase/migrations/20261115000000_opponent_teams.sql)
+   - [`20261116000000_public_logos_bucket.sql`](./supabase/migrations/20261116000000_public_logos_bucket.sql)
+   - [`20261117000000_zoebas_schedule.sql`](./supabase/migrations/20261117000000_zoebas_schedule.sql)
+   - [`20261118000000_session_join_window.sql`](./supabase/migrations/20261118000000_session_join_window.sql)
+   - [`20261119000000_session_status.sql`](./supabase/migrations/20261119000000_session_status.sql)
+   - [`20261120000000_session_closing.sql`](./supabase/migrations/20261120000000_session_closing.sql)
+   - [`20261121000000_admin_dashboard.sql`](./supabase/migrations/20261121000000_admin_dashboard.sql)
+   - [`20261122000000_test_games.sql`](./supabase/migrations/20261122000000_test_games.sql) (testdata; draai daarna `select public.refresh_test_games();`)
+   - [`20261123000000_test_team_logos.sql`](./supabase/migrations/20261123000000_test_team_logos.sql) (upload de bestanden in `supabase/test-logos/` naar de bucket `logos`)
 3. Kopieer `.env.example` naar `.env.local` en vul de project-URL en publishable/anon key in. Deze client key is bedoeld voor gebruik in de browser; de database vertrouwt op RLS-beleid en anonieme Supabase Auth-sessies.
-4. Herstart `npm run dev`. Deel vanuit de app de wedstrijdcode met andere scorers.
+4. Controleer dat Supabase Realtime is ingeschakeld en dat `match_events`, `shared_matches` en `match_score_links` in de publicatie `supabase_realtime` staan. De migratie voegt deze toe als de publicatie bestaat.
+5. Herstart `npm run dev`. Kies op de startpagina een wedstrijd uit het programma.
 
-Bij het eerste gebruik stel je lokaal je naam, taal en weergave in. Via het profiel rechtsboven kun je deze voorkeuren later aanpassen. Kies daarna een Zoebas-team uit het raster en selecteer de spelers en coaches die meedoen; vul voor de spelers ook hun rugnummers in. De naam van de tegenstander kun je direct invoeren. De wizard laadt daarnaast programma en uitslagen uit de publieke FOYS-competitie-API; je kunt een wedstrijd zelf selecteren, maar er wordt niet automatisch een wedstrijd gekozen. De tegenstander krijgt voorlopig vijf tijdelijke spelers (`player_1` tot en met `player_5`) met fictieve nummers.
+Bij het eerste gebruik stel je lokaal je naam, taal en weergave in. Via het profiel rechtsboven kun je deze voorkeuren later aanpassen. Start een wedstrijd en kies een Zoebas-team en de deelnemende spelers en coaches; vul voor de spelers ook hun rugnummers in. De wizard laadt programma en uitslagen uit de publieke FOYS-competitie-API. Bij een handmatig ingevoerde tegenstander zijn ook datum en aanvangstijd verplicht. De tegenstander krijgt voorlopig vijf tijdelijke spelers (`player_1` tot en met `player_5`) met fictieve nummers; een deelnemer die voor de uit-ploeg registreert beheert zijn eigen spelerslijst.
+
+De tegenstander kies je in de laatste wizardstap met een zoekveld met suggesties uit de tabel `opponent_teams`. Deze tabel wordt bij het uitvoeren van `20261115000000_opponent_teams.sql` gevuld uit de bestanden in de publieke Storage-bucket `logos` (gif, png, jpg, jpeg en webp, zonder submappen): de bestandsnaam zonder extensie is de teamnaam. De naam wordt in de database in de vorm `Sv Zoebas` opgeslagen (eerste letter van elk woord hoofdletter) en `logo_file` bewaart de exacte bestandsnaam voor het logo. Controleer afkortingen als `BC` of `CBV` en pas de naam zo nodig aan in de tabel; zoeken is niet hoofdlettergevoelig. Nieuwe logo's voeg je later toe met een `insert` in `opponent_teams`. Een niet gevonden tegenstander blijft als vrije tekst mogelijk. De lijst wordt lokaal gecached voor offline gebruik; logo's zijn alleen zichtbaar met internet. De logo's worden getoond via de publieke URL van de bucket; voer daarom ook `20261116000000_public_logos_bucket.sql` uit (zet de bucket `logos` op publiek). Bij een privé-bucket geeft Supabase "Bucket not found" en blijven de logo's leeg.
+
+Sessies zijn voor alle appgebruikers zichtbaar. Deelnemen kan vanaf tien minuten voor de opgegeven aanvang, tot 180 minuten daarna of totdat de maker of bevoegde coach de sessie sluit. De aangewezen live-scorer bepaalt de getoonde stand; de maker of een bevoegde coach kan deze scorer wijzigen. Andere registraties worden in het live-overzicht per score zo goed mogelijk gekoppeld, met een onzekerheidsmelding en handmatige correctie. Niet-gekoppelde acties blijven zichtbaar als aanvullende acties. De gewone registratie en het scorebord op je eigen apparaat blijven onafhankelijk van de live-stand.
+
+Een lokale wedstrijd blijft op het apparaat bewaard na afsluiten. Je kunt deze later met internet indienen als nieuwe gedeelde wedstrijd of bij een bestaande sessie met dezelfde teamnamen en aanvangstijd; als beide wedstrijden een programma-ID hebben, moeten ook die overeenkomen. Indienen kan ook na sluiting van de sessie. Bij een onzekere netwerkuitkomst moet de indiening met dezelfde account en hetzelfde doel opnieuw worden geprobeerd. Lokale wedstrijden staan niet automatisch in de teamstatistiekhistorie.
+
+Een account dat al acties of een lokale inzending in die sessie heeft, kan geen tweede lokale registratie bij dezelfde sessie indienen: die zou anders als dezelfde scorer worden opgeteld in plaats van gekoppeld.
+
+Een eerder opgehaalde teamcatalogus is offline beschikbaar. Ontbreekt die, dan kun je bij een lokale wedstrijd zelf een team en spelers invoeren. Het lokale team is geen gedeeld catalogusteam. Om de app zelf offline te openen moet deze eerder online zijn geladen of geïnstalleerd.
 
 In dialoogvensters blijft de toetsenbordfocus binnen het venster. Met Escape kun je een venster sluiten wanneer annuleren mogelijk is; de focus keert dan waar mogelijk terug naar de knop waarmee je het opende.
 
@@ -62,7 +86,7 @@ Op het wedstrijdscherm kies je twee tot vijf actieve Zoebas-spelers om de eerste
 
 Met **Spelers bewerken** pas je vóór en tijdens de wedstrijd dezelfde spelers- en coachlijst aan als in de wizard. Geef iemand als afwezig op in plaats van die te verwijderen; bestaande wedstrijdacties blijven bewaard. De opstelling kies je afzonderlijk. Tijdens de wedstrijd stopt het openen van de spelerseditor de klok.
 
-De spelers op het veld staan met naam en rugnummer bij de wisselknop onder het scorebord; deze balk blijft tijdens het scrollen zichtbaar. Bij lange namen kun je de spelerslijst horizontaal scrollen. Voor de tegenstander registreer je alleen de score met de knoppen +1, +2 en +3 in het actiegebied. Deze scores worden als acties zonder toegewezen speler opgeslagen en gesynchroniseerd; je kunt ze afzonderlijk verwijderen in het wedstrijdoverzicht of de laatste actie ongedaan maken. Het automatisch koppelen of verrijken van deze scores door een tegenstander is nog niet geïmplementeerd.
+De spelers op het veld staan met naam en rugnummer bij de wisselknop onder het scorebord; deze balk blijft tijdens het scrollen zichtbaar. Bij lange namen kun je de spelerslijst horizontaal scrollen. Voor de tegenstander registreer je alleen de score met de knoppen +1, +2 en +3 in het actiegebied. Deze scores worden als acties zonder toegewezen speler opgeslagen en gesynchroniseerd; je kunt ze afzonderlijk verwijderen in het wedstrijdoverzicht of de laatste actie ongedaan maken.
 
 De klok start je per periode handmatig en kun je pauzeren, ook tijdens de rust; de wedstrijd pauzeren stopt de klok eveneens. X10-, X12- en V12-teams spelen acht periodes van vier minuten, andere teams vier kwarten van tien minuten. Zodra de vierde jeugdperiode of het tweede kwart op 00:00 komt, start automatisch een pauze van tien minuten. Je start de volgende periode zelf; verlengingen duren vijf minuten. De klok gebruikt verstreken tijd en loopt dus ook door wanneer het tabblad gesloten is.
 
@@ -70,13 +94,42 @@ Bij vijf teamfouten verschijnt een rood vierkantje onder de teamnaam. Voor jeugd
 
 Het wedstrijdverloop toont acties, wissels (spelers erin en eruit) en het begin en einde van periodes of kwarten. Nieuwe regels verschijnen met een korte animatie in de teamkleur; periodegebeurtenissen hebben een neutrale kleur. Bij verminderde beweging is de animatie uitgeschakeld. Het einde wordt geregistreerd bij 00:00 of wanneer je eerder naar de volgende periode gaat; de eerste opstelling is geen wissel. De periode, klok, opstelling en dit verloop worden lokaal opgeslagen. Bij gedeelde wedstrijden zijn ze onderdeel van de beginsnapshot; latere klok-, periode-, opstellings- en verloopwijzigingen worden momenteel niet tussen apparaten gesynchroniseerd. De geregistreerde fouten worden wel als actie-events gesynchroniseerd, inclusief hun periode.
 
-De app bewaart de actieve wedstrijd en niet-gesynchroniseerde events lokaal. Nieuwe acties, wijzigingen en verwijderingen blijven per anonieme scorer gescheiden in `match_events`; de wedstrijd-roster wordt bij het aanmaken als uitgangspunt gedeeld. Een scorer kan offline blijven registreren nadat die online aan de gedeelde wedstrijd is toegevoegd. Bij herstellen van de verbinding worden events opnieuw geprobeerd te synchroniseren.
+De app bewaart de actieve wedstrijd en niet-gesynchroniseerde events lokaal. Nieuwe acties, wijzigingen en verwijderingen blijven per anonieme scorer gescheiden in `match_events`; de wedstrijd-roster wordt bij het aanmaken als uitgangspunt gedeeld. Een scorer kan offline blijven registreren nadat die online aan de gedeelde wedstrijd is toegevoegd. Bij herstellen van de verbinding worden events opnieuw geprobeerd te synchroniseren, ook na het wisselen van wedstrijd. Events van een andere apparaatidentiteit blijven bewaard en melden een synchronisatiefout; ze kunnen alleen met de oorspronkelijke identiteit worden verstuurd. De resetknop verwijdert ook niet-gesynchroniseerde events.
+
+## Teamstatistieken en coaches
+
+De beheerder voert de nieuwe migratie uit vóór het uitrollen van de app. Deze maakt per bestaand catalogusteam een geheime teamcode en geeft iedere bestaande catalogusspeler een eigen UUID; ook spelers met dezelfde naam krijgen afzonderlijke IDs. Nieuwe private spelers worden door een coach toegevoegd. Hun naam staat afzonderlijk opgeslagen en is alleen toegankelijk voor bevoegde coaches; teamleden met de teamcode zien hun rugnummer en statistieken. De gedeelde wedstrijdgegevens gebruiken voor deze spelers een anoniem label. Eerder openbaar gemaakte gegevens, waaronder bestaande teamcatalogi en oudere wedstrijdkopieën, worden niet automatisch privé gemaakt of gewist.
+
+Een vertrouwde beheerder kan in de Supabase SQL-editor de code van één team opzoeken en veilig aan teamleden bezorgen:
+
+```sql
+select access_code from public.statistics_teams where id = 'x12-1';
+```
+
+De teamcode geeft toegang tot de historie van dat team, maar geen coachrechten. Deel hem daarom alleen met personen die de teamhistorie mogen zien. De bestaande wedstrijdcode geeft toegang tot de gegevens van die wedstrijd en is iets anders dan de teamcode. Statistieken zijn per team; een speler die bij een ander team gaat spelen krijgt daar niet automatisch dezelfde identiteit of de historie van het vorige team.
+
+Schakel in Supabase Auth naast anonieme aanmelding ook aanmelden via e-mail met een magic link in. Voeg de URL van de app toe aan de toegestane redirect-URL's. Een coach meldt zich aan via **Instellingen → Coach inloggen** en opent de link op hetzelfde apparaat en in dezelfde browser/app. Safari en de iPhone-beginschermapp hebben afzonderlijke opslag en delen hun aanmelding niet. Aanmelden zelf geeft nog geen coachrechten: nadat de coach voor het eerst is aangemeld, kent een beheerder die rechten per team toe met de gebruikers-ID uit Supabase Auth:
+
+```sql
+insert into public.statistics_coaches (team_id, user_id)
+values ('x12-1', '00000000-0000-0000-0000-000000000000');
+```
+
+Vervang de voorbeeldwaarden door het team en de juiste, niet-anonieme gebruikers-ID. Verwijder een rij uit `statistics_coaches` om die coachrechten in te trekken. Teamleden met een code behouden zelfstandig toegang totdat hun rij in `statistics_team_members` wordt verwijderd; vervang zo nodig ook de teamcode. Een aangemelde coach kan spelers toevoegen en wijzigen op de statistiekenpagina. Kies bij een nieuwe wedstrijd **Gedeelde spelerslijst gebruiken** in de spelersstap om de vaste spelers-ID's te gebruiken. Bestaande lokale spelers blijven beschikbaar maar worden bij die keuze aanvankelijk op afwezig gezet, zodat ze niet automatisch met naamgenoten worden samengevoegd.
+
+Voor teamstatistieken moet de wedstrijd gedeeld zijn. Via **Wedstrijd afsluiten** kies je met internet een team en één officiële scorer. Iedere wedstrijddeelnemer mag de officiële scorer later wijzigen. De pagina toont de laatst ontvangen stand van elke scorer; nog niet gesynchroniseerde acties kunnen daarin ontbreken. Latere correcties en vertraagde synchronisatie van de gekozen scorer werken de historische statistieken bij. Acties van verschillende scorers worden niet opgeteld. De klok stopt bij afsluiten; correcties blijven mogelijk zolang de wedstrijd op het apparaat actief is.
+
+Aanvullingen van andere scorers verwerken de historische statistieken wel: de officiële scorer-snapshot blijft het anker voor score en teamtotalen, en de huidige acties van andere scorers (online en offline ingediend) worden daaraan gekoppeld met dezelfde regels als de live-weergave (team, punten en periode; handmatige koppelingen gelden). Daarbij vullen ze een ontbrekende speler, schotpositie of assist aan. Niet-gekoppelde scores en overige acties van andere scorers tellen niet mee, zodat niets dubbel wordt geteld. Je kunt in een sessie ook voor de uit-ploeg registreren (**Ik registreer voor** in de sessielijst). Je eigen team staat dan bovenaan, je beheert je eigen spelerslijst, en je registratie krijgt geen catalogusteam: je kunt hem dus niet als officiële scorer voor de statistieken van het thuisteam gebruiken. Statistieken voor het uitteam zelf zijn nog niet beschikbaar, omdat een wedstrijd één officiële scorer en één statistiekteam kent. Spelersnamen van andere scorers worden bewust niet gedeeld; in de live-weergave verschijnen onbekende spelers als zodanig. Een nieuw aangewezen live-scorer kan een achterlopende eigen registratie hebben; de stand van een andere scorer wordt niet continu naar diens apparaat gekopieerd.
+
+Wedstrijdspelers met een gedeelde UUID worden automatisch gekoppeld; andere wedstrijdspelers moet een deelnemer aan de wedstrijd op de historiepagina handmatig koppelen. Tot die tijd ontbreken ze in de spelerstotalen. Lifetime-totalen en trends bevatten alleen afgesloten, gekoppelde wedstrijden van het gekozen team. Bestaande lokale wedstrijden zijn niet automatisch beschikbaar als historie.
+
+Een scorer-snapshot bevat geen spelersnamen en wordt samen met de eventwachtrij lokaal bewaard bij netwerkuitval, ook als je naar een andere wedstrijd wisselt. Wijzigt dezelfde scorer op twee apparaten tegelijk, dan meldt de app een conflict en blijven de lokale gegevens bewaard; er wordt niet automatisch een registratie overschreven. Een scherm om dergelijke conflicten samen te voegen is nog niet beschikbaar: de historie kan achterlopen totdat een beheerder dit heeft opgelost. Gebruik dezelfde scorer daarom niet gelijktijdig in meerdere tabbladen of op meerdere apparaten. Wisselen tussen anoniem en coach is alleen mogelijk na afsluiten en synchroniseren van de actieve gedeelde wedstrijd en alle wachtrijen. Een inloglink die tijdens een actieve wedstrijd binnenkomt, wordt niet automatisch verwerkt. Gebruik de resetknop niet zolang acties of snapshots nog niet zijn gesynchroniseerd. De gedeelde historie en het afsluiten zijn alleen online beschikbaar.
 
 De startwizard laadt de Zoebas-teams, spelersvoornamen en bekende coaches en assistent-coaches met hun rol uit `zoebas_teams` in Supabase. Spelers zijn bij een nieuwe wizard standaard aanwezig; een onafgemaakt concept behoudt de gemaakte keuzes. Rugnummers van spelers uit de teamlijst worden bij doorgaan naar de tegenstander in Supabase opgeslagen en op andere apparaten opgehaald. Ook wijzigingen aan deze nummers in de wedstrijdeditor worden gedeeld. Deze nummers zijn openbaar leesbaar en door iedere bezoeker aanpasbaar. Gelijktijdige wijzigingen worden gecontroleerd; bij een conflict moet je de gedeelde nummers opnieuw laden en controleren. Zelf toegevoegde spelers, coaches en hun gegevens blijven lokaal.
 
 Wijzigingen aan het team in de wizard worden als lokaal concept bewaard, ook als je de pagina herlaadt voordat de wedstrijd is aangemaakt. Behalve de gedeelde rugnummers zijn teamgegevens browser- en apparaatspecifiek. De resetknop verwijdert ook dit concept, maar niet de gedeelde rugnummers.
 
-De ruwe registraties zijn in Supabase te vergelijken via de `match_events`-tabel, gefilterd op `match_id` en gesorteerd op `occurred_at`. `tracker_id` is de vaste anonieme apparaatidentiteit; `tracker_name` is de gekozen weergavenaam. De UI voor het naast elkaar vergelijken van registraties volgt later.
+De ruwe registraties zijn in Supabase te vergelijken via de `match_events`-tabel, gefilterd op `match_id` en gesorteerd op `sequence_id`. `tracker_id` is de apparaatidentiteit; `tracker_name` is de gekozen weergavenaam.
 
 ## Testen via GitHub Pages
 
@@ -86,15 +139,17 @@ De workflow in [deploy-pages.yml](./.github/workflows/deploy-pages.yml) publicee
 2. Configureer Supabase zoals hierboven beschreven, inclusief anonieme aanmelding en alle nog ontbrekende migraties.
 3. Kies bij **Settings → Pages → Build and deployment → Source** voor **GitHub Actions**. Controleer daarna de workflow bij **Actions** en open de site op je telefoon.
 
-Browseropslag is per apparaat en per websiteadres gescheiden. Een lokale wedstrijd op je computer verschijnt dus niet automatisch op je telefoon. Deel een wedstrijdcode om de gedeelde sync te testen.
+Browseropslag is per apparaat en per websiteadres gescheiden. Een lokale wedstrijd op je computer verschijnt dus niet automatisch op je telefoon. Open dezelfde sessie op beide apparaten om gedeelde sync te testen.
 
 ### App op je beginscherm
 
-Open de gepubliceerde site op je telefoon en kies in de browser **Deel → Zet op beginscherm** (iPhone) of **Toevoegen aan startscherm / App installeren** (Android). Open de app daarna via het nieuwe icoon. Op iPhone hebben Safari en de beginschermapp afzonderlijke opslag: lokale wedstrijden, instellingen en niet-gesynchroniseerde acties worden niet automatisch overgenomen. Synchroniseer eventuele acties eerst en gebruik de wedstrijdcode om een gedeelde wedstrijd opnieuw te openen. Klok, opstelling en lokaal wedstrijdverloop worden daarbij niet doorlopend overgezet.
+Open de gepubliceerde site op je telefoon en kies in de browser **Deel → Zet op beginscherm** (iPhone) of **Toevoegen aan startscherm / App installeren** (Android). Open de app daarna via het nieuwe icoon. Op iPhone hebben Safari en de beginschermapp afzonderlijke opslag: lokale wedstrijden, instellingen en niet-gesynchroniseerde acties worden niet automatisch overgenomen. Synchroniseer eventuele acties eerst en open de gedeelde sessie opnieuw. Klok, opstelling en lokaal wedstrijdverloop worden daarbij niet doorlopend overgezet.
 
-Na een eerste online bezoek kan de app offline opstarten. Voor het laden van de teamcatalogus, deelnemen aan een gedeelde wedstrijd en synchroniseren blijft internet nodig. Offline acties worden opnieuw gesynchroniseerd wanneer de app met verbinding actief is. Een nieuwe versie wordt pas na alle oude vensters te sluiten of via **Bijwerken** geladen; die knop is niet beschikbaar terwijl de wedstrijdklok loopt.
+Na een eerste online bezoek kan de app offline opstarten. Voor het ophalen van de teamcatalogus, deelnemen aan een gedeelde wedstrijd en synchroniseren blijft internet nodig. Offline acties worden opnieuw gesynchroniseerd wanneer de app met verbinding actief is. Een nieuwe versie wordt pas na alle oude vensters te sluiten of via **Bijwerken** geladen; die knop is niet beschikbaar terwijl de wedstrijdklok loopt.
 
 Via **Profiel en voorkeuren** kun je instellen of het scherm tijdens een actieve wedstrijd aan blijft. Dit staat standaard aan, werkt alleen terwijl de app zichtbaar is en hangt af van browser, apparaat en energiebesparing.
+
+Onderaan **Profiel en voorkeuren** staat de buildcode voor probleemonderzoek. Bij GitHub Pages zijn dit de eerste 12 tekens van de gepubliceerde commit; de ontwikkelserver toont `dev` en lokale productiebuilds krijgen een eigen `local-` code.
 
 ## Testgegevens eenmalig wissen
 

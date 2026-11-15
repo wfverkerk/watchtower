@@ -1,0 +1,378 @@
+<script setup lang="ts">
+import PageHeader from './PageHeader.vue'
+import BaseDialog from './BaseDialog.vue'
+import JoinSidePicker from './JoinSidePicker.vue'
+import TeamLogo from './TeamLogo.vue'
+import { errorMessage } from '../domain/guards'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { gameStartMs, groupByDay, scheduleBucket, winnerSide, type ScheduleGame } from '../domain/schedule'
+import { sessionPhase } from '../domain/sessionWindow'
+import { createInitialGameState, type GameState } from '../domain/game'
+import { useFavoriteTeams } from '../composables/useFavoriteTeams'
+import { useLocale } from '../i18n/useLocale'
+import { listMatchSessions, openScheduleSession, setSessionFinal, type MatchSession, type SessionStatus } from '../services/sharedMatch'
+import { loadLocalMatches, type LocalMatch } from '../services/localMatches'
+import { loadSchedule } from '../services/zoebasSchedule'
+import { submitLocalMatch } from '../services/submitLocalMatch'
+
+const props = defineProps<{ configured: boolean; hasCurrentGame: boolean; displayName: string; currentMatchId: string | null }>()
+const emit = defineEmits<{
+  resume: []
+  join: [id: string, side: 'home' | 'away']
+}>()
+const { t, locale } = useLocale()
+const localMatches = ref<LocalMatch[]>([])
+const allSessions = ref<MatchSession[]>([])
+const targets = ref<Record<string, string>>({})
+const popoverGame = ref<ScheduleGame | null>(null)
+const submitting = ref('')
+const error = ref('')
+const localError = ref('')
+const loading = ref(false)
+const now = ref(Date.now())
+let timer: number | undefined
+let lastRefresh = 0
+
+const schedule = ref<ScheduleGame[]>([])
+const scheduleError = ref('')
+const { favorites, setFavorites } = useFavoriteTeams()
+const mode = ref<'mine' | 'all'>(favorites.value.length ? 'mine' : 'all')
+const editing = ref(false)
+const draftFavorites = ref<string[]>([])
+const teamNames = computed(() => [...new Set(schedule.value.flatMap((game) => [game.homeTeam, game.awayTeam]))]
+  .sort((left, right) => left.localeCompare(right)))
+const showMine = computed(() => mode.value === 'mine' && favorites.value.length > 0)
+const visibleSchedule = computed(() => showMine.value
+  ? schedule.value.filter((game) => favorites.value.includes(game.homeTeam) || favorites.value.includes(game.awayTeam))
+  : schedule.value)
+
+function selectAll() {
+  mode.value = 'all'
+  editing.value = false
+}
+
+// Without favorites, "mijn teams" goes straight to choosing them.
+function selectMine() {
+  mode.value = 'mine'
+  if (!favorites.value.length) startEditing()
+  else editing.value = false
+}
+
+function startEditing() {
+  draftFavorites.value = [...favorites.value]
+  editing.value = true
+}
+
+function toggleDraft(teamName: string) {
+  draftFavorites.value = draftFavorites.value.includes(teamName)
+    ? draftFavorites.value.filter((name) => name !== teamName)
+    : [...draftFavorites.value, teamName]
+}
+
+function saveMyTeams() {
+  setFavorites(draftFavorites.value)
+  mode.value = favorites.value.length ? 'mine' : 'all'
+  editing.value = false
+  void refresh()
+}
+
+const openGames = computed(() => visibleSchedule.value.filter((game) => scheduleBucket(game, now.value) === 'open'))
+const upcomingDays = computed(() => groupByDay(visibleSchedule.value.filter((game) => scheduleBucket(game, now.value) === 'upcoming')))
+const historyGames = computed(() => visibleSchedule.value
+  .filter((game) => scheduleBucket(game, now.value) === 'history')
+  .sort((left, right) => gameStartMs(right) - gameStartMs(left)))
+const historyDays = computed(() => groupByDay(historyGames.value))
+
+function sessionForGame(game: ScheduleGame) {
+  return allSessions.value.find((session) => session.scheduleId === game.id)
+}
+
+function canJoinSession(session: MatchSession | undefined) {
+  return !!session && (session.status === 'open' || session.status === 'live')
+}
+
+function scheduleGameState(game: ScheduleGame): GameState {
+  const state = createInitialGameState()
+  return {
+    ...state,
+    teams: [
+      { id: 'home', name: game.homeTeam, color: '#f26a36' },
+      { id: 'away', name: game.awayTeam, color: '#5d72d9' },
+    ],
+    players: [],
+    matchInfo: { id: game.id, date: game.date, startTime: game.startTime, venue: game.venue, startsAt: new Date(gameStartMs(game)).toISOString() },
+  }
+}
+
+// The first joiner opens the session for a scheduled game; later joiners get the same session back.
+async function startScheduleSession(game: ScheduleGame, side: 'home' | 'away') {
+  popoverGame.value = null
+  error.value = ''
+  try {
+    const joined = await openScheduleSession(game.id, scheduleGameState(game), props.displayName)
+    emit('join', joined.link.matchId, side)
+    await refresh()
+  } catch (reason) {
+    console.error('Failed to open the scheduled session.', reason)
+    error.value = errorMessage(reason)
+  }
+}
+
+async function finalizeSession(id: string) {
+  error.value = ''
+  try {
+    await setSessionFinal(id)
+    await refresh()
+  } catch (reason) {
+    console.error('Failed to finalise the session.', reason)
+    error.value = errorMessage(reason)
+  }
+}
+
+function isCurrentGame(game: ScheduleGame) {
+  return !!props.currentMatchId && sessionForGame(game)?.id === props.currentMatchId
+}
+
+function canPick(game: ScheduleGame) {
+  if (isCurrentGame(game)) return true
+  if (props.hasCurrentGame) return false
+  const session = sessionForGame(game)
+  if (session) return canJoinSession(session)
+  return sessionPhase(new Date(gameStartMs(game)).toISOString(), now.value) === 'open'
+}
+
+// Tapping your own running game resumes it; any other open game opens the side choice.
+function tapGame(game: ScheduleGame) {
+  if (isCurrentGame(game)) emit('resume')
+  else popoverGame.value = game
+}
+
+function confirmPopover(side: 'home' | 'away') {
+  const game = popoverGame.value
+  if (!game) return
+  const session = sessionForGame(game)
+  if (session) joinAs(session.id, side)
+  else void startScheduleSession(game, side)
+}
+
+function statusLabel(status: SessionStatus) {
+  return t(`sessions.status.${status}`)
+}
+
+function formatDay(date: string) {
+  return new Date(`${date}T00:00:00`).toLocaleDateString(locale.value, { weekday: 'long', day: 'numeric', month: 'long' })
+}
+
+async function refreshSchedule() {
+  try {
+    schedule.value = await loadSchedule()
+    scheduleError.value = ''
+  } catch (reason) {
+    console.error('Failed to load the schedule.', reason)
+    scheduleError.value = errorMessage(reason)
+  }
+}
+
+async function refresh() {
+  if (loading.value || !props.configured) return
+  lastRefresh = Date.now()
+  loading.value = true
+  try {
+    allSessions.value = await listMatchSessions(true)
+    error.value = ''
+    await refreshSchedule()
+  } catch (reason) {
+    console.error('Failed to load match sessions.', reason)
+    error.value = errorMessage(reason)
+  } finally {
+    loading.value = false
+  }
+}
+
+function joinAs(id: string, side: 'home' | 'away') {
+  emit('join', id, side)
+}
+
+function matchingSessions(match: LocalMatch) {
+  const startsAt = match.game.matchInfo?.startsAt
+  if (!startsAt) return []
+  const names = match.game.teams.map((team) => team.name.trim().toLocaleLowerCase()).sort()
+  return allSessions.value.filter((session) => Date.parse(session.startsAt) === Date.parse(startsAt)
+    && session.teams.map((team) => team.name.trim().toLocaleLowerCase()).sort().every((name, index) => name === names[index]))
+}
+
+async function submit(match: LocalMatch) {
+  if (submitting.value) return
+  submitting.value = match.id
+  error.value = ''
+  try {
+    const target = targets.value[match.id] || 'new'
+    await submitLocalMatch(match.id, target === 'new' ? null : target, props.displayName)
+    localMatches.value = loadLocalMatches()
+    await refresh()
+  } catch (reason) {
+    console.error('Failed to submit local match.', reason)
+    error.value = errorMessage(reason)
+    try { localMatches.value = loadLocalMatches() } catch (loadError) {
+      console.error('Failed to reload local matches.', loadError)
+      localError.value = t('sessions.localLoadError')
+    }
+  } finally {
+    submitting.value = ''
+  }
+}
+
+onMounted(() => {
+  try {
+    localMatches.value = loadLocalMatches()
+    for (const match of localMatches.value) {
+      targets.value[match.id] = match.submission?.targetMatchId ?? 'new'
+    }
+  } catch (reason) {
+    console.error('Failed to load local matches.', reason)
+    localError.value = t('sessions.localLoadError')
+  }
+  void refresh()
+  window.addEventListener('online', refresh)
+  timer = window.setInterval(() => {
+    now.value = Date.now()
+    if (now.value - lastRefresh >= 30_000) void refresh()
+  }, 10_000)
+})
+onUnmounted(() => {
+  window.removeEventListener('online', refresh)
+  if (timer !== undefined) window.clearInterval(timer)
+})
+</script>
+
+<template>
+  <section class="sessions-page">
+    <PageHeader :eyebrow="t('sessions.eyebrow')" :title="t('sessions.title')">
+      <div class="landing-toggle" role="group" :aria-label="t('sessions.myTeams')">
+        <button type="button" :class="{ 'is-active': mode === 'mine' }" :aria-pressed="mode === 'mine' ? 'true' : 'false'" @click="selectMine">{{ t('sessions.myTeams') }}</button>
+        <button type="button" :class="{ 'is-active': mode === 'all' }" :aria-pressed="mode === 'all' ? 'true' : 'false'" @click="selectAll">{{ t('sessions.allTeams') }}</button>
+      </div>
+    </PageHeader>
+    <p v-if="!configured" class="notice">{{ t('sync.notConfigured') }}</p>
+    <p v-if="error" class="notice" role="alert">{{ t('sessions.loadError') }}: {{ error }}</p>
+    <p v-if="localError" class="notice" role="alert">{{ localError }}</p>
+    <p v-if="scheduleError" class="notice" role="alert">{{ t('sessions.scheduleError') }}: {{ scheduleError }}</p>
+    <section v-if="editing" class="panel statistics-card my-teams-editor">
+      <h2>{{ t('sessions.pickMyTeams') }}</h2>
+      <p class="statistics-hint">{{ t('sessions.myTeamsHint') }}</p>
+      <ul class="favorite-team-list">
+        <li v-for="name in teamNames" :key="name" class="favorite-team-row">
+          <span>{{ name }}</span>
+          <button
+            type="button"
+            class="favorite-heart"
+            :class="{ 'is-favorite': draftFavorites.includes(name) }"
+            :aria-pressed="draftFavorites.includes(name) ? 'true' : 'false'"
+            :aria-label="name"
+            @click="toggleDraft(name)"
+          >♥</button>
+        </li>
+      </ul>
+      <div class="session-actions">
+        <button type="button" class="match-sync-primary" @click="saveMyTeams">{{ t('sessions.saveMyTeams') }}</button>
+      </div>
+    </section>
+    <template v-if="!editing">
+    <section class="panel statistics-card">
+      <h2>{{ t('sessions.openToday') }}</h2>
+      <p v-if="!openGames.length" class="statistics-hint">{{ t('sessions.openEmpty') }}</p>
+      <article v-for="game in openGames" :key="game.id" class="session-row schedule-game" :class="{ 'is-live': sessionForGame(game)?.status === 'live' }">
+        <button type="button" class="schedule-open-trigger" :disabled="!canPick(game)" @click="tapGame(game)">
+          <span class="schedule-teams">
+            <TeamLogo :name="game.homeTeam" placeholder />
+            <strong>{{ game.homeTeam }}</strong>
+            <span>–</span>
+            <strong>{{ game.awayTeam }}</strong>
+            <TeamLogo :name="game.awayTeam" placeholder />
+          </span>
+          <time>{{ game.startTime }}</time>
+        </button>
+        <span v-if="sessionForGame(game)" class="session-status" :data-status="sessionForGame(game)!.status">{{ statusLabel(sessionForGame(game)!.status) }}</span>
+        <span v-else-if="!canPick(game)" class="statistics-hint">{{ t('sessions.opensBefore') }}</span>
+        <div v-if="sessionForGame(game)?.canReview && sessionForGame(game)?.status === 'in_review'" class="session-actions">
+          <button type="button" class="match-sync-primary" @click="finalizeSession(sessionForGame(game)!.id)">{{ t('sessions.finalise') }}</button>
+        </div>
+      </article>
+    </section>
+    <section class="panel statistics-card">
+      <h2>{{ t('sessions.upcomingTitle') }}</h2>
+      <p v-if="!upcomingDays.length" class="statistics-hint">{{ t('sessions.upcomingEmpty') }}</p>
+      <div v-for="day in upcomingDays" :key="day.date" class="card schedule-day">
+        <h3>{{ formatDay(day.date) }}</h3>
+        <article v-for="game in day.games" :key="game.id" class="session-row schedule-game">
+          <div class="schedule-teams">
+            <TeamLogo :name="game.homeTeam" placeholder />
+            <strong>{{ game.homeTeam }}</strong>
+            <span>–</span>
+            <strong>{{ game.awayTeam }}</strong>
+            <TeamLogo :name="game.awayTeam" placeholder />
+          </div>
+          <time>{{ game.startTime }}</time>
+        </article>
+      </div>
+    </section>
+    <section class="panel statistics-card">
+      <h2>{{ t('sessions.historyTitle') }}</h2>
+      <p v-if="!historyGames.length" class="statistics-hint">{{ t('sessions.historyEmpty') }}</p>
+      <details v-for="day in historyDays" :key="day.date" class="history-day">
+        <summary>{{ formatDay(day.date) }} <small>{{ day.games.length }}</small></summary>
+        <article v-for="game in day.games" :key="game.id" class="session-row schedule-game">
+          <span class="stats-label" :class="game.hasStats ? 'has-stats' : 'no-stats'">{{ game.hasStats ? t('sessions.withStats') : t('sessions.withoutStats') }}</span>
+          <div class="schedule-teams">
+            <span :class="{ 'schedule-winner': winnerSide(game) === 'home' }">{{ game.homeTeam }}</span>
+            <strong>{{ game.homeScore ?? '–' }} – {{ game.awayScore ?? '–' }}</strong>
+            <span :class="{ 'schedule-winner': winnerSide(game) === 'away' }">{{ game.awayTeam }}</span>
+          </div>
+          <time>{{ game.startTime }}</time>
+          <span v-if="winnerSide(game)" class="statistics-hint">{{ t('sessions.winner') }}: {{ winnerSide(game) === 'home' ? game.homeTeam : game.awayTeam }}</span>
+          <div v-if="sessionForGame(game)?.canReview && sessionForGame(game)?.status === 'in_review'" class="session-actions">
+            <button type="button" class="match-sync-primary" @click="finalizeSession(sessionForGame(game)!.id)">{{ t('sessions.finalise') }}</button>
+          </div>
+        </article>
+      </details>
+    </section>
+    </template>
+    <section v-if="localMatches.length" class="panel statistics-card">
+      <h2>{{ t('sessions.localFinished') }}</h2>
+      <div v-for="match in localMatches" :key="match.id" class="session-row">
+        <strong>{{ match.game.teams[0].name }} – {{ match.game.teams[1].name }}</strong>
+        <span>{{ match.game.matchInfo?.date }} {{ match.game.matchInfo?.startTime }}</span>
+        <span v-if="match.submission?.resultMatchId" class="statistics-hint">{{ t('sessions.submitted') }}</span>
+        <template v-else>
+          <label class="match-sync-field">{{ t('sessions.submitTarget') }}
+            <select v-model="targets[match.id]" :disabled="!!match.submission || !configured">
+              <option value="new">{{ t('sessions.submitNew') }}</option>
+              <option v-for="session in matchingSessions(match)" :key="session.id" :value="session.id">
+                {{ session.teams[0]?.name }} – {{ session.teams[1]?.name }} · {{ new Date(session.startsAt).toLocaleString() }}
+              </option>
+            </select>
+          </label>
+          <button type="button" class="match-sync-primary" :disabled="!configured || !!submitting || !match.game.matchInfo?.startsAt" @click="submit(match)">{{ t('sessions.submit') }}</button>
+          <span v-if="!match.game.matchInfo?.startsAt" class="statistics-hint">{{ t('sessions.missingStart') }}</span>
+        </template>
+      </div>
+    </section>
+    <div v-if="!editing && showMine" class="session-actions my-teams-change">
+      <button type="button" class="match-sync-secondary" @click="startEditing">{{ t('sessions.changeMyTeams') }}</button>
+    </div>
+    <BaseDialog
+      v-if="popoverGame"
+      backdrop-class="match-dialog-backdrop"
+      dialog-class="panel user-profile-dialog"
+      label="join-popover"
+      @close="popoverGame = null"
+    >
+      <JoinSidePicker
+        :home-name="popoverGame.homeTeam"
+        :away-name="popoverGame.awayTeam"
+        @confirm="confirmPopover"
+        @cancel="popoverGame = null"
+      />
+    </BaseDialog>
+  </section>
+</template>

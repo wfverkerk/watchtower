@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { registerSW } from 'virtual:pwa-register'
 import ActivityPanel from './components/ActivityPanel.vue'
 import FoulMarker from './components/FoulMarker.vue'
@@ -10,21 +10,50 @@ import PlayerPickerDialog from './components/PlayerPickerDialog.vue'
 import Scoreboard from './components/Scoreboard.vue'
 import TeamSetupDialog from './components/TeamSetupDialog.vue'
 import UserProfileDialog from './components/UserProfileDialog.vue'
-import type { GameAction } from './domain/game'
+import UpcomingGamesPage from './components/UpcomingGamesPage.vue'
+import AdminDashboard from './components/AdminDashboard.vue'
+import { errorMessage } from './domain/guards'
+import { parseGameState, type GameAction, type GameState } from './domain/game'
 import type { TeamProfile } from './services/teamProfiles'
 import { loadUserProfile, saveUserProfile as persistUserProfile, type UserProfile } from './services/userProfile'
 import { resetLocalData } from './services/resetLocalData'
 import type { ZoebasMatch } from './services/zoebasMatches'
+import { isAuthCallbackBlocked } from './services/supabaseClient'
+import { loadSharedGame } from './services/sharedMatch'
+import { isPlatformAdmin } from './services/admin'
 import { useGameSession } from './composables/useGameSession'
 import { useScreenWakeLock } from './composables/useScreenWakeLock'
+import { useSupabaseConnection } from './composables/useSupabaseConnection'
 import { isAppLocale, saveLocale, useLocale } from './i18n/useLocale'
 
 const { t, locale, displayTeamName, displayPlayerName, formatPeriod } = useLocale()
+const { connection } = useSupabaseConnection()
+const connectionLabel = computed(() => t(connection.value === 'online'
+  ? 'app.connectionOnline'
+  : connection.value === 'offline' ? 'app.connectionOffline' : 'app.connectionChecking'))
 const matchSyncOpen = ref(false)
 const userProfile = ref<UserProfile | null>(null)
 const userProfileOpen = ref(false)
 const userProfileError = ref('')
+const CoachLoginDialog = defineAsyncComponent(() => import('./components/CoachLoginDialog.vue'))
+const LiveMatchPage = defineAsyncComponent(() => import('./components/LiveMatchPage.vue'))
+const StatisticsPage = defineAsyncComponent(() => import('./components/StatisticsPage.vue'))
 const rosterEditing = ref(false)
+const statisticsOpen = ref(false)
+const platformAdmin = ref(false)
+const adminOpen = ref(false)
+watch(userProfileOpen, (open) => {
+  if (!open) return
+  void isPlatformAdmin().then((value) => { platformAdmin.value = value }).catch(() => { platformAdmin.value = false })
+})
+const coachLoginOpen = ref(false)
+const homeOpen = ref(true)
+const newOnlineSession = ref(false)
+const sharedInitialGame = ref<GameState | null>(null)
+const sharedInitialError = ref('')
+const onlineRefresh = ref(0)
+const pageError = ref('')
+const authCallbackBlocked = isAuthCallbackBlocked()
 try {
   userProfile.value = loadUserProfile()
   userProfileOpen.value = userProfile.value === null
@@ -106,6 +135,7 @@ const {
   teamCatalog,
   teamCatalogLoading,
   teamCatalogError,
+  teamCatalogCached,
   playerName,
   addAction,
   addOpponentScore,
@@ -122,16 +152,40 @@ const {
   toggleClock,
   applyTeamSetup,
   saveGameRoster,
-  openTeamSetup,
   cancelTeamSetup,
   openLineupEditor,
   beginPeriod,
   toggleDraftCourtPlayer,
   saveLineup,
   cancelLineupEdit,
+  markMatchFinished,
+  finishLocalMatch,
+  releaseFinishedMatch,
   createSharedMatch,
   joinSharedMatch,
 } = useGameSession()
+const hasCurrentGame = computed(() => {
+  if (matchLink.value) return !matchLink.value.finished
+  return !game.localFinishedAt && (game.period !== undefined || game.actions.length > 0)
+})
+watch([() => matchLink.value?.matchId, onlineRefresh], async ([id], old, onCleanup) => {
+  let cancelled = false
+  onCleanup(() => { cancelled = true })
+  if (id !== old?.[0]) sharedInitialGame.value = null
+  if (!id) { sharedInitialGame.value = null; sharedInitialError.value = ''; return }
+  try {
+    const data = await loadSharedGame(id)
+    if (!cancelled) { sharedInitialGame.value = parseGameState(data); sharedInitialError.value = '' }
+  } catch (error) {
+    if (!cancelled) {
+      console.error('Failed to load the live match.', error)
+      sharedInitialError.value = errorMessage(error)
+    }
+  }
+}, { immediate: true })
+function refreshOnlineData() { onlineRefresh.value++ }
+onMounted(() => window.addEventListener('online', refreshOnlineData))
+onUnmounted(() => window.removeEventListener('online', refreshOnlineData))
 const wakeLockStatus = useScreenWakeLock(computed(() =>
   game.gameStarted && (userProfile.value?.keepScreenAwake ?? true),
 ))
@@ -197,11 +251,35 @@ const nextPeriodLabel = computed(() => {
 })
 
 async function createMatch(displayName: string) {
-  if (await createSharedMatch(displayName)) matchSyncOpen.value = false
+  if (await createSharedMatch(displayName, game.matchInfo?.startsAt)) {
+    matchSyncOpen.value = false
+    pageError.value = ''
+  }
 }
 
 async function joinMatch(joinCode: string, displayName: string) {
   if (await joinSharedMatch(joinCode, displayName)) matchSyncOpen.value = false
+}
+
+async function joinSession(id: string, side: 'home' | 'away' = 'home') {
+  if (!userProfile.value) return
+  pageError.value = ''
+  try {
+    if (!hasCurrentGame.value) {
+      if (await joinSharedMatch(id, userProfile.value.name, true, side)) {
+        homeOpen.value = false
+        if (!game.gameStarted && !teamPlayers.value.length) openRosterEditor()
+      } else pageError.value = matchSyncError.value
+    }
+  } catch (error) {
+    console.error('Failed to join session.', error)
+    pageError.value = errorMessage(error)
+  }
+}
+
+function finishCurrentMatch() {
+  if (matchLink.value) statisticsOpen.value = true
+  else if (window.confirm(t('sessions.finishLocalConfirm')) && finishLocalMatch()) homeOpen.value = true
 }
 
 function updateTeamName(teamId: string, name: string) {
@@ -213,13 +291,19 @@ function handleEditAction(action: GameAction) {
   editAction(action)
 }
 
-function saveTeamSetup(
+async function saveTeamSetup(
   profiles: TeamProfile[],
   profileIds: [string, string],
   match: ZoebasMatch | null,
   manualOpponentName: string,
+  manualStart: string,
 ) {
-  applyTeamSetup(profiles, profileIds, match, manualOpponentName)
+  if (!applyTeamSetup(profiles, profileIds, match, manualOpponentName, manualStart)) return
+  if (newOnlineSession.value && userProfile.value && game.matchInfo) {
+    const startsAt = game.matchInfo.startsAt ?? new Date(`${game.matchInfo.date}T${game.matchInfo.startTime}:00`).toISOString()
+    if (!await createSharedMatch(userProfile.value.name, startsAt)) pageError.value = matchSyncError.value
+  }
+  newOnlineSession.value = false
 }
 
 function openRosterEditor() {
@@ -281,16 +365,19 @@ watch(locale, (value) => {
 <template>
   <main class="app-shell" :class="{ 'game-live': game.gameStarted }">
     <header class="topbar">
-      <a class="brand" href="#" :aria-label="t('app.brandHome')">
+      <a class="brand" href="#" :aria-label="t('app.brandHome')" @click.prevent="homeOpen = true">
         <span class="brand-mark">W</span>
         <span>watchtower<span class="brand-dot">.</span></span>
       </a>
       <div class="topbar-right">
-        <span v-if="!teamSetupOpen" class="offline-indicator">
-          <span :class="matchLink ? `sync-dot-${matchSyncStatus}` : ''"></span>
-          {{ matchLink ? t(`sync.status.${matchSyncStatus}`) : t('app.savedLocally') }}
+        <button class="share-match-button" type="button" :aria-label="t('statistics.title')" :title="t('statistics.title')" @click="statisticsOpen = true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V12h4v8M10 20V5h4v15M16 20V9h4v11M2 20h20" /></svg>
+        </button>
+        <span v-if="!teamSetupOpen && !homeOpen" class="offline-indicator">
+          <span :class="matchLink || matchSyncStatus !== 'local' ? `sync-dot-${matchSyncStatus}` : ''"></span>
+          {{ matchLink || matchSyncStatus !== 'local' ? t(`sync.status.${matchSyncStatus}`) : t('app.savedLocally') }}
         </span>
-        <button v-if="!teamSetupOpen" class="share-match-button" type="button" :aria-label="t('sync.open')" :title="t('sync.open')" @click="matchSyncOpen = true">
+        <button v-if="!teamSetupOpen && !homeOpen" class="share-match-button" type="button" :aria-label="t('sync.open')" :title="t('sync.open')" @click="matchSyncOpen = true">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="18" cy="5" r="3" />
             <circle cx="6" cy="12" r="3" />
@@ -305,6 +392,10 @@ watch(locale, (value) => {
     </header>
 
     <div v-if="storageError" class="notice" role="alert">{{ storageError }}</div>
+    <div v-if="pageError" class="notice" role="alert">{{ pageError }}</div>
+    <div v-if="sharedInitialError" class="notice" role="alert">{{ sharedInitialError }}</div>
+    <div v-if="authCallbackBlocked" class="notice" role="alert">{{ t('statistics.authCallbackBlocked') }}</div>
+    <div v-if="!matchLink && matchSyncError" class="notice" role="alert">{{ matchSyncError }}</div>
     <div v-if="offlineSetupError" class="notice" role="alert">{{ t('userProfile.offlineSetupError') }}</div>
     <div v-if="wakeLockStatus === 'unsupported' || wakeLockStatus === 'error'" class="notice" role="status">
       {{ t(wakeLockStatus === 'unsupported' ? 'userProfile.screenWakeUnsupported' : 'userProfile.screenWakeError') }}
@@ -325,15 +416,50 @@ watch(locale, (value) => {
       @locale-change="previewProfileLocale"
       @theme-change="previewTheme"
       @reset="resetApp"
+      :is-admin="platformAdmin"
+      @coach-login="coachLoginOpen = true"
+      @admin="userProfileOpen = false; adminOpen = true"
+    />
+
+    <AdminDashboard v-if="adminOpen" @close="adminOpen = false" />
+
+    <CoachLoginDialog
+      v-if="coachLoginOpen"
+      :has-match="!!matchLink"
+      :release-match="releaseFinishedMatch"
+      @close="coachLoginOpen = false"
+    />
+
+    <StatisticsPage
+      v-if="statisticsOpen && !userProfileOpen && !coachLoginOpen"
+      :match-link="matchLink"
+      :sync-status="matchSyncStatus"
+      :current-team-id="game.catalogTeamId"
+      @close="statisticsOpen = false"
+      @coach-login="coachLoginOpen = true"
+      @finished="markMatchFinished"
+    />
+
+
+    <UpcomingGamesPage
+      v-else-if="homeOpen && userProfile && !userProfileOpen && !coachLoginOpen"
+      :configured="matchSyncConfigured"
+      :has-current-game="hasCurrentGame"
+      :display-name="userProfile.name"
+      :current-match-id="matchLink?.matchId ?? null"
+      @resume="homeOpen = false"
+      @join="joinSession"
     />
 
     <TeamSetupDialog
-      v-if="userProfile && teamSetupOpen && !teamSetupInitializing"
+      v-else-if="userProfile && teamSetupOpen && !teamSetupInitializing && !statisticsOpen"
       :profiles="teamProfiles"
       :selected-profile-ids="selectedTeamProfileIds"
       :catalog-teams="teamCatalog"
       :catalog-loading="teamCatalogLoading"
       :catalog-error="teamCatalogError"
+      :catalog-cached="teamCatalogCached"
+      :local-only="!newOnlineSession"
       :can-cancel="canCancelTeamSetup"
       :error="storageError"
       home
@@ -361,13 +487,16 @@ watch(locale, (value) => {
       @save-roster="saveRoster"
     />
 
-    <template v-else-if="!userProfileOpen">
+    <template v-else-if="!userProfileOpen && !statisticsOpen">
+      <p v-if="matchLink" class="statistics-hint">{{ t('sessions.localScoreNotice') }}</p>
       <div class="game-header" :class="{ 'game-header-sticky': game.gameStarted || (game.period !== undefined && game.period > 0) }">
       <Scoreboard
         :teams="game.teams"
         :scores="scores"
         :score-notification="scoreNotification"
         :game-started="game.gameStarted"
+        :match-finished="(matchLink?.finished ?? false) || !!game.localFinishedAt"
+        :can-finish-match="(game.period ?? 0) > 0 || game.actions.length > 0"
         :can-start="canStart"
         :can-start-new-match="canStartNewMatch"
         :period="game.period"
@@ -379,9 +508,10 @@ watch(locale, (value) => {
         :team-fouls="periodTeamFouls"
         @team-name-change="updateTeamName"
         @toggle-game="toggleGame"
-        @new-match="openTeamSetup"
+        @new-match="homeOpen = true"
         @next-period="beginPeriod"
         @toggle-clock="toggleClock"
+        @finish-match="finishCurrentMatch"
       />
       <section v-if="game.gameStarted || (game.period !== undefined && game.period > 0)" class="court-lineup panel" :aria-label="t('picker.fieldPlayers')">
         <ul class="court-lineup-players" tabindex="0">
@@ -397,9 +527,10 @@ watch(locale, (value) => {
 
     <div class="content-grid">
       <GameControls
+        v-if="!game.localFinishedAt"
         :team-id="selectedTeamId"
         :team-players="teamPlayers"
-        :game-started="game.gameStarted"
+        :game-started="game.gameStarted || !!matchLink?.finished"
         :can-start="canStart"
         :awaiting-first-period="game.period === 0"
         @edit-roster="openRosterEditor"
@@ -417,9 +548,17 @@ watch(locale, (value) => {
         :player-name="playerName"
         :can-undo="game.actions.length > 0"
         :player-fouls="playerFouls"
+        :read-only="!!game.localFinishedAt"
         @edit-action="handleEditAction"
         @remove-opponent-score="removeOpponentScore"
         @undo="undoLastAction"
+      />
+      <LiveMatchPage
+        v-if="matchLink && sharedInitialGame"
+        :key="matchLink.matchId"
+        :match-id="matchLink.matchId"
+        :initial-game="sharedInitialGame"
+        embedded
       />
     </div>
 
@@ -456,8 +595,9 @@ watch(locale, (value) => {
       @save="saveLineup"
       @toggle="toggleDraftCourtPlayer"
     />
+    </template>
     <MatchSyncDialog
-      v-if="matchSyncOpen"
+      v-if="matchSyncOpen && !userProfileOpen && !coachLoginOpen"
       :configured="matchSyncConfigured"
       :default-display-name="userProfile?.name"
       :match-link="matchLink"
@@ -467,18 +607,18 @@ watch(locale, (value) => {
       @create="createMatch"
       @join="joinMatch"
     />
-    </template>
 
     <footer class="app-footer">
       <div class="footer-copy"><span class="footer-ball">◉</span> {{ t('app.footer') }} <span>·</span> Watchtower</div>
       <button
-        v-if="game.gameStarted && !teamSetupOpen && !userProfileOpen && !rosterEditing"
+        v-if="game.gameStarted && !teamSetupOpen && !userProfileOpen && !rosterEditing && !statisticsOpen"
         class="new-match-button"
         type="button"
         :disabled="!rosterEditProfile"
         :title="t('scoreboard.editPlayersHint')"
         @click="openRosterEditor"
       >{{ t('scoreboard.editPlayers') }}</button>
+      <span class="connection-status" :class="`is-${connection}`" role="status" :aria-label="connectionLabel" :title="connectionLabel"></span>
     </footer>
   </main>
 </template>

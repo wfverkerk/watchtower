@@ -1,5 +1,7 @@
 import type { GameState } from '../domain/game'
 import type { MatchEvent, MatchLink } from './matchEventLog'
+import type { MatchSnapshot } from './matchSnapshots'
+import { callRpc } from './supabaseRpc'
 import { ensureAnonymousUser, getSupabaseClient } from './supabaseClient'
 
 function record(value: unknown): Record<string, unknown> {
@@ -9,7 +11,7 @@ function record(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
-function parseMatchResponse(value: unknown) {
+function parseMatchResponse(value: unknown): { link: MatchLink; gameData: GameState } {
   const response = record(Array.isArray(value) ? value[0] : value)
   if (typeof response.match_id !== 'string'
     || typeof response.join_code !== 'string'
@@ -31,34 +33,113 @@ function parseMatchResponse(value: unknown) {
 }
 
 export async function createSharedMatch(gameData: GameState, displayName: string) {
-  const supabase = getSupabaseClient()
-  if (!supabase) throw new Error('Supabase is not configured.')
   const trackerId = await ensureAnonymousUser()
-  const { data, error } = await supabase.rpc('create_shared_match', {
+  const response = record(await callRpc('create_shared_match', {
     p_game_data: gameData,
     p_display_name: displayName.trim(),
-  })
-  if (error) throw error
-  const response = record(data)
-  const result = parseMatchResponse({
+  }))
+  return parseMatchResponse({
     match_id: response.match_id,
     join_code: response.join_code,
     tracker_id: trackerId,
     display_name: displayName.trim(),
     game_data: response.game_data,
   })
-  return result
+}
+
+export type SessionStatus = 'open' | 'live' | 'closed' | 'in_review' | 'final'
+
+export type MatchSession = {
+  id: string
+  scheduleId: string | null
+  startsAt: string
+  teams: { id: string; name: string; color: string }[]
+  status: SessionStatus
+  closed: boolean
+  canClose: boolean
+  canReview: boolean
+}
+
+const sessionStatuses: readonly string[] = ['open', 'live', 'closed', 'in_review', 'final']
+
+export async function listMatchSessions(includeClosed = false): Promise<MatchSession[]> {
+  const data = await callRpc('list_match_sessions', { p_include_closed: includeClosed })
+  if (!Array.isArray(data)) throw new Error('Invalid session list.')
+  return data.map((item: unknown) => {
+    const session = record(item)
+    if (typeof session.id !== 'string' || typeof session.startsAt !== 'string'
+      || !Number.isFinite(Date.parse(session.startsAt)) || typeof session.closed !== 'boolean' || typeof session.canClose !== 'boolean'
+      || typeof session.canReview !== 'boolean' || typeof session.status !== 'string' || !sessionStatuses.includes(session.status)
+      || !Array.isArray(session.teams) || session.teams.length !== 2) throw new Error('Invalid session.')
+    const teams = session.teams.map((item: unknown) => {
+      const team = record(item)
+      if (typeof team.id !== 'string' || typeof team.name !== 'string' || typeof team.color !== 'string') {
+        throw new Error('Invalid session team.')
+      }
+      return { id: team.id, name: team.name, color: team.color }
+    })
+    return {
+      id: session.id,
+      scheduleId: typeof session.scheduleId === 'string' ? session.scheduleId : null,
+      startsAt: session.startsAt,
+      status: session.status as SessionStatus,
+      closed: session.closed,
+      canClose: session.canClose,
+      canReview: session.canReview,
+      teams,
+    }
+  })
+}
+
+export async function openScheduleSession(scheduleId: string, gameData: GameState, displayName: string) {
+  const trackerId = await ensureAnonymousUser()
+  const data = await callRpc('open_schedule_session', {
+    p_schedule_id: scheduleId, p_game_data: gameData, p_display_name: displayName.trim(),
+  })
+  return parseMatchResponse({ ...record(data), tracker_id: trackerId, display_name: displayName.trim() })
+}
+
+export async function setSessionFinal(matchId: string) {
+  await callRpc('set_session_final', { p_match_id: matchId })
+}
+
+export async function createMatchSession(gameData: GameState, displayName: string, startsAt: string) {
+  const trackerId = await ensureAnonymousUser()
+  const data = await callRpc('create_match_session', {
+    p_game_data: gameData, p_display_name: displayName.trim(), p_starts_at: startsAt,
+  })
+  return parseMatchResponse({ ...record(data), tracker_id: trackerId, display_name: displayName.trim() })
+}
+
+export async function joinMatchSession(matchId: string, displayName: string) {
+  const trackerId = await ensureAnonymousUser()
+  const data = await callRpc('join_match_session', {
+    p_match_id: matchId, p_display_name: displayName.trim(),
+  })
+  return parseMatchResponse({ ...record(data), tracker_id: trackerId, display_name: displayName.trim() })
+}
+
+export async function setLiveMatchTracker(matchId: string, trackerId: string) {
+  await callRpc('set_live_match_tracker', { p_match_id: matchId, p_tracker_id: trackerId })
+}
+
+export async function loadSharedGame(matchId: string): Promise<GameState> {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase is not configured.')
+  await ensureAnonymousUser()
+  const { data, error } = await supabase.from('shared_matches').select('game_data').eq('id', matchId).single()
+  if (error) throw new Error(error.message)
+  const response = record(data)
+  if (!response.game_data || typeof response.game_data !== 'object') throw new Error('Invalid shared match.')
+  return response.game_data as GameState
 }
 
 export async function joinSharedMatch(joinCode: string, displayName: string) {
-  const supabase = getSupabaseClient()
-  if (!supabase) throw new Error('Supabase is not configured.')
   const trackerId = await ensureAnonymousUser()
-  const { data, error } = await supabase.rpc('join_shared_match', {
+  const data = await callRpc('join_shared_match', {
     p_join_code: joinCode.trim().toUpperCase(),
     p_display_name: displayName.trim(),
   })
-  if (error) throw error
   const response = record(data)
   return parseMatchResponse({
     ...response,
@@ -85,6 +166,19 @@ export async function uploadMatchEvents(events: MatchEvent[]) {
       })),
       { onConflict: 'id', ignoreDuplicates: true },
     )
-    if (error) throw error
+    if (error) throw new Error(error.message)
   }
+}
+
+export async function uploadMatchSnapshot(snapshot: MatchSnapshot) {
+  const supabase = getSupabaseClient()
+  if (!supabase) throw new Error('Supabase is not configured.')
+  const { matchId, revision, baseRevision, trackerId: _trackerId, ...data } = snapshot
+  const { error } = await supabase.rpc('save_match_scorer_snapshot', {
+    p_match_id: matchId,
+    p_revision: revision,
+    p_expected_revision: baseRevision,
+    p_snapshot: data,
+  })
+  if (error) throw new Error(error.message)
 }
