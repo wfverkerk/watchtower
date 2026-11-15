@@ -9,10 +9,12 @@ import {
   getPeriodTeamFouls,
   getTeamStats,
   parseGameState,
+  personalFoulNumbers,
   startNextPeriod,
   undoLastAction,
   updateMissedShotPlay,
   updateScoringPlay,
+  type FoulType,
   type GameAction,
 } from './game'
 import { gameStorageKey, loadGameState, saveGameState } from '../services/gameStorage'
@@ -250,7 +252,7 @@ describe('game domain rules', () => {
     const game = createInitialGameState()
     game.youth = true
     game.actions = [1, 1, 2, 2, 3, 7, 8, 9].map((period, index) => makeAction({
-      id: String(index), playerId: 'home-1', teamId: 'home', type: 'foul', period,
+      id: String(index), playerId: 'home-1', teamId: 'home', type: 'foul', period, foulType: 'P',
     }))
     expect(getPlayerFouls(game.actions)['home-1']).toBe(8)
     game.period = 2
@@ -264,6 +266,29 @@ describe('game domain rules', () => {
     expect(getPeriodTeamFouls(game)['home']).toBe(1)
     game.period = 5
     expect(getPeriodTeamFouls(game)['home']).toBe(3)
+  })
+
+  it('counts only field-player fouls other than technicals toward team fouls, and personal fouls per player', () => {
+    const game = createInitialGameState()
+    const foul = (id: string, playerId: string, foulType: FoulType) => makeAction({
+      id, playerId, teamId: 'home', type: 'foul', foulType, period: 1,
+    })
+    game.actions = [
+      foul('p1', 'home-1', 'P'),
+      foul('p2', 'home-1', 'P'),
+      foul('u', 'home-2', 'U'),
+      foul('d', 'home-3', 'D'),
+      foul('t', 'home-4', 'T'),
+      foul('b', 'home-5', 'B'),
+      foul('bd', 'home-5', 'BD'),
+      foul('c', 'coach-home', 'C'),
+      foul('cd', 'coach-home', 'D'),
+    ]
+    expect(getPeriodTeamFouls(game).home).toBe(4)
+    expect(getTeamStats(game)[0].fouls).toBe(4)
+    expect(getPlayerFouls(game.actions)).toMatchObject({ 'home-1': 2 })
+    expect(getPlayerFouls(game.actions)['home-4']).toBeUndefined()
+    expect(personalFoulNumbers(game.actions).get('p2')).toBe(2)
   })
 
   it('round-trips period, clock and fouls and rejects invalid stored values', () => {
@@ -353,13 +378,13 @@ describe('game domain rules', () => {
       type: 'foul',
       teamId: 'home',
       playerId: 'coach-home',
-      foulType: 'TF',
+      foulType: 'TF' as unknown as FoulType,
     }))
 
     expect(parseGameState(game).actions[0]).toMatchObject({
       type: 'foul',
       playerId: 'coach-home',
-      foulType: 'TF',
+      foulType: 'T',
     })
     const legacy = { ...game, actions: [{ ...game.actions[0], foulType: undefined }] }
     expect(parseGameState(legacy).actions[0]).not.toHaveProperty('foulType')

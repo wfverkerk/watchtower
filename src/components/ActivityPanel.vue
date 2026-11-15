@@ -54,8 +54,8 @@ function isCoachAction(action: GameAction) {
   return isFoulCoachId(action.playerId)
 }
 
-function actionLabel(action: GameAction) {
-  const { key, params } = getActionTranslation(action, isAppLocale(locale.value) ? locale.value : 'nl')
+function actionLabel(item: RecentAction) {
+  const { key, params } = getActionTranslation(item.action, isAppLocale(locale.value) ? locale.value : 'nl', item.personalFoulNumber)
   return t(key, params ?? {})
 }
 
@@ -102,14 +102,14 @@ function actionIcon(action: GameAction) {
             <span v-if="isCoachAction(item.action)" class="activity-coach-marker" :title="t('picker.coach')">C</span>
             {{ actionPlayer(item.action) }} <FoulMarker v-if="item.action.playerId !== null && !isCoachAction(item.action)" :count="playerFouls[item.action.playerId] ?? 0" /><template v-if="item.assistName">&nbsp;<span class="assist-attribution">{{ t('activity.assistAttribution', { name: displayPlayerName(item.assistName) }) }}</span></template>
           </strong>
-          <span>{{ actionLabel(item.action) }}</span>
+          <span>{{ actionLabel(item) }}</span>
         </div>
         <time>{{ actionTime(item.action.createdAt) }}</time>
         <button
           class="activity-edit"
           v-if="!readOnly && item.action.playerId !== null"
-          :aria-label="t('activity.editAction', { player: actionPlayer(item.action), action: actionLabel(item.action) })"
-          :title="t('activity.editAction', { player: actionPlayer(item.action), action: actionLabel(item.action) })"
+          :aria-label="t('activity.editAction', { player: actionPlayer(item.action), action: actionLabel(item) })"
+          :title="t('activity.editAction', { player: actionPlayer(item.action), action: actionLabel(item) })"
           @click="emit('edit-action', item.action)"
         >✎</button>
         <button v-else-if="!readOnly && item.action.type === 'score'" class="activity-edit" :aria-label="t(item.action.value === 1 ? 'activity.removeOpponentPoint' : 'activity.removeOpponentScore', { team: actionPlayer(item.action), count: item.action.value })" :title="t(item.action.value === 1 ? 'activity.removeOpponentPoint' : 'activity.removeOpponentScore', { team: actionPlayer(item.action), count: item.action.value })" @click="emit('remove-opponent-score', item.action)">×</button>

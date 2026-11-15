@@ -113,6 +113,20 @@ describe('event flows', () => {
     session.chooseFoulType('P')
     expect(session.game.actions).toMatchObject([{ type: 'foul', playerId: 'coach-home', foulType: 'P' }])
   })
+  it('limits a field player to five personal fouls', async () => {
+    const session = await mountStartedGame()
+    for (let index = 0; index < 5; index++) {
+      session.addAction('foul', 1)
+      session.selectPlayer('home-1')
+      session.chooseFoulType('P')
+    }
+    session.addAction('foul', 1)
+    session.selectPlayer('home-1')
+    session.chooseFoulType('P')
+    expect(session.game.actions.filter((action) => action.foulType === 'P')).toHaveLength(5)
+    session.chooseFoulType('U')
+    expect(session.game.actions.at(-1)).toMatchObject({ type: 'foul', foulType: 'U', playerId: 'home-1' })
+  })
 })
 
 describe('local match preservation', () => {

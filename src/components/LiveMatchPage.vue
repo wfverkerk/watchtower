@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { errorMessage } from '../domain/guards'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { getScore, type GameAction, type GameState } from '../domain/game'
+import { getScore, personalFoulNumbers, type GameAction, type GameState } from '../domain/game'
 import { isScoreCandidate, reconcileLiveScores } from '../domain/liveReconciliation'
 import { getActionTranslation } from '../i18n/actionLabel'
 import { isAppLocale, useLocale } from '../i18n/useLocale'
@@ -17,6 +17,7 @@ let unmounted = false
 const offline = ref(!navigator.onLine)
 function updateOnline() { offline.value = !navigator.onLine }
 const actions = computed(() => live.value ? currentLiveActions(props.initialGame, live.value) : [])
+const personalNumbers = computed(() => personalFoulNumbers(actions.value.map((item) => item.action)))
 const reconciled = computed(() => live.value
   ? reconcileLiveScores(props.initialGame, live.value.sourceId, actions.value, live.value.links)
   : { official: [], additional: [], invalidLinks: [] })
@@ -29,7 +30,7 @@ const scores = computed(() => getScore({
 const teamName = (teamId: string) => props.initialGame.teams.find((team) => team.id === teamId)?.name
 const playerLabel = (playerId: string | null) => props.initialGame.players.find((player) => player.id === playerId)?.name ?? t('app.unknownPlayer')
 function actionText(action: GameAction) {
-  const translation = getActionTranslation(action, isAppLocale(locale.value) ? locale.value : 'nl')
+  const translation = getActionTranslation(action, isAppLocale(locale.value) ? locale.value : 'nl', personalNumbers.value.get(action.id))
   return t(translation.key, translation.params ?? {})
 }
 

@@ -14,7 +14,7 @@ export type StatType =
   | 'foul'
   | 'block'
   | 'steal'
-export type FoulType = 'P' | 'TF' | 'U' | 'D'
+export type FoulType = 'P' | 'U' | 'T' | 'D' | 'C' | 'B' | 'BD'
 export type TurnoverType =
   | 'turnover'
   | 'second_dribble'
@@ -99,7 +99,7 @@ export type TeamStats = {
   steals: number
   missedShots: number
 }
-export type RecentAction = { action: GameAction; assistName: string }
+export type RecentAction = { action: GameAction; assistName: string; personalFoulNumber?: number }
 
 const statTypes: StatType[] = [
   'score',
@@ -113,7 +113,7 @@ const statTypes: StatType[] = [
   'block',
   'steal',
 ]
-const foulTypes: FoulType[] = ['P', 'TF', 'U', 'D']
+const foulTypes: FoulType[] = ['P', 'U', 'T', 'D', 'C', 'B', 'BD']
 export const turnoverTypes = [
   'turnover',
   'second_dribble',
@@ -168,8 +168,10 @@ function isShotLocation(value: unknown): value is ShotLocation {
     && value.y <= 100
 }
 
-function isFoulType(value: unknown): value is FoulType {
-  return typeof value === 'string' && foulTypes.includes(value as FoulType)
+// Legacy saves used TF for a technical foul.
+function parseFoulType(value: unknown): FoulType | undefined {
+  if (value === 'TF') return 'T'
+  return foulTypes.find((foulType) => foulType === value)
 }
 
 export function isTurnoverType(value: unknown): value is TurnoverType {
@@ -271,7 +273,7 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       || (action.groupId !== undefined && typeof action.groupId !== 'string')
       || (action.shotLocation !== undefined && !isShotLocation(action.shotLocation))
       || (action.period !== undefined && (typeof action.period !== 'number' || !Number.isSafeInteger(action.period) || action.period < 1))
-      || (action.foulType !== undefined && (action.type !== 'foul' || !isFoulType(action.foulType)))
+      || (action.foulType !== undefined && (action.type !== 'foul' || parseFoulType(action.foulType) === undefined))
       || (action.turnoverType !== undefined && (action.type !== 'turnover' || !isTurnoverType(action.turnoverType)))) {
       throw new Error('Opgeslagen wedstrijdacties zijn ongeldig.')
     }
@@ -285,7 +287,7 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       createdAt: action.createdAt,
       ...(typeof action.groupId === 'string' ? { groupId: action.groupId } : {}),
       ...(isShotLocation(action.shotLocation) ? { shotLocation: action.shotLocation } : {}),
-      ...(isFoulType(action.foulType) ? { foulType: action.foulType } : {}),
+      ...(parseFoulType(action.foulType) ? { foulType: parseFoulType(action.foulType) } : {}),
       ...(isTurnoverType(action.turnoverType) ? { turnoverType: action.turnoverType } : {}),
       ...(typeof action.period === 'number' ? { period: action.period } : {}),
     }
@@ -371,12 +373,37 @@ export function startNextPeriod(game: GameState, playerIds: string[]) {
   return true
 }
 
+// Personal fouls (P) count toward the five-foul limit of a field player.
 export function getPlayerFouls(actions: GameAction[]) {
   const counts: Record<string, number> = Object.create(null)
   for (const action of actions) {
-    if (action.type === 'foul' && action.playerId !== null) counts[action.playerId] = (counts[action.playerId] ?? 0) + 1
+    if (action.type === 'foul' && action.foulType === 'P' && action.playerId !== null) counts[action.playerId] = (counts[action.playerId] ?? 0) + 1
   }
   return counts
+}
+
+// Technical fouls, fouls by coaches and bench players, and bench disqualifications never count toward team fouls.
+export function countsTowardTeamFouls(action: GameAction) {
+  if (action.type !== 'foul' || isFoulCoachId(action.playerId)) return false
+  return action.foulType === undefined || action.foulType === 'P' || action.foulType === 'U' || action.foulType === 'D'
+}
+
+// A bench disqualification is stored as BD so it does not count toward team fouls, but it is shown as D.
+export function foulCode(foulType: FoulType) {
+  return foulType === 'BD' ? 'D' : foulType
+}
+
+// Numbers each personal foul per player in order: the first is P1, the second P2, and so on.
+export function personalFoulNumbers(actions: GameAction[]) {
+  const counts = new Map<string, number>()
+  const numbers = new Map<string, number>()
+  for (const action of actions) {
+    if (action.type !== 'foul' || action.foulType !== 'P' || action.playerId === null) continue
+    const next = (counts.get(action.playerId) ?? 0) + 1
+    counts.set(action.playerId, next)
+    numbers.set(action.id, next)
+  }
+  return numbers
 }
 
 export function getPeriodTeamFouls(game: GameState) {
@@ -384,7 +411,7 @@ export function getPeriodTeamFouls(game: GameState) {
   const group = foulPeriodGroup(period, game.youth ?? false)
   const counts: Record<string, number> = Object.create(null)
   for (const action of game.actions) {
-    if (action.type === 'foul' && foulPeriodGroup(action.period ?? period, game.youth ?? false) === group) {
+    if (countsTowardTeamFouls(action) && foulPeriodGroup(action.period ?? period, game.youth ?? false) === group) {
       counts[action.teamId] = (counts[action.teamId] ?? 0) + 1
     }
   }
@@ -431,7 +458,7 @@ export function getTeamStats(game: GameState): TeamStats[] {
       case 'rebound': teamStats.legacyRebounds += 1; break
       case 'assist': teamStats.assists += 1; break
       case 'turnover': teamStats.turnovers += 1; break
-      case 'foul': teamStats.fouls += 1; break
+      case 'foul': if (countsTowardTeamFouls(action)) teamStats.fouls += 1; break
       case 'block': teamStats.blocks += 1; break
       case 'steal': teamStats.steals += 1; break
       case 'missed_shot': teamStats.missedShots += 1; break
@@ -452,6 +479,7 @@ export function getRecentActions(game: GameState, limit = 8, unknownPlayerName =
     }
   }
 
+  const personalNumbers = personalFoulNumbers(game.actions)
   const scoredGroups = new Set(
     game.actions.filter((action) => action.type === 'score' && action.groupId).map((action) => action.groupId),
   )
@@ -467,6 +495,7 @@ export function getRecentActions(game: GameState, limit = 8, unknownPlayerName =
     .map((action) => ({
       action,
       assistName: action.type === 'score' && action.groupId ? assistsByGroup.get(action.groupId) ?? '' : '',
+      personalFoulNumber: personalNumbers.get(action.id),
     }))
 }
 

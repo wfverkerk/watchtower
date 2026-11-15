@@ -1,4 +1,4 @@
-import type { FoulType, GameAction, StatType, TurnoverType } from '../domain/game'
+import { foulCode, isFoulCoachId, type GameAction, type StatType, type TurnoverType } from '../domain/game'
 import type { AppLocale } from './types'
 
 type TranslationKey =
@@ -53,12 +53,6 @@ const actionKeys: Partial<Record<StatType, TranslationKey>> = {
   steal: 'actions.steal',
 }
 
-const foulTypeKeys: Record<FoulType, TranslationKey> = {
-  P: 'actions.personalFoul',
-  TF: 'actions.technicalFoul',
-  U: 'actions.unsportsmanlikeFoul',
-  D: 'actions.disqualifyingFoul',
-}
 
 const turnoverTypeKeys: Record<TurnoverType, TranslationKey> = {
   turnover: 'actions.turnover',
@@ -95,7 +89,21 @@ export function turnoverTypeAbbreviation(type: TurnoverType): string | null {
   return turnoverTypeAbbreviations[type]
 }
 
-export function getActionTranslation(action: Pick<GameAction, 'type' | 'value' | 'foulType' | 'turnoverType'>, locale: AppLocale) {
+type LabelTranslation = { key: TranslationKey; params?: Record<string, string | number> }
+
+function foulTranslation(action: Pick<GameAction, 'foulType'> & { playerId?: string | null }, personalFoulNumber?: number): LabelTranslation {
+  if (action.foulType === 'P') return { key: 'actions.personalFoul' as const, params: { number: personalFoulNumber ?? '' } }
+  if (action.foulType === 'U') return { key: 'actions.unsportsmanlikeFoul' as const, params: undefined }
+  // A disqualifying foul by a field player is D; coaches and bench players get technical fouls only.
+  if (action.foulType === 'D' && !isFoulCoachId(action.playerId ?? null)) return { key: 'actions.disqualifyingFoul' as const, params: undefined }
+  return { key: 'actions.technicalFoul' as const, params: { code: foulCode(action.foulType ?? 'T') } }
+}
+
+export function getActionTranslation(
+  action: Pick<GameAction, 'type' | 'value' | 'foulType' | 'turnoverType'> & { playerId?: string | null },
+  locale: AppLocale,
+  personalFoulNumber?: number,
+): LabelTranslation {
   if (action.type === 'score') {
     return { key: pointsKey('score', action.value, locale), params: { value: action.value } }
   }
@@ -103,7 +111,7 @@ export function getActionTranslation(action: Pick<GameAction, 'type' | 'value' |
     return { key: pointsKey('missed', action.value, locale), params: { value: action.value } }
   }
   if (action.type === 'foul' && action.foulType) {
-    return { key: foulTypeKeys[action.foulType], params: undefined }
+    return foulTranslation(action, personalFoulNumber)
   }
   if (action.type === 'turnover' && action.turnoverType) {
     return { key: turnoverTypeKeys[action.turnoverType], params: undefined }

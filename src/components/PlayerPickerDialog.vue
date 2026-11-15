@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { getActionTranslation, turnoverTypeAbbreviation, turnoverTypeLabelKey } from '../i18n/actionLabel'
 import { isAppLocale, useLocale } from '../i18n/useLocale'
-import { turnoverTypes, type FoulType, type Player, type ShotLocation, type StatType, type TurnoverType } from '../domain/game'
+import { foulCode, isFoulCoachId, turnoverTypes, type FoulType, type Player, type ShotLocation, type StatType, type TurnoverType } from '../domain/game'
 import type { EventFlowStep } from '../domain/eventFlow'
 import ShotLocationPicker from './ShotLocationPicker.vue'
 import EventFlowPlayerButton from './EventFlowPlayerButton.vue'
@@ -44,6 +44,19 @@ const emit = defineEmits<{
 const currentStep = computed(() => props.flow[props.stepIndex])
 const progressPercent = computed(() => ((props.stepIndex + 1) / props.flow.length) * 100)
 const assistCandidates = computed(() => props.players.filter((player) => player.id !== props.scorerId))
+// A coach can get C or D, a bench player B or D, and a field player P, U, T or D.
+const foulOptions = computed<FoulType[]>(() => {
+  if (isFoulCoachId(props.scorerId)) return ['C', 'D']
+  const scorer = props.players.find((player) => player.id === props.scorerId)
+  return scorer && !scorer.isOnCourt ? ['B', 'BD'] : ['P', 'U', 'T', 'D']
+})
+const personalNumber = computed(() => (props.playerFouls[props.scorerId] ?? 0) + (props.editing && props.foulType === 'P' ? 0 : 1))
+const personalLimitReached = computed(() => (props.playerFouls[props.scorerId] ?? 0) >= 5 && !(props.editing && props.foulType === 'P'))
+function foulSubtitle(type: FoulType) {
+  if (type === 'P' || type === 'U') return type
+  if (type === 'D' && !isFoulCoachId(props.scorerId)) return 'D'
+  return 'T'
+}
 const questionLabel = computed(() => {
   switch (currentStep.value) {
     case 'player':
@@ -201,16 +214,17 @@ function actionLabel(action: PendingAction) {
       <section v-else-if="currentStep === 'foulType'" class="foul-type-picker" :aria-label="t('picker.foulType')">
         <div class="foul-type-options">
           <button
-            v-for="type in (['P', 'TF', 'U', 'D'] as const)"
+            v-for="type in foulOptions"
             :key="type"
             type="button"
             class="foul-type-option"
             :class="{ selected: foulType === type }"
+            :disabled="type === 'P' && personalLimitReached"
             :aria-pressed="foulType === type"
             @click="emit('select-foul-type', type)"
           >
-            <strong>{{ type }}</strong>
-            <span>{{ t(`picker.foulTypes.${type}`) }}</span>
+            <strong>{{ type === 'P' ? `P${personalNumber}` : foulCode(type) }}</strong>
+            <span>{{ t(`picker.foulTypes.${foulSubtitle(type)}`) }}</span>
           </button>
         </div>
       </section>

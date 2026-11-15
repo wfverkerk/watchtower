@@ -402,7 +402,7 @@ export function useGameSession() {
     pendingAssistId.value = null
     pendingReboundId.value = null
     pendingShotLocation.value = null
-    pendingFoulType.value = type === 'foul' ? 'P' : null
+    pendingFoulType.value = null
     pendingTurnoverType.value = 'turnover'
   }
 
@@ -463,6 +463,8 @@ export function useGameSession() {
 
   function chooseFoulType(foulType: FoulType) {
     if (pendingAction.value?.type !== 'foul') return
+    if (foulType === 'P' && (playerFouls.value[pendingScorerId.value] ?? 0) >= 5
+      && !(editingActionId.value && pendingFoulType.value === 'P')) return
     pendingFoulType.value = foulType
     advanceFlow()
   }
@@ -476,6 +478,7 @@ export function useGameSession() {
   function commitPendingAction() {
     const action = pendingAction.value
     if (!action || !pendingScorerId.value || (!game.gameStarted && !matchLink.value?.finished)) return
+    if (action.type === 'foul' && !pendingFoulType.value) return
     if (action.type === 'score') {
       commitScore(action)
     } else if (action.type === 'missed_shot') {
