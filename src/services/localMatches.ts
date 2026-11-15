@@ -6,7 +6,7 @@ export type LocalMatch = {
   id: string
   finishedAt: string
   game: GameState
-  submission?: { trackerId: string; targetMatchId: string | null; resultMatchId?: string }
+  submission?: { trackerId: string; targetMatchId: string | null; resultMatchId?: string; statisticsTeamId?: string }
 }
 
 type StringStorage = Pick<Storage, 'getItem' | 'setItem'>
@@ -26,8 +26,13 @@ export function loadLocalMatches(storage: StringStorage = window.localStorage): 
       if (typeof match.submission !== 'object' || match.submission === null || Array.isArray(match.submission)) throw new Error('Invalid local match submission.')
       const state = match.submission as Record<string, unknown>
       if (typeof state.trackerId !== 'string' || !(state.targetMatchId === null || typeof state.targetMatchId === 'string')
-        || !(state.resultMatchId === undefined || typeof state.resultMatchId === 'string')) throw new Error('Invalid local match submission.')
-      submission = { trackerId: state.trackerId, targetMatchId: state.targetMatchId, ...(typeof state.resultMatchId === 'string' ? { resultMatchId: state.resultMatchId } : {}) }
+        || !(state.resultMatchId === undefined || typeof state.resultMatchId === 'string')
+        || !(state.statisticsTeamId === undefined || typeof state.statisticsTeamId === 'string')) throw new Error('Invalid local match submission.')
+      submission = {
+        trackerId: state.trackerId, targetMatchId: state.targetMatchId,
+        ...(typeof state.resultMatchId === 'string' ? { resultMatchId: state.resultMatchId } : {}),
+        ...(typeof state.statisticsTeamId === 'string' ? { statisticsTeamId: state.statisticsTeamId } : {}),
+      }
     }
     return { id: match.id, finishedAt: match.finishedAt, game: parseGameState(match.game), ...(submission ? { submission } : {}) }
   })

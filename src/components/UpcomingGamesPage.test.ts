@@ -27,8 +27,6 @@ vi.mock('../services/zoebasSchedule', () => {
     }]),
   }
 })
-vi.mock('../services/localMatches', () => ({ loadLocalMatches: () => [] }))
-vi.mock('../services/submitLocalMatch', () => ({ submitLocalMatch: vi.fn() }))
 
 let app: App | undefined
 afterEach(() => {
@@ -37,6 +35,22 @@ afterEach(() => {
 })
 
 describe('upcoming sessions', () => {
+  it('lists the running practice game of this device as live today and resumes it on tap', async () => {
+    const resume = vi.fn()
+    app = createApp({ render: () => h(UpcomingGamesPage, {
+      configured: false, hasCurrentGame: true, currentMatchId: null, displayName: 'Scorer', onResume: resume,
+      practiceGame: { homeTeam: 'X12-1', awayTeam: 'Vrienden', homeScore: 6, awayScore: 4, startTime: '19:30' },
+    }) })
+    app.mount(document.body.appendChild(document.createElement('div')))
+    const card = document.querySelector('.practice-open-game')!
+    expect(card.textContent).toContain('Vrienden')
+    expect(card.querySelector('.schedule-score.is-live')?.textContent).toContain('6 – 4')
+    expect(card.querySelector('.live-score-label')?.textContent).toBe('Live')
+    expect(document.body.textContent).not.toContain('Geen open wedstrijden vandaag.')
+    card.querySelector<HTMLButtonElement>('.schedule-open-trigger')!.click()
+    expect(resume).toHaveBeenCalled()
+  })
+
   it('blocks opening another game while a game is active and resumes the active game on tap', async () => {
     const resume = vi.fn()
     app = createApp({ render: () => h(UpcomingGamesPage, {

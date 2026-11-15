@@ -109,4 +109,78 @@ describe('shared team roster', () => {
     expect(saved?.[3]).toBe('Tegenstander')
     expect(saved?.[4]).toBe('2026-11-13T14:30')
   })
+
+  it('asks for the opponent players instead of a scheduled match in a practice game', async () => {
+    let saved: unknown[] | undefined
+    app = createApp({ render: () => h(TeamSetupDialog, {
+      profiles: [], selectedProfileIds: ['', ''],
+      catalogTeams: [{ id: 'team', name: 'Team', sourceTeamId: 'source', playerNames: ['Anna', 'Bob'], staff: [] }],
+      catalogLoading: false, catalogError: '', catalogCached: true, practice: true,
+      canCancel: true, error: '', onSave: (...args: unknown[]) => { saved = args },
+    }) })
+    app.mount(document.body.appendChild(document.createElement('div')))
+    const fill = (input: HTMLInputElement, value: string) => {
+      input.value = value
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    expect(document.querySelector('#local-team-name')).toBeNull()
+    document.querySelector<HTMLButtonElement>('.team-setup-team-grid button')!.click()
+    await nextTick()
+    const next = () => document.querySelector<HTMLButtonElement>('.team-setup-primary')!
+    await vi.waitFor(() => expect(next().disabled).toBe(false))
+    next().click()
+    await nextTick()
+    const numbers = document.querySelectorAll<HTMLInputElement>('input[aria-label="Nr."]')
+    fill(numbers[0], '4')
+    fill(numbers[1], '5')
+    await nextTick()
+    next().click()
+    await vi.waitFor(() => expect(document.querySelector('.team-setup-matches input[placeholder="Club tegenstander"]')).not.toBeNull())
+    const section = document.querySelector('.team-setup-matches')!
+    expect(section.querySelector('input[type="datetime-local"]')).toBeNull()
+    const opponentNames = () => [...section.querySelectorAll<HTMLInputElement>('input[aria-label="Naam speler"]')]
+    const opponentNumbers = () => [...section.querySelectorAll<HTMLInputElement>('input[aria-label="Nr."]')]
+    expect(opponentNames().map((input) => input.value)).toEqual(['Speler 4', 'Speler 5', 'Speler 6', 'Speler 7', 'Speler 8'])
+    expect(opponentNumbers().map((input) => input.value)).toEqual(['4', '5', '6', '7', '8'])
+    expect(next().disabled).toBe(true)
+    fill(section.querySelector<HTMLInputElement>('input[placeholder="Club tegenstander"]')!, 'Vrienden')
+    fill(section.querySelector<HTMLInputElement>('input[placeholder="Bijv. M16-1"]')!, 'M16-1')
+    await nextTick()
+    expect(next().disabled).toBe(false)
+    fill(opponentNames()[0], 'Carla')
+    fill(opponentNumbers()[0], '5')
+    await nextTick()
+    expect(next().disabled).toBe(true)
+    fill(opponentNumbers()[0], '10')
+    for (const remove of [...section.querySelectorAll<HTMLButtonElement>('.team-setup-opponent-remove')].slice(2)) remove.click()
+    await nextTick()
+    expect(next().disabled).toBe(false)
+    next().click()
+    expect(saved?.[0]).toEqual(expect.arrayContaining([expect.objectContaining({
+      name: 'M16-1',
+      players: [
+        expect.objectContaining({ name: 'Carla', jerseyNumber: '10', isParticipating: true }),
+        expect.objectContaining({ name: 'Speler 5', jerseyNumber: '5', isParticipating: true }),
+      ],
+    })]))
+    expect(saved?.[3]).toBe('M16-1')
+    expect(saved?.[5]).toBe('Vrienden')
+    expect(saved?.[2]).toBeNull()
+    expect(saved?.[4]).toBe('')
+  })
+
+  it('groups the club teams in the same sections as the favorite team picker', async () => {
+    const team = (id: string, name: string) => ({ id, name, sourceTeamId: id, playerNames: ['Anna'], staff: [] })
+    app = createApp({ render: () => h(TeamSetupDialog, {
+      profiles: [], selectedProfileIds: ['', ''],
+      catalogTeams: [team('mse-1', 'MSE-1'), team('m16-1', 'M16-1'), team('x12-2', 'X12-2'), team('x12-1', 'X12-1')],
+      catalogLoading: false, catalogError: '', catalogCached: true, canCancel: false, error: '',
+    }) })
+    app.mount(document.body.appendChild(document.createElement('div')))
+    const sections = [...document.querySelectorAll('.favorite-team-section')].map((section) => [
+      section.querySelector('h3')?.textContent,
+      [...section.querySelectorAll('button')].map((button) => button.textContent),
+    ])
+    expect(sections).toEqual([['Jeugd', ['X12-1', 'X12-2']], ['14 t/m 18', ['M16-1']], ['Volwassenen', ['MSE-1']]])
+  })
 })

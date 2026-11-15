@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createInitialGameState } from '../domain/game'
 import { loadLocalMatches, saveLocalMatch } from './localMatches'
-import { submitLocalMatch } from './submitLocalMatch'
+import { addPracticeMatchToStatistics, submitLocalMatch } from './submitLocalMatch'
 
 const api = vi.hoisted(() => ({ rpc: vi.fn(), identity: vi.fn() }))
 vi.mock('./supabaseClient', () => ({
@@ -47,5 +47,25 @@ describe('offline submission', () => {
     api.rpc.mockResolvedValueOnce({ data: null, error: { code: 'P0001', message: 'metadata mismatch' } })
     await expect(submitLocalMatch('local', 'match', 'Scorer', storage)).rejects.toThrow('metadata mismatch')
     expect(loadLocalMatches(storage)[0].submission).toBeUndefined()
+  })
+
+  it('adds a submitted practice game to its club team statistics once', async () => {
+    const storage = createStorage()
+    const game = createInitialGameState()
+    game.catalogTeamId = 'x12-1'
+    game.matchInfo = { id: 'practice-1', date: '2026-11-13', startTime: '12:00', venue: '', startsAt: '2026-11-13T11:00:00Z', kind: 'practice' }
+    saveLocalMatch({ id: 'practice', finishedAt: '2026-11-13T14:00:00Z', game }, storage)
+    await expect(addPracticeMatchToStatistics('practice', storage)).rejects.toThrow('Submit the practice game')
+    api.rpc.mockResolvedValueOnce({ data: { match_id: 'match' }, error: null })
+    await submitLocalMatch('practice', null, 'Scorer', storage)
+    api.rpc.mockResolvedValueOnce({ data: null, error: { message: 'Team access required' } })
+    await expect(addPracticeMatchToStatistics('practice', storage)).rejects.toThrow('Team access required')
+    expect(loadLocalMatches(storage)[0].submission?.statisticsTeamId).toBeUndefined()
+    api.rpc.mockResolvedValueOnce({ data: null, error: null })
+    await addPracticeMatchToStatistics('practice', storage)
+    expect(api.rpc).toHaveBeenLastCalledWith('statistics_finish_match', { p_match_id: 'match', p_team_id: 'x12-1', p_tracker_id: 'tracker' })
+    expect(loadLocalMatches(storage)[0].submission?.statisticsTeamId).toBe('x12-1')
+    await addPracticeMatchToStatistics('practice', storage)
+    expect(api.rpc).toHaveBeenCalledTimes(3)
   })
 })

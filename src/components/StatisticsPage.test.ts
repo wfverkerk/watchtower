@@ -86,4 +86,27 @@ describe('statistics page', () => {
     button.click()
     await vi.waitFor(() => expect(api.finishStatisticsMatch).toHaveBeenCalledWith('match', 'team', 'scorer'))
   })
+
+  it('leaves practice games out of the totals until they are included', async () => {
+    const game = createInitialGameState()
+    game.players = [{ id: 'home-one', teamId: 'home', name: '', jerseyNumber: '12', isOnCourt: false }]
+    game.actions = [{ id: 'action', playerId: 'home-one', teamId: 'home', type: 'score', value: 2, createdAt: 1 }]
+    const base = { finishedAt: '2026-01-03T10:00:00Z', trackerId: 'scorer', snapshotUpdatedAt: '2026-01-03T10:00:00Z', game, links: {}, canEdit: true }
+    api.loadStatisticsHistory.mockResolvedValue([
+      { ...base, id: 'official', matchDate: '2026-01-01', practice: false },
+      { ...base, id: 'practice', matchDate: '2026-01-02', practice: true, game: { ...game, teams: [game.teams[0], { ...game.teams[1], name: 'M16-1', club: 'Vrienden' }] } },
+    ])
+    app = createApp({ render: () => h(StatisticsPage, { matchLink: null, syncStatus: 'local' }) })
+    app.mount(document.body.appendChild(document.createElement('div')))
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Totaal · 1 wedstrijden'))
+    expect(document.querySelector('.statistics-metrics strong')?.textContent).toBe('2')
+    expect(document.body.textContent).not.toContain('Oefenwedstrijd ·')
+    const filter = document.querySelector<HTMLInputElement>('.statistics-practice-filter input')!
+    expect(filter.checked).toBe(false)
+    filter.click()
+    await nextTick()
+    expect(document.body.textContent).toContain('Totaal · 2 wedstrijden')
+    expect(document.querySelector('.statistics-metrics strong')?.textContent).toBe('4')
+    expect(document.body.textContent).toContain('2026-01-02 · Thuis – Vrienden M16-1 · Oefenwedstrijd')
+  })
 })

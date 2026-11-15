@@ -3,6 +3,7 @@ import PageHeader from './PageHeader.vue'
 import { errorMessage } from '../domain/guards'
 import { computed, onMounted, ref, watch } from 'vue'
 import { matchPlayerId, playerMatchStats, statKeys, sumPlayerStats, type PlayerStatKey } from '../domain/statistics'
+import { fullTeamName } from '../domain/game'
 import { useLocale } from '../i18n/useLocale'
 import type { MatchLink } from '../services/matchEventLog'
 import { isSupabaseConfigured } from '../services/supabaseClient'
@@ -21,6 +22,9 @@ const teamId = ref('')
 const code = ref('')
 const roster = ref<StatisticsPlayer[]>([])
 const history = ref<StatisticsMatch[]>([])
+const includePractice = ref(false)
+const practiceCount = computed(() => history.value.filter((match) => match.practice).length)
+const visibleHistory = computed(() => includePractice.value ? history.value : history.value.filter((match) => !match.practice))
 const selectedPlayerId = ref('')
 const selectedMetric = ref<PlayerStatKey>('points')
 const trendCount = ref(10)
@@ -40,7 +44,7 @@ const selectedTeam = computed(() => teams.value.find((team) => team.id === teamI
 const selectedPlayer = computed(() => roster.value.find((player) => player.id === selectedPlayerId.value))
 const playerGames = computed(() => {
   if (!selectedPlayerId.value) return []
-  return history.value.flatMap((match) => {
+  return visibleHistory.value.flatMap((match) => {
     const stats = playerMatchStats(match, selectedPlayerId.value, roster.value)
     return stats ? [{ match, stats }] : []
   })
@@ -63,7 +67,8 @@ function displayPlayer(player: StatisticsPlayer) {
 
 function matchLabel(match: StatisticsMatch) {
   const date = match.matchDate || new Date(match.finishedAt).toLocaleDateString()
-  return `${date} · ${match.game.teams.map((team) => team.name).join(' – ')}`
+  const label = `${date} · ${match.game.teams.map(fullTeamName).join(' – ')}`
+  return match.practice ? `${label} · ${t('statistics.practiceLabel')}` : label
 }
 
 async function run(action: () => Promise<void>) {
@@ -215,6 +220,10 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
       <label v-if="teams.length" class="match-sync-field statistics-team-select">{{ t('statistics.team') }}
         <select v-model="teamId" :disabled="busy"><option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option></select>
       </label>
+      <label v-if="selectedTeam" class="statistics-practice-filter">
+        <input v-model="includePractice" type="checkbox">
+        {{ t('statistics.includePractice', { count: practiceCount }) }}
+      </label>
     </section>
 
     <section v-if="matchLink && scorers" class="panel statistics-card">
@@ -307,8 +316,8 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
       <section class="panel statistics-card">
         <h2>{{ t('statistics.history') }}</h2>
         <p class="statistics-hint">{{ t('statistics.mappingHint') }}</p>
-        <p v-if="!history.length" class="statistics-hint">{{ t('statistics.noHistory') }}</p>
-        <article v-for="match in history" :key="match.id" class="statistics-match">
+        <p v-if="!visibleHistory.length" class="statistics-hint">{{ t('statistics.noHistory') }}</p>
+        <article v-for="match in visibleHistory" :key="match.id" class="statistics-match">
           <strong>{{ matchLabel(match) }}</strong>
           <p class="statistics-hint">{{ t('statistics.snapshotTime', { date: new Date(match.snapshotUpdatedAt).toLocaleString() }) }}</p>
           <div v-for="player in match.game.players.filter((p) => p.teamId === match.game.teams[0].id && !p.isCoach)" :key="player.id" class="statistics-link">
@@ -335,6 +344,7 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
 .statistics-inline, .statistics-player-form { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
 .statistics-player-form label { min-width: 90px; }
 .statistics-team-select { margin-top: 16px; }
+.statistics-practice-filter { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; }
 select { min-height: 39px; padding: 7px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); background: var(--panel); }
 .statistics-roster { padding: 0; list-style: none; }
 .statistics-roster li { display: flex; justify-content: space-between; align-items: center; gap: 10px; }

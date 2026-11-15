@@ -13,7 +13,7 @@ import UserProfileDialog from './components/UserProfileDialog.vue'
 import UpcomingGamesPage from './components/UpcomingGamesPage.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
 import { errorMessage } from './domain/guards'
-import { parseGameState, type GameAction, type GameState } from './domain/game'
+import { isPracticeGame, parseGameState, type GameAction, type GameState } from './domain/game'
 import type { TeamProfile } from './services/teamProfiles'
 import { loadUserProfile, saveUserProfile as persistUserProfile, type UserProfile } from './services/userProfile'
 import { resetLocalData } from './services/resetLocalData'
@@ -38,8 +38,10 @@ const userProfileError = ref('')
 const CoachLoginDialog = defineAsyncComponent(() => import('./components/CoachLoginDialog.vue'))
 const LiveMatchPage = defineAsyncComponent(() => import('./components/LiveMatchPage.vue'))
 const StatisticsPage = defineAsyncComponent(() => import('./components/StatisticsPage.vue'))
+const PracticePage = defineAsyncComponent(() => import('./components/PracticePage.vue'))
 const rosterEditing = ref(false)
 const statisticsOpen = ref(false)
+const practiceOpen = ref(false)
 const platformAdmin = ref(false)
 const adminOpen = ref(false)
 watch(userProfileOpen, (open) => {
@@ -49,6 +51,7 @@ watch(userProfileOpen, (open) => {
 const coachLoginOpen = ref(false)
 const homeOpen = ref(true)
 const newOnlineSession = ref(false)
+const practiceSetup = ref(false)
 const sharedInitialGame = ref<GameState | null>(null)
 const sharedInitialError = ref('')
 const onlineRefresh = ref(0)
@@ -152,6 +155,7 @@ const {
   toggleClock,
   applyTeamSetup,
   saveGameRoster,
+  openTeamSetup,
   cancelTeamSetup,
   openLineupEditor,
   beginPeriod,
@@ -167,6 +171,18 @@ const {
 const hasCurrentGame = computed(() => {
   if (matchLink.value) return !matchLink.value.finished
   return !game.localFinishedAt && (game.period !== undefined || game.actions.length > 0)
+})
+// A running practice game only exists on this device, so the landing page gets it from the local session.
+const openPracticeGame = computed(() => {
+  if (!hasCurrentGame.value || matchLink.value || !isPracticeGame(game)) return null
+  return {
+    homeTeam: game.teams[0].name,
+    awayTeam: game.teams[1].name,
+    awayClub: game.teams[1].club ?? null,
+    homeScore: scores.value[0]?.points ?? 0,
+    awayScore: scores.value[1]?.points ?? 0,
+    startTime: game.matchInfo?.startTime ?? '',
+  }
 })
 watch([() => matchLink.value?.matchId, onlineRefresh], async ([id], old, onCleanup) => {
   let cancelled = false
@@ -279,7 +295,10 @@ async function joinSession(id: string, side: 'home' | 'away' = 'home') {
 
 function finishCurrentMatch() {
   if (matchLink.value) statisticsOpen.value = true
-  else if (window.confirm(t('sessions.finishLocalConfirm')) && finishLocalMatch()) homeOpen.value = true
+  else if (window.confirm(t('sessions.finishLocalConfirm')) && finishLocalMatch()) {
+    homeOpen.value = true
+    practiceOpen.value = true
+  }
 }
 
 function updateTeamName(teamId: string, name: string) {
@@ -297,14 +316,52 @@ async function saveTeamSetup(
   match: ZoebasMatch | null,
   manualOpponentName: string,
   manualStart: string,
+  opponentClub: string,
 ) {
-  if (!applyTeamSetup(profiles, profileIds, match, manualOpponentName, manualStart)) return
+  if (!applyTeamSetup(profiles, profileIds, match, manualOpponentName, manualStart, practiceSetup.value, opponentClub)) return
+  practiceSetup.value = false
   if (newOnlineSession.value && userProfile.value && game.matchInfo) {
     const startsAt = game.matchInfo.startsAt ?? new Date(`${game.matchInfo.date}T${game.matchInfo.startTime}:00`).toISOString()
     if (!await createSharedMatch(userProfile.value.name, startsAt)) pageError.value = matchSyncError.value
   }
   newOnlineSession.value = false
 }
+
+function openStatistics() {
+  practiceOpen.value = false
+  statisticsOpen.value = true
+}
+
+function openPracticePage() {
+  statisticsOpen.value = false
+  practiceOpen.value = true
+}
+
+function startPractice() {
+  practiceOpen.value = false
+  if (hasCurrentGame.value) return
+  pageError.value = ''
+  practiceSetup.value = true
+  openTeamSetup()
+  homeOpen.value = false
+}
+
+function cancelSetup() {
+  if (!practiceSetup.value) {
+    cancelTeamSetup()
+    return
+  }
+  practiceSetup.value = false
+  cancelTeamSetup(true)
+  homeOpen.value = true
+}
+
+watch(homeOpen, (open) => {
+  if (open && practiceSetup.value) {
+    practiceSetup.value = false
+    cancelTeamSetup(true)
+  }
+})
 
 function openRosterEditor() {
   if (game.clock?.deadline != null) toggleClock()
@@ -365,12 +422,15 @@ watch(locale, (value) => {
 <template>
   <main class="app-shell" :class="{ 'game-live': game.gameStarted }">
     <header class="topbar">
-      <a class="brand" href="#" :aria-label="t('app.brandHome')" @click.prevent="homeOpen = true">
+      <a class="brand" href="#" :aria-label="t('app.brandHome')" @click.prevent="homeOpen = true; practiceOpen = false">
         <span class="brand-mark">W</span>
         <span>watchtower<span class="brand-dot">.</span></span>
       </a>
       <div class="topbar-right">
-        <button class="share-match-button" type="button" :aria-label="t('statistics.title')" :title="t('statistics.title')" @click="statisticsOpen = true">
+        <button class="share-match-button" type="button" :aria-label="t('sessions.practiceMenu')" :title="t('sessions.practiceMenu')" @click="openPracticePage">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3H9zM7 5.5H5v15h14v-15h-2M12 10.5v6M9 13.5h6" /></svg>
+        </button>
+        <button class="share-match-button" type="button" :aria-label="t('statistics.title')" :title="t('statistics.title')" @click="openStatistics">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V12h4v8M10 20V5h4v15M16 20V9h4v11M2 20h20" /></svg>
         </button>
         <span v-if="!teamSetupOpen && !homeOpen" class="offline-indicator">
@@ -441,10 +501,20 @@ watch(locale, (value) => {
     />
 
 
+    <PracticePage
+      v-else-if="practiceOpen && userProfile && !userProfileOpen && !coachLoginOpen"
+      :configured="matchSyncConfigured"
+      :has-current-game="hasCurrentGame"
+      :display-name="userProfile.name"
+      @close="practiceOpen = false"
+      @start="startPractice"
+    />
+
     <UpcomingGamesPage
       v-else-if="homeOpen && userProfile && !userProfileOpen && !coachLoginOpen"
       :configured="matchSyncConfigured"
       :has-current-game="hasCurrentGame"
+      :practice-game="openPracticeGame"
       :display-name="userProfile.name"
       :current-match-id="matchLink?.matchId ?? null"
       @resume="homeOpen = false"
@@ -459,11 +529,12 @@ watch(locale, (value) => {
       :catalog-loading="teamCatalogLoading"
       :catalog-error="teamCatalogError"
       :catalog-cached="teamCatalogCached"
-      :local-only="!newOnlineSession"
-      :can-cancel="canCancelTeamSetup"
+      :local-only="!newOnlineSession && !practiceSetup"
+      :practice="practiceSetup"
+      :can-cancel="practiceSetup || canCancelTeamSetup"
       :error="storageError"
       home
-      @cancel="cancelTeamSetup"
+      @cancel="cancelSetup"
       @save="saveTeamSetup"
     />
 

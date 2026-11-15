@@ -1,4 +1,6 @@
+import { isPracticeGame } from '../domain/game'
 import { loadLocalMatches, updateLocalMatchSubmission } from './localMatches'
+import { finishStatisticsMatch } from './statistics'
 import { ensureAnonymousUser, getSupabaseClient } from './supabaseClient'
 
 export async function submitLocalMatch(
@@ -29,4 +31,19 @@ export async function submitLocalMatch(
     || typeof data.match_id !== 'string') throw new Error('Invalid offline submission response.')
   updateLocalMatchSubmission(id, { ...submission, resultMatchId: data.match_id }, storage)
   return data.match_id
+}
+
+// A submitted practice game becomes team history like a finished shared game, with the submitter as official scorer.
+export async function addPracticeMatchToStatistics(id: string, storage: Pick<Storage, 'getItem' | 'setItem'> = window.localStorage) {
+  const match = loadLocalMatches(storage).find((item) => item.id === id)
+  if (!match) throw new Error('Local match not found.')
+  const teamId = match.game.catalogTeamId
+  if (!isPracticeGame(match.game) || !teamId) throw new Error('Only practice games of a club team can be added to the statistics.')
+  const submission = match.submission
+  if (!submission?.resultMatchId) throw new Error('Submit the practice game before adding it to the statistics.')
+  if (submission.statisticsTeamId) return
+  const trackerId = await ensureAnonymousUser()
+  if (trackerId !== submission.trackerId) throw new Error('This practice game was submitted with another account.')
+  await finishStatisticsMatch(submission.resultMatchId, teamId, trackerId)
+  updateLocalMatchSubmission(id, { ...submission, statisticsTeamId: teamId }, storage)
 }

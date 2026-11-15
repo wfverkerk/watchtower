@@ -55,6 +55,13 @@ export function teamGroup(name: string, isTestTeam: boolean): TeamGroup {
   return 'other'
 }
 
+export const teamGroupLabelKeys: Record<TeamGroup, string> = {
+  young: 'sessions.teamGroupYoung',
+  middle: 'sessions.teamGroupMiddle',
+  other: 'sessions.teamGroupOther',
+  test: 'sessions.teamGroupTest',
+}
+
 export function groupTeams(names: string[], testTeams: Set<string>) {
   const order: TeamGroup[] = ['young', 'middle', 'other', 'test']
   return order

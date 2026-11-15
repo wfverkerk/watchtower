@@ -16,6 +16,7 @@ export type StatisticsMatch = {
   matchDate: string | null
   links: Record<string, string>
   canEdit: boolean
+  practice: boolean
 }
 export type MatchScorers = {
   finishedAt: string | null
@@ -148,6 +149,8 @@ export async function loadStatisticsHistory(teamId: string): Promise<StatisticsM
     if (!isRecord(item) || typeof item.id !== 'string' || typeof item.finishedAt !== 'string'
       || typeof item.trackerId !== 'string' || typeof item.snapshotUpdatedAt !== 'string'
       || typeof item.canEdit !== 'boolean' || !isRecord(item.links)
+      || !(item.practice === undefined || typeof item.practice === 'boolean')
+      || !(item.teamClubs === undefined || (isRecord(item.teamClubs) && Object.values(item.teamClubs).every((club) => typeof club === 'string')))
       || !Object.values(item.links).every((link) => typeof link === 'string')
       || !isRecord(item.snapshot) || !Array.isArray(item.snapshot.teams)
       || !Array.isArray(item.snapshot.players) || !Array.isArray(item.snapshot.actions)
@@ -155,7 +158,11 @@ export async function loadStatisticsHistory(teamId: string): Promise<StatisticsM
       throw new Error('Invalid statistics match.')
     }
     const game = parseGameState({
-      teams: item.snapshot.teams.map((team: unknown) => isRecord(team) ? { ...team, color: '#000000' } : team),
+      teams: item.snapshot.teams.map((team: unknown) => {
+        if (!isRecord(team)) return team
+        const club = isRecord(item.teamClubs) && typeof team.id === 'string' ? item.teamClubs[team.id] : undefined
+        return { ...team, color: '#000000', ...(typeof club === 'string' ? { club } : {}) }
+      }),
       players: item.snapshot.players.map((player: unknown) => isRecord(player)
         ? { ...player, name: '', isOnCourt: false } : player),
       actions: item.snapshot.actions,
@@ -166,7 +173,7 @@ export async function loadStatisticsHistory(teamId: string): Promise<StatisticsM
       id: item.id, finishedAt: item.finishedAt, trackerId: item.trackerId,
       snapshotUpdatedAt: item.snapshotUpdatedAt, canEdit: item.canEdit,
       links: Object.fromEntries(Object.entries(item.links).map(([key, link]) => [key, String(link)])),
-      game, matchDate: item.snapshot.matchDate,
+      game, matchDate: item.snapshot.matchDate, practice: item.practice === true,
     }
   })
 }

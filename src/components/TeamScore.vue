@@ -33,7 +33,7 @@ const { t, displayTeamName } = useLocale()
     >
     <span v-if="fouls >= 5" class="foul-marker" role="img" :aria-label="t('scoreboard.teamFoulLimit')" :title="t('scoreboard.teamFoulLimit')"></span>
     <div class="score-row">
-      <TeamLogo :name="team.name" class="scoreboard-logo" />
+      <TeamLogo :name="team.club ?? team.name" :placeholder="!!team.club" class="scoreboard-logo" />
       <div class="score-value">
         <strong>{{ points }}</strong>
         <span v-for="notification in notifications" :key="notification.id" class="score-increment" aria-hidden="true" @animationend="emit('notification-end', notification.id)">+{{ notification.value }}</span>
