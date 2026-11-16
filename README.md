@@ -74,6 +74,7 @@ Afgesloten lokale wedstrijden en hun indienstatus staan onder `watchtower-local-
    - [`20261201000000_event_flow_rebounds.sql`](./supabase/migrations/20261201000000_event_flow_rebounds.sql) (staat rebounds van de tegenstander zonder speler toe bij het indienen van een wedstrijd)
    - [`20261202000000_turnover_types.sql`](./supabase/migrations/20261202000000_turnover_types.sql) (staat de uitgebreide turnover-typen toe bij het indienen van een wedstrijd)
    - [`20261203000000_remove_team_staff.sql`](./supabase/migrations/20261203000000_remove_team_staff.sql) (verwijdert de coachkolommen uit `zoebas_teams`; coachtoegang blijft ongewijzigd)
+   - [`20261204000000_single_scorer.sql`](./supabase/migrations/20261204000000_single_scorer.sql) (eerste stap naar één scorer per wedstrijd: `scorer_id`, `transfer_match_scorer` en een schrijfcontrole in de servergards. Doet niets voor wedstrijden zonder `scorer_id`, dus de bestaande app blijft werken; de client en het automatisch toewijzen van de maker volgen in een latere stap)
 
 De Edge Function `sync-zoebas-schedule` haalt het programma per competitie op uit de FOYS-API (met header `X-FederationId`). Een pg_cron-taak roept hem dagelijks om 03:00 Amsterdamse tijd aan; het `SYNC_SECRET` staat in de Supabase-secrets en in Vault (`sync_zoebas_schedule_secret`).
 3. Kopieer `.env.example` naar `.env.local` en vul de project-URL en publishable/anon key in. Deze client key is bedoeld voor gebruik in de browser; de database vertrouwt op RLS-beleid en anonieme Supabase Auth-sessies.
