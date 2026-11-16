@@ -379,6 +379,94 @@ describe('statistics database authorization', () => {
     await expect(db.exec(insertEvent.replace(`'${viewer}', 'Viewer'`, `'${coach}', 'Coach'`))).rejects.toThrow('Session is locked')
   })
 
+  it('lets only the scorer register and lets members take the role over while a match is live', async () => {
+    const gameData = { teams: [{ id: 'home', name: 'X12-1', color: '#000000' }, { id: 'away', name: 'Opponent', color: '#000000' }], players: [], catalogTeamId: 'x12-1' }
+    const snapshot = { teams: [{ id: 'home', name: 'X12-1' }, { id: 'away', name: 'Opponent' }], players: [], actions: [], matchDate: null, catalogTeamId: 'x12-1' }
+    const create = async () => (await db.query<{ result: { match_id: string } }>(
+      "select public.create_match_session($1 || jsonb_build_object('matchInfo', jsonb_build_object('startsAt', now() - interval '1 minute')), 'Coach', now() - interval '1 minute') result", [gameData],
+    )).rows[0].result.match_id
+    const insertEvent = (matchId: string, user: string, name: string) => `insert into public.match_events (id, match_id, tracker_id, tracker_name, action_id, event_type, action_data, occurred_at)
+      values (gen_random_uuid(), '${matchId}', '${user}', '${name}', gen_random_uuid()::text, 'action_added', '{}', now())`
+    const transfer = async (matchId: string) => (await db.query<{ result: { changed: boolean; previousScorerId: string } }>(
+      'select public.transfer_match_scorer($1) result', [matchId],
+    )).rows[0].result
+    const scorers = async (matchId: string) => (await db.query<{ result: Record<string, unknown> }>(
+      'select public.match_scorers($1) result', [matchId],
+    )).rows[0].result
+
+    await asUser(coach)
+    const shared = await create()
+    await asUser(viewer)
+    await db.query("select public.join_match_session($1, 'Viewer')", [shared])
+    await db.exec(insertEvent(shared, viewer, 'Viewer'))
+    await asUser(coach)
+    await expect(db.query('select public.transfer_match_scorer($1)', [shared])).rejects.toThrow('several scorers')
+
+    const matchId = await create()
+    await asUser(viewer)
+    await db.query("select public.join_match_session($1, 'Viewer')", [matchId])
+    await asUser(coach)
+    expect((await transfer(matchId)).changed).toBe(true)
+    expect((await transfer(matchId)).changed).toBe(false)
+    await db.exec(insertEvent(matchId, coach, 'Coach'))
+    await db.query('select public.save_match_scorer_snapshot($1, 1, 0, $2)', [matchId, snapshot])
+    expect(await scorers(matchId)).toMatchObject({ scorerId: coach, scorerName: 'Coach', liveTrackerId: coach, canTakeOver: false })
+
+    await asUser(viewer)
+    await expect(db.exec(insertEvent(matchId, viewer, 'Viewer'))).rejects.toThrow('not_scorer')
+    await expect(db.query('select public.save_match_scorer_snapshot($1, 1, 0, $2)', [matchId, snapshot])).rejects.toThrow('not_scorer')
+    expect(await scorers(matchId)).toMatchObject({ scorerId: coach, canTakeOver: true })
+    expect((await scorers(matchId)).lastEventAt).not.toBeNull()
+
+    expect((await transfer(matchId)).previousScorerId).toBe(coach)
+    await db.exec(insertEvent(matchId, viewer, 'Viewer'))
+    await asUser(coach)
+    await expect(db.exec(insertEvent(matchId, coach, 'Coach'))).rejects.toThrow('not_scorer')
+    await expect(db.query('select public.set_live_match_tracker($1, $2)', [matchId, coach])).rejects.toThrow('transfer_match_scorer')
+    await asUser(viewer)
+    await expect(db.query("select public.statistics_finish_match($1, 'x12-1', $2)", [matchId, coach])).rejects.toThrow('Only the scorer')
+
+    await db.exec(`reset role; update public.shared_matches set finished_at = now() where id = '${matchId}';`)
+    await asUser(coach)
+    await expect(db.query('select public.transfer_match_scorer($1)', [matchId])).rejects.toThrow('not possible')
+  })
+
+  it('lets only a team coach take over a match in review', async () => {
+    const gameData = { teams: [{ id: 'home', name: 'X12-1', color: '#000000' }, { id: 'away', name: 'Opponent', color: '#000000' }], players: [], catalogTeamId: 'x12-1' }
+    const insertEvent = (matchId: string, user: string, name: string) => `insert into public.match_events (id, match_id, tracker_id, tracker_name, action_id, event_type, action_data, occurred_at)
+      values (gen_random_uuid(), '${matchId}', '${user}', '${name}', gen_random_uuid()::text, 'action_added', '{}', now())`
+    await asUser(coach)
+    const matchId = (await db.query<{ result: { match_id: string } }>(
+      "select public.create_match_session($1 || jsonb_build_object('matchInfo', jsonb_build_object('startsAt', now() - interval '1 minute')), 'Coach', now() - interval '1 minute') result", [gameData],
+    )).rows[0].result.match_id
+    await asUser(viewer)
+    await db.query("select public.join_match_session($1, 'Viewer')", [matchId])
+    await asUser(outsider)
+    await db.query("select public.join_match_session($1, 'Outsider')", [matchId])
+    await asUser(coach)
+    await db.query('select public.transfer_match_scorer($1)', [matchId])
+    await asUser(viewer)
+    await db.query('select public.transfer_match_scorer($1)', [matchId])
+
+    await db.exec(`reset role; update public.shared_matches set session_starts_at = now() - interval '45 minutes' where id = '${matchId}';`)
+    await asUser(coach)
+    const status = (await db.query<{ status: string }>(
+      "select s->>'status' status from jsonb_array_elements(public.list_match_sessions(true)) s where s->>'id' = $1", [matchId],
+    )).rows[0].status
+    expect(status).toBe('in_review')
+
+    await asUser(outsider)
+    await expect(db.query('select public.transfer_match_scorer($1)', [matchId])).rejects.toThrow('not possible')
+    await asUser(coach)
+    const taken = (await db.query<{ result: { changed: boolean; previousScorerId: string } }>(
+      'select public.transfer_match_scorer($1) result', [matchId],
+    )).rows[0].result
+    expect(taken).toMatchObject({ changed: true, previousScorerId: viewer })
+    await db.exec(insertEvent(matchId, coach, 'Coach'))
+    await asUser(viewer)
+    await expect(db.exec(insertEvent(matchId, viewer, 'Viewer'))).rejects.toThrow('not_scorer')
+  })
+
   it('closes automatically after 30 minutes without events and moves to review after the closed window', async () => {
     await asUser(coach)
     const gameData = { teams: [{ id: 'home', name: 'X12-1', color: '#000000' }, { id: 'away', name: 'Opponent', color: '#000000' }], players: [], catalogTeamId: 'x12-1' }
