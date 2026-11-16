@@ -46,8 +46,9 @@ Afgesloten lokale wedstrijden en hun indienstatus staan onder `watchtower-local-
 
 1. Maak een Supabase-project en schakel **Anonymous Sign-Ins** in bij Authentication.
 2. Voer de SQL-bestanden in `supabase/migrations/` op volgorde van bestandsnaam uit in de SQL-editor van Supabase:
-   - [`20261204000000_baseline.sql`](./supabase/migrations/20261204000000_baseline.sql) (het schema van alle eerdere migraties, zonder testdata en testfuncties, met de referentiedata: Zoebas-teams, competities en statistiekteams. Nieuw project: voer dit eerst uit. Bestaande projecten hebben dit al en voeren alleen de volgende migratie uit)
-   - [`20261205000000_match_live_state.sql`](./supabase/migrations/20261205000000_match_live_state.sql) (tabel `match_live_state` en `set_match_live_state`: de scorer deelt roster, opstelling, periode en wissels met kijkers; zonder deze migratie zien kijkers wel de stand en de acties, maar geen opstelling)
+   - [`20261206000000_baseline.sql`](./supabase/migrations/20261206000000_baseline.sql) (het volledige schema van Watchtower, zonder testdata, met de referentiedata: Zoebas-teams, competities en statistiekteams, de realtime-publicatie en de publieke bucket `logos`. Nieuw project: voer dit ene bestand uit. Bestaande projecten hebben dit schema al)
+
+Eenmalig op een bestaand project om oude gedeelde wedstrijden te verwijderen: voer [`scripts/delete-shared-matches.sql`](./scripts/delete-shared-matches.sql) uit in de SQL-editor. Dat verwijdert alle gedeelde wedstrijden, hun events en de teamstatistieken die daaruit zijn gemaakt. Teams, spelers, het programma en coachtoegang blijven bestaan.
 
 De Edge Function `sync-zoebas-schedule` haalt het programma per competitie op uit de FOYS-API (met header `X-FederationId`). Een pg_cron-taak roept hem dagelijks om 03:00 Amsterdamse tijd aan; het `SYNC_SECRET` staat in de Supabase-secrets en in Vault (`sync_zoebas_schedule_secret`).
 3. Kopieer `.env.example` naar `.env.local` en vul de project-URL en publishable/anon key in. Deze client key is bedoeld voor gebruik in de browser; de database vertrouwt op RLS-beleid en anonieme Supabase Auth-sessies.
