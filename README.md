@@ -46,35 +46,7 @@ Afgesloten lokale wedstrijden en hun indienstatus staan onder `watchtower-local-
 
 1. Maak een Supabase-project en schakel **Anonymous Sign-Ins** in bij Authentication.
 2. Voer de SQL-bestanden in `supabase/migrations/` op volgorde van bestandsnaam uit in de SQL-editor van Supabase:
-   - [`20261110000000_shared_match_events.sql`](./supabase/migrations/20261110000000_shared_match_events.sql)
-   - [`20261111000000_shared_match_size_limits.sql`](./supabase/migrations/20261111000000_shared_match_size_limits.sql)
-   - [`20261111000000_zoebas_team_catalog.sql`](./supabase/migrations/20261111000000_zoebas_team_catalog.sql)
-   - [`20261111000100_zoebas_team_staff.sql`](./supabase/migrations/20261111000100_zoebas_team_staff.sql)
-   - [`20261111000200_zoebas_team_staff_roles.sql`](./supabase/migrations/20261111000200_zoebas_team_staff_roles.sql)
-   - [`20261111000300_shared_jersey_numbers.sql`](./supabase/migrations/20261111000300_shared_jersey_numbers.sql)
-   - [`20261112000000_statistics.sql`](./supabase/migrations/20261112000000_statistics.sql)
-   - [`20261113000000_match_sessions.sql`](./supabase/migrations/20261113000000_match_sessions.sql)
-   - [`20261114000000_statistics_contributions.sql`](./supabase/migrations/20261114000000_statistics_contributions.sql)
-   - [`20261115000000_opponent_teams.sql`](./supabase/migrations/20261115000000_opponent_teams.sql)
-   - [`20261116000000_public_logos_bucket.sql`](./supabase/migrations/20261116000000_public_logos_bucket.sql)
-   - [`20261117000000_zoebas_schedule.sql`](./supabase/migrations/20261117000000_zoebas_schedule.sql)
-   - [`20261118000000_session_join_window.sql`](./supabase/migrations/20261118000000_session_join_window.sql)
-   - [`20261119000000_session_status.sql`](./supabase/migrations/20261119000000_session_status.sql)
-   - [`20261120000000_session_closing.sql`](./supabase/migrations/20261120000000_session_closing.sql)
-   - [`20261121000000_admin_dashboard.sql`](./supabase/migrations/20261121000000_admin_dashboard.sql)
-   - [`20261122000000_test_games.sql`](./supabase/migrations/20261122000000_test_games.sql) (testdata; draai daarna `select public.refresh_test_games();`)
-   - [`20261123000000_test_team_logos.sql`](./supabase/migrations/20261123000000_test_team_logos.sql) (upload de bestanden in `supabase/test-logos/` naar de bucket `logos`)
-   - [`20261124000000_test_history_game.sql`](./supabase/migrations/20261124000000_test_history_game.sql) (testdata; draai daarna `select public.refresh_test_history();`)
-   - [`20261125000000_schedule_stats.sql`](./supabase/migrations/20261125000000_schedule_stats.sql)
-   - [`20261126000000_zoebas_competitions.sql`](./supabase/migrations/20261126000000_zoebas_competitions.sql) (competities voor de schedule-sync)
-   - [`20261127000000_schedule_clubs_logos.sql`](./supabase/migrations/20261127000000_schedule_clubs_logos.sql) (club- en logokolommen voor het programma)
-   - [`20261128000000_test_games_today.sql`](./supabase/migrations/20261128000000_test_games_today.sql) (testdata: een wedstrijd van vandaag die nog niet gestart is; draai daarna opnieuw `select public.refresh_test_games();`)
-   - [`20261129000000_live_scores.sql`](./supabase/migrations/20261129000000_live_scores.sql) (live-stand in de sessielijst; zet de snapshot van de testwedstrijd die nu live is)
-   - [`20261130000000_practice_games.sql`](./supabase/migrations/20261130000000_practice_games.sql) (markeert oefenwedstrijden in de teamstatistiekhistorie)
-   - [`20261201000000_event_flow_rebounds.sql`](./supabase/migrations/20261201000000_event_flow_rebounds.sql) (staat rebounds van de tegenstander zonder speler toe bij het indienen van een wedstrijd)
-   - [`20261202000000_turnover_types.sql`](./supabase/migrations/20261202000000_turnover_types.sql) (staat de uitgebreide turnover-typen toe bij het indienen van een wedstrijd)
-   - [`20261203000000_remove_team_staff.sql`](./supabase/migrations/20261203000000_remove_team_staff.sql) (verwijdert de coachkolommen uit `zoebas_teams`; coachtoegang blijft ongewijzigd)
-   - [`20261204000000_single_scorer.sql`](./supabase/migrations/20261204000000_single_scorer.sql) (eerste stap naar één scorer per wedstrijd: `scorer_id`, `transfer_match_scorer` en een schrijfcontrole in de servergards. Doet niets voor wedstrijden zonder `scorer_id`, dus de bestaande app blijft werken; de client en het automatisch toewijzen van de maker volgen in een latere stap)
+   - [`20261204000000_baseline.sql`](./supabase/migrations/20261204000000_baseline.sql) (het schema van alle eerdere migraties, zonder testdata en testfuncties, met de referentiedata: Zoebas-teams, competities en statistiekteams. Nieuw project: voer dit eerst uit. Bestaande projecten hebben dit al en voeren alleen de volgende migratie uit)
    - [`20261205000000_match_live_state.sql`](./supabase/migrations/20261205000000_match_live_state.sql) (tabel `match_live_state` en `set_match_live_state`: de scorer deelt roster, opstelling, periode en wissels met kijkers; zonder deze migratie zien kijkers wel de stand en de acties, maar geen opstelling)
 
 De Edge Function `sync-zoebas-schedule` haalt het programma per competitie op uit de FOYS-API (met header `X-FederationId`). Een pg_cron-taak roept hem dagelijks om 03:00 Amsterdamse tijd aan; het `SYNC_SECRET` staat in de Supabase-secrets en in Vault (`sync_zoebas_schedule_secret`).
@@ -84,7 +56,7 @@ De Edge Function `sync-zoebas-schedule` haalt het programma per competitie op ui
 
 Bij het eerste gebruik stel je lokaal je naam, taal en weergave in. Via het profiel rechtsboven kun je deze voorkeuren later aanpassen. Start een wedstrijd en kies een Zoebas-team en de deelnemende spelers; vul voor de spelers ook hun rugnummers in. De wizard laadt programma en uitslagen uit de publieke FOYS-competitie-API. Bij een handmatig ingevoerde tegenstander zijn ook datum en aanvangstijd verplicht. De tegenstander krijgt voorlopig vijf tijdelijke spelers (`player_1` tot en met `player_5`) met fictieve nummers; een deelnemer die voor de uit-ploeg registreert beheert zijn eigen spelerslijst.
 
-De tegenstander kies je in de laatste wizardstap met een zoekveld met suggesties uit de tabel `opponent_teams`. Deze tabel wordt bij het uitvoeren van `20261115000000_opponent_teams.sql` gevuld uit de bestanden in de publieke Storage-bucket `logos` (gif, png, jpg, jpeg en webp, zonder submappen): de bestandsnaam zonder extensie is de teamnaam. De naam wordt in de database in de vorm `Sv Zoebas` opgeslagen (eerste letter van elk woord hoofdletter) en `logo_file` bewaart de exacte bestandsnaam voor het logo. Controleer afkortingen als `BC` of `CBV` en pas de naam zo nodig aan in de tabel; zoeken is niet hoofdlettergevoelig. Nieuwe logo's voeg je later toe met een `insert` in `opponent_teams`. Een niet gevonden tegenstander blijft als vrije tekst mogelijk. De lijst wordt lokaal gecached voor offline gebruik; logo's zijn alleen zichtbaar met internet. De logo's worden getoond via de publieke URL van de bucket; voer daarom ook `20261116000000_public_logos_bucket.sql` uit (zet de bucket `logos` op publiek). Bij een privé-bucket geeft Supabase "Bucket not found" en blijven de logo's leeg.
+De tegenstander kies je in de laatste wizardstap met een zoekveld met suggesties uit de tabel `opponent_teams`. Deze tabel wordt bij het uitvoeren van de baseline-migratie gevuld uit de bestanden in de publieke Storage-bucket `logos` (gif, png, jpg, jpeg en webp, zonder submappen): de bestandsnaam zonder extensie is de teamnaam. De naam wordt in de database in de vorm `Sv Zoebas` opgeslagen (eerste letter van elk woord hoofdletter) en `logo_file` bewaart de exacte bestandsnaam voor het logo. Controleer afkortingen als `BC` of `CBV` en pas de naam zo nodig aan in de tabel; zoeken is niet hoofdlettergevoelig. Nieuwe logo's voeg je later toe met een `insert` in `opponent_teams`. Een niet gevonden tegenstander blijft als vrije tekst mogelijk. De lijst wordt lokaal gecached voor offline gebruik; logo's zijn alleen zichtbaar met internet. De logo's worden getoond via de publieke URL van de bucket; de baseline-migratie zet de bucket `logos` daarom op publiek. Bij een privé-bucket geeft Supabase "Bucket not found" en blijven de logo's leeg.
 
 Sessies zijn voor alle appgebruikers zichtbaar. Deelnemen kan vanaf tien minuten voor de opgegeven aanvang, tot 180 minuten daarna of totdat de maker of bevoegde coach de sessie sluit. De aangewezen live-scorer bepaalt de getoonde stand; de maker of een bevoegde coach kan deze scorer wijzigen. Andere registraties worden in het live-overzicht per score zo goed mogelijk gekoppeld, met een onzekerheidsmelding en handmatige correctie. Niet-gekoppelde acties blijven zichtbaar als aanvullende acties. De gewone registratie en het scorebord op je eigen apparaat blijven onafhankelijk van de live-stand.
 
