@@ -9,6 +9,7 @@ defineProps<{
   points: number
   fouls: number
   notifications: { id: number; value: 1 | 2 | 3 }[]
+  readOnly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -28,6 +29,7 @@ const { t, displayTeamName } = useLocale()
     <input
       class="team-name"
       :value="displayTeamName(team)"
+      :readonly="readOnly"
       :aria-label="t(side === 'home' ? 'scoreboard.homeName' : 'scoreboard.awayName')"
       @input="emit('name-change', team.id, ($event.target as HTMLInputElement).value)"
     >

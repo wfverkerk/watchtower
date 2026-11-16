@@ -22,6 +22,7 @@ import { isAuthCallbackBlocked } from './services/supabaseClient'
 import { loadSharedGame } from './services/sharedMatch'
 import { isPlatformAdmin } from './services/admin'
 import { useGameSession } from './composables/useGameSession'
+import ThankYouOverlay from './components/ThankYouOverlay.vue'
 import { useScreenWakeLock } from './composables/useScreenWakeLock'
 import { useSupabaseConnection } from './composables/useSupabaseConnection'
 import { isAppLocale, saveLocale, useLocale } from './i18n/useLocale'
@@ -39,6 +40,9 @@ const CoachLoginDialog = defineAsyncComponent(() => import('./components/CoachLo
 const LiveMatchPage = defineAsyncComponent(() => import('./components/LiveMatchPage.vue'))
 const StatisticsPage = defineAsyncComponent(() => import('./components/StatisticsPage.vue'))
 const PracticePage = defineAsyncComponent(() => import('./components/PracticePage.vue'))
+const MatchViewerPage = defineAsyncComponent(() => import('./components/MatchViewerPage.vue'))
+// The session a viewer is watching; a viewer never gets a local game.
+const viewerMatchId = ref<string | null>(null)
 const rosterEditing = ref(false)
 const statisticsOpen = ref(false)
 const practiceOpen = ref(false)
@@ -300,10 +304,25 @@ async function joinSession(id: string, side: 'home' | 'away' = 'home') {
 
 function finishCurrentMatch() {
   if (matchLink.value) statisticsOpen.value = true
-  else if (window.confirm(t('sessions.finishLocalConfirm')) && finishLocalMatch()) {
-    homeOpen.value = true
-    practiceOpen.value = true
+  else if (window.confirm(t('sessions.finishLocalConfirm')) && finishLocalMatch()) showThankYou(true)
+}
+
+// The thank-you screen covers the page the scorer finished on and ends on the games overview.
+const thankYou = ref<{ teams: { id: string; name: string; points: number }[]; practice: boolean } | null>(null)
+
+function showThankYou(practice: boolean) {
+  thankYou.value = {
+    teams: game.teams.map((team, index) => ({ id: team.id, name: team.name, points: scores.value[index]?.points ?? 0 })),
+    practice,
   }
+}
+
+function closeThankYou() {
+  const practice = thankYou.value?.practice ?? false
+  thankYou.value = null
+  statisticsOpen.value = false
+  homeOpen.value = true
+  practiceOpen.value = practice
 }
 
 function updateTeamName(teamId: string, name: string) {
@@ -427,7 +446,7 @@ watch(locale, (value) => {
 <template>
   <main class="app-shell" :class="{ 'game-live': game.gameStarted }">
     <header class="topbar">
-      <a class="brand" href="#" :aria-label="t('app.brandHome')" @click.prevent="homeOpen = true; practiceOpen = false">
+      <a class="brand" href="#" :aria-label="t('app.brandHome')" @click.prevent="homeOpen = true; practiceOpen = false; viewerMatchId = null">
         <span class="brand-mark">W</span>
         <span>watchtower<span class="brand-dot">.</span></span>
       </a>
@@ -503,6 +522,7 @@ watch(locale, (value) => {
       @close="statisticsOpen = false"
       @coach-login="coachLoginOpen = true"
       @finished="markMatchFinished"
+      @match-completed="showThankYou(false)"
     />
 
 
@@ -515,6 +535,13 @@ watch(locale, (value) => {
       @start="startPractice"
     />
 
+    <MatchViewerPage
+      v-else-if="viewerMatchId && userProfile && !userProfileOpen && !coachLoginOpen"
+      :key="viewerMatchId"
+      :match-id="viewerMatchId"
+      @close="viewerMatchId = null"
+    />
+
     <UpcomingGamesPage
       v-else-if="homeOpen && userProfile && !userProfileOpen && !coachLoginOpen"
       :configured="matchSyncConfigured"
@@ -524,6 +551,7 @@ watch(locale, (value) => {
       :current-match-id="matchLink?.matchId ?? null"
       @resume="homeOpen = false"
       @join="joinSession"
+      @view="viewerMatchId = $event"
     />
 
     <TeamSetupDialog
@@ -699,5 +727,7 @@ watch(locale, (value) => {
       >{{ t('scoreboard.editPlayers') }}</button>
       <span class="connection-status" :class="`is-${connection}`" role="status" :aria-label="connectionLabel" :title="connectionLabel"></span>
     </footer>
+
+    <ThankYouOverlay v-if="thankYou" :teams="thankYou.teams" @done="closeThankYou" />
   </main>
 </template>

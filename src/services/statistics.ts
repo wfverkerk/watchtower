@@ -23,6 +23,11 @@ export type MatchScorers = {
   officialTrackerId: string | null
   liveTrackerId?: string | null
   canManageLive?: boolean
+  scorerId?: string | null
+  scorerName?: string | null
+  scorerSince?: string | null
+  lastEventAt?: string | null
+  canTakeOver?: boolean
   scorers: { id: string; name: string; updatedAt: string | null }[]
 }
 
@@ -59,10 +64,14 @@ export async function saveStatisticsPlayer(teamId: string, playerId: string | nu
 
 export async function loadMatchScorers(matchId: string): Promise<MatchScorers> {
   const value = await rpc('match_scorers', { p_match_id: matchId })
+  const nullableString = (entry: unknown) => entry === undefined || entry === null || typeof entry === 'string'
   if (!isRecord(value) || !(value.finishedAt === null || typeof value.finishedAt === 'string')
     || !(value.officialTrackerId === null || typeof value.officialTrackerId === 'string')
     || !(value.liveTrackerId === undefined || value.liveTrackerId === null || typeof value.liveTrackerId === 'string')
     || !(value.canManageLive === undefined || typeof value.canManageLive === 'boolean')
+    || !nullableString(value.scorerId) || !nullableString(value.scorerName)
+    || !nullableString(value.scorerSince) || !nullableString(value.lastEventAt)
+    || !(value.canTakeOver === undefined || typeof value.canTakeOver === 'boolean')
     || !Array.isArray(value.scorers) || !value.scorers.every((scorer) =>
       isRecord(scorer) && typeof scorer.id === 'string' && typeof scorer.name === 'string'
       && (scorer.updatedAt === null || typeof scorer.updatedAt === 'string'))) {
@@ -72,6 +81,11 @@ export async function loadMatchScorers(matchId: string): Promise<MatchScorers> {
     finishedAt: value.finishedAt, officialTrackerId: value.officialTrackerId, scorers: value.scorers,
     ...(value.liveTrackerId !== undefined ? { liveTrackerId: value.liveTrackerId } : {}),
     ...(value.canManageLive !== undefined ? { canManageLive: value.canManageLive } : {}),
+    scorerId: value.scorerId ?? null,
+    scorerName: value.scorerName ?? null,
+    scorerSince: value.scorerSince ?? null,
+    lastEventAt: value.lastEventAt ?? null,
+    ...(value.canTakeOver !== undefined ? { canTakeOver: value.canTakeOver } : {}),
   }
 }
 

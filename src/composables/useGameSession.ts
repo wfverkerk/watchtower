@@ -62,6 +62,7 @@ import { ensureAnonymousUser, isSupabaseConfigured } from '../services/supabaseC
 import { loadCachedZoebasTeams, loadZoebasTeams, saveCachedZoebasTeams, type ZoebasTeam } from '../services/zoebasTeams'
 import { loadMatchScorers, restoreMyMatchSnapshot } from '../services/statistics'
 import { currentLiveActions, loadLiveMatch } from '../services/liveMatch'
+import { buildLiveState, uploadLiveState, type LiveState } from '../services/matchLiveState'
 import type { ZoebasMatch } from '../services/zoebasMatches'
 import { isAppLocale, useLocale } from '../i18n/useLocale'
 import { errorMessage } from '../domain/guards'
@@ -113,6 +114,8 @@ export function useGameSession() {
   let syncInProgress = false
   let syncRequested = false
   let syncTimer: number | undefined
+  let liveStateTimer: number | undefined
+  let lastLiveState = ''
   let clockTimer: number | undefined
   const clockNow = ref(Date.now())
 
@@ -195,6 +198,30 @@ export function useGameSession() {
       syncTimer = undefined
       void syncPendingMatchEvents()
     }, 250)
+  }
+
+  // Viewers follow the lineup, period and substitutions through this small shared state; only the scorer can write it.
+  const liveState = computed(() => JSON.stringify(buildLiveState(game)))
+
+  async function pushLiveState() {
+    liveStateTimer = undefined
+    const link = matchLink.value
+    if (!matchSyncConfigured || !link || !navigator.onLine) return
+    const serialized = liveState.value
+    if (serialized === lastLiveState) return
+    try {
+      await uploadLiveState(link.matchId, JSON.parse(serialized) as LiveState)
+      lastLiveState = serialized
+    } catch (error) {
+      // Registrations that are not the scorer's, such as on older matches, are simply not shared.
+      console.debug('The live state was not shared.', error)
+    }
+  }
+
+  function scheduleLiveState() {
+    if (!matchLink.value) return
+    if (liveStateTimer !== undefined) window.clearTimeout(liveStateTimer)
+    liveStateTimer = window.setTimeout(() => void pushLiveState(), 800)
   }
 
   async function syncPendingMatchEvents() {
@@ -1203,14 +1230,27 @@ export function useGameSession() {
     { deep: true, flush: 'sync' },
   )
 
+  watch(liveState, scheduleLiveState)
+  watch(() => matchLink.value?.matchId, () => {
+    lastLiveState = ''
+    scheduleLiveState()
+  })
+
   function handleOnline() {
-    if (matchSyncConfigured) scheduleMatchSync()
+    if (matchSyncConfigured) {
+      scheduleMatchSync()
+      scheduleLiveState()
+    }
   }
 
-  onMounted(() => window.addEventListener('online', handleOnline))
+  onMounted(() => {
+    window.addEventListener('online', handleOnline)
+    scheduleLiveState()
+  })
   onUnmounted(() => {
     window.removeEventListener('online', handleOnline)
     if (syncTimer !== undefined) window.clearTimeout(syncTimer)
+    if (liveStateTimer !== undefined) window.clearTimeout(liveStateTimer)
     if (clockTimer !== undefined) window.clearInterval(clockTimer)
   })
 

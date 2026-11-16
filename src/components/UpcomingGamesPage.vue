@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import PageHeader from './PageHeader.vue'
-import BaseDialog from './BaseDialog.vue'
-import JoinSidePicker from './JoinSidePicker.vue'
+import ScorerRoleDialog from './ScorerRoleDialog.vue'
 import ScheduleSide from './ScheduleSide.vue'
 import { errorMessage } from '../domain/guards'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
@@ -11,7 +10,8 @@ import { createInitialGameState, type GameState } from '../domain/game'
 import { useFavoriteTeams } from '../composables/useFavoriteTeams'
 import { useOpponentTeams } from '../composables/useOpponentTeams'
 import { useLocale } from '../i18n/useLocale'
-import { listMatchSessions, openScheduleSession, setSessionFinal, type MatchSession, type SessionStatus } from '../services/sharedMatch'
+import { joinMatchSession, listMatchSessions, openScheduleSession, setSessionFinal, transferMatchScorer, type MatchSession, type SessionStatus } from '../services/sharedMatch'
+import { loadMatchScorers } from '../services/statistics'
 import { loadSchedule } from '../services/zoebasSchedule'
 
 export type OpenPracticeGame = { homeTeam: string; awayTeam: string; awayClub?: string | null; homeScore: number; awayScore: number; startTime: string }
@@ -26,10 +26,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   resume: []
   join: [id: string, side: 'home' | 'away']
+  view: [id: string]
 }>()
 const { t, locale } = useLocale()
 const allSessions = ref<MatchSession[]>([])
-const popoverGame = ref<ScheduleGame | null>(null)
+// The game whose role is being chosen. Without a session nobody has started it yet, so there is nothing to watch.
+const roleGame = ref<{ game: ScheduleGame; sessionId: string | null } | null>(null)
+const roleBusy = ref(false)
+const checking = ref(false)
 const error = ref('')
 const loading = ref(false)
 const now = ref(Date.now())
@@ -120,18 +124,25 @@ function scheduleGameState(game: ScheduleGame): GameState {
   }
 }
 
-// The first joiner opens the session for a scheduled game; later joiners get the same session back.
+// The first scorer opens the session for a scheduled game and becomes its scorer; later joiners get the same session back.
 async function startScheduleSession(game: ScheduleGame, side: 'home' | 'away') {
-  popoverGame.value = null
   error.value = ''
   try {
     const joined = await openScheduleSession(game.id, scheduleGameState(game), props.displayName)
+    await transferMatchScorer(joined.link.matchId)
     emit('join', joined.link.matchId, side)
     await refresh()
   } catch (reason) {
     console.error('Failed to open the scheduled session.', reason)
-    error.value = errorMessage(reason)
+    error.value = claimMessage(reason)
   }
+}
+
+function claimMessage(reason: unknown) {
+  const message = errorMessage(reason)
+  if (message.includes('several scorers')) return t('roles.claimMultiple')
+  if (message.includes('not possible')) return t('roles.claimFailed')
+  return message
 }
 
 async function finalizeSession(id: string) {
@@ -157,18 +168,57 @@ function canPick(game: ScheduleGame) {
   return sessionPhase(new Date(gameStartMs(game)).toISOString(), now.value) === 'open'
 }
 
-// Tapping your own running game resumes it; any other open game opens the side choice.
-function tapGame(game: ScheduleGame) {
-  if (isCurrentGame(game)) emit('resume')
-  else popoverGame.value = game
+// Tapping your own running game resumes it. Any other open game first finds out whether it already has a scorer:
+// then you can only watch, otherwise you choose between scoring and watching.
+async function tapGame(game: ScheduleGame) {
+  if (isCurrentGame(game)) { emit('resume'); return }
+  if (checking.value) return
+  error.value = ''
+  const session = sessionForGame(game)
+  if (!session) {
+    roleGame.value = { game, sessionId: null }
+    return
+  }
+  checking.value = true
+  try {
+    // Joining only gives read access; the role is decided afterwards.
+    const joined = await joinMatchSession(session.id, props.displayName)
+    const info = await loadMatchScorers(session.id)
+    if (!info.scorerId) roleGame.value = { game, sessionId: session.id }
+    else if (info.scorerId === joined.link.trackerId) emit('join', session.id, 'home')
+    else emit('view', session.id)
+  } catch (reason) {
+    console.error('Failed to open the game.', reason)
+    error.value = errorMessage(reason)
+  } finally {
+    checking.value = false
+  }
 }
 
-function confirmPopover(side: 'home' | 'away') {
-  const game = popoverGame.value
-  if (!game) return
-  const session = sessionForGame(game)
-  if (session) joinAs(session.id, side)
-  else void startScheduleSession(game, side)
+function chooseViewer() {
+  const target = roleGame.value
+  roleGame.value = null
+  if (target?.sessionId) emit('view', target.sessionId)
+}
+
+async function chooseScorer(side: 'home' | 'away') {
+  const target = roleGame.value
+  if (!target || roleBusy.value) return
+  roleBusy.value = true
+  try {
+    if (target.sessionId) {
+      await transferMatchScorer(target.sessionId)
+      emit('join', target.sessionId, side)
+    } else {
+      await startScheduleSession(target.game, side)
+    }
+  } catch (reason) {
+    console.error('Failed to become the scorer.', reason)
+    error.value = claimMessage(reason)
+  } finally {
+    roleGame.value = null
+    roleBusy.value = false
+  }
 }
 
 function statusLabel(status: SessionStatus) {
@@ -215,10 +265,6 @@ async function refresh() {
   }
 }
 
-function joinAs(id: string, side: 'home' | 'away') {
-  emit('join', id, side)
-}
-
 onMounted(() => {
   void refresh()
   window.addEventListener('online', refresh)
@@ -243,6 +289,7 @@ onUnmounted(() => {
     </PageHeader>
     <p v-if="!configured" class="notice">{{ t('sync.notConfigured') }}</p>
     <p v-if="error" class="notice" role="alert">{{ t('sessions.loadError') }}: {{ error }}</p>
+    <p v-if="checking" class="statistics-hint" role="status">{{ t('roles.checking') }}</p>
     <p v-if="scheduleError" class="notice" role="alert">{{ t('sessions.scheduleError') }}: {{ scheduleError }}</p>
     <section v-if="editing" class="panel statistics-card my-teams-editor">
       <h2>{{ t('sessions.pickMyTeams') }}</h2>
@@ -361,19 +408,15 @@ onUnmounted(() => {
     <div v-if="!editing && showMine" class="session-actions my-teams-change">
       <button type="button" class="match-sync-secondary" @click="startEditing">{{ t('sessions.changeMyTeams') }}</button>
     </div>
-    <BaseDialog
-      v-if="popoverGame"
-      backdrop-class="match-dialog-backdrop"
-      dialog-class="panel user-profile-dialog"
-      label="join-popover"
-      @close="popoverGame = null"
-    >
-      <JoinSidePicker
-        :home-name="popoverGame.homeTeam"
-        :away-name="popoverGame.awayTeam"
-        @confirm="confirmPopover"
-        @cancel="popoverGame = null"
-      />
-    </BaseDialog>
+    <ScorerRoleDialog
+      v-if="roleGame"
+      :home-name="roleGame.game.homeTeam"
+      :away-name="roleGame.game.awayTeam"
+      :can-watch="!!roleGame.sessionId"
+      :busy="roleBusy"
+      @view="chooseViewer"
+      @scorer="chooseScorer"
+      @cancel="roleGame = null"
+    />
   </section>
 </template>

@@ -467,6 +467,32 @@ describe('statistics database authorization', () => {
     await expect(db.exec(insertEvent(matchId, viewer, 'Viewer'))).rejects.toThrow('not_scorer')
   })
 
+  it('shares the live state only from the scorer and only with members of the match', async () => {
+    const gameData = { teams: [{ id: 'home', name: 'X12-1', color: '#000000' }, { id: 'away', name: 'Opponent', color: '#000000' }], players: [], catalogTeamId: 'x12-1' }
+    await asUser(coach)
+    const matchId = (await db.query<{ result: { match_id: string } }>(
+      "select public.create_match_session($1 || jsonb_build_object('matchInfo', jsonb_build_object('startsAt', now() - interval '1 minute')), 'Coach', now() - interval '1 minute') result", [gameData],
+    )).rows[0].result.match_id
+    await asUser(viewer)
+    await db.query("select public.join_match_session($1, 'Viewer')", [matchId])
+    await asUser(coach)
+    await expect(db.query('select public.set_match_live_state($1, $2)', [matchId, { period: 1 }])).rejects.toThrow('not_scorer')
+    await db.query('select public.transfer_match_scorer($1)', [matchId])
+    await db.query('select public.set_match_live_state($1, $2)', [matchId, { period: 1, players: [] }])
+    await db.query('select public.set_match_live_state($1, $2)', [matchId, { period: 2, players: [] }])
+    await expect(db.query('select public.set_match_live_state($1, $2)', [matchId, { text: 'x'.repeat(70_000) }])).rejects.toThrow('Invalid live state')
+
+    const readState = async () => (await db.query<{ state: { period: number } }>(
+      'select state from public.match_live_state where match_id = $1', [matchId],
+    )).rows
+    await asUser(viewer)
+    expect((await readState()).map((row) => row.state.period)).toEqual([2])
+    await expect(db.query('select public.set_match_live_state($1, $2)', [matchId, { period: 3 }])).rejects.toThrow('not_scorer')
+    await expect(db.query('insert into public.match_live_state (match_id, state, updated_by) values ($1, $2, $3)', [matchId, {}, viewer])).rejects.toThrow('permission denied')
+    await asUser(outsider)
+    expect(await readState()).toEqual([])
+  })
+
   it('closes automatically after 30 minutes without events and moves to review after the closed window', async () => {
     await asUser(coach)
     const gameData = { teams: [{ id: 'home', name: 'X12-1', color: '#000000' }, { id: 'away', name: 'Opponent', color: '#000000' }], players: [], catalogTeamId: 'x12-1' }

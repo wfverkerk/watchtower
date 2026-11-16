@@ -127,6 +127,12 @@ export async function setLiveMatchTracker(matchId: string, trackerId: string) {
   await callRpc('set_live_match_tracker', { p_match_id: matchId, p_tracker_id: trackerId })
 }
 
+// Makes this device the scorer. The server refuses when taking over is not allowed, for example when the
+// match already has several registrations.
+export async function transferMatchScorer(matchId: string) {
+  await callRpc('transfer_match_scorer', { p_match_id: matchId })
+}
+
 export async function loadSharedGame(matchId: string): Promise<GameState> {
   const supabase = getSupabaseClient()
   if (!supabase) throw new Error('Supabase is not configured.')

@@ -15,7 +15,7 @@ import {
 } from '../services/statistics'
 
 const props = defineProps<{ matchLink: MatchLink | null; syncStatus: string; currentTeamId?: string }>()
-const emit = defineEmits<{ close: []; 'coach-login': []; finished: [] }>()
+const emit = defineEmits<{ close: []; 'coach-login': []; finished: []; 'match-completed': [] }>()
 const { t } = useLocale()
 const teams = ref<StatisticsTeam[]>([])
 const teamId = ref('')
@@ -99,7 +99,7 @@ async function refreshTeams() {
 async function refreshScorers() {
   if (!props.matchLink) { scorers.value = null; return }
   scorers.value = await loadMatchScorers(props.matchLink.matchId)
-  scorerId.value = scorers.value.officialTrackerId ?? scorers.value.liveTrackerId ?? props.matchLink.trackerId
+  scorerId.value = scorers.value.scorerId ?? scorers.value.officialTrackerId ?? scorers.value.liveTrackerId ?? props.matchLink.trackerId
   liveScorerId.value = scorers.value.liveTrackerId ?? ''
   if (scorers.value.finishedAt) emit('finished')
 }
@@ -162,6 +162,7 @@ async function finishMatch() {
   if (!window.confirm(t('statistics.finishConfirm', { team: selectedTeam.value?.name ?? '', scorer: scorer?.name ?? '' }))) return
   await run(async () => {
     await finishStatisticsMatch(link.matchId, teamId.value, scorerId.value)
+    emit('match-completed')
     await refreshScorers()
     await refreshTeam()
   })
@@ -229,7 +230,8 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
     <section v-if="matchLink && scorers" class="panel statistics-card">
       <h2>{{ t('statistics.currentMatch') }}</h2>
       <p class="statistics-hint">{{ t('statistics.scorerHint') }}</p>
-      <template v-if="scorers.canManageLive">
+      <p v-if="scorers.scorerId" class="statistics-hint">{{ t('roles.scorerIs', { name: scorers.scorerName ?? '' }) }}</p>
+      <template v-if="scorers.canManageLive && !scorers.scorerId">
         <label class="match-sync-field">{{ t('sessions.liveScorer') }}
           <select v-model="liveScorerId">
             <option v-for="scorer in scorers.scorers" :key="scorer.id" :value="scorer.id" :disabled="!scorer.updatedAt">{{ scorer.name }} · {{ scorer.updatedAt ? new Date(scorer.updatedAt).toLocaleString() : t('statistics.noSnapshot') }}</option>
@@ -237,7 +239,7 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
         </label>
         <button type="button" class="match-sync-secondary" :disabled="busy || !liveScorerId || liveScorerId === scorers.liveTrackerId" @click="changeLiveScorer">{{ t('sessions.setLiveScorer') }}</button>
       </template>
-      <label class="match-sync-field">{{ t('statistics.officialScorer') }}
+      <label v-if="!scorers.scorerId" class="match-sync-field">{{ t('statistics.officialScorer') }}
         <select v-model="scorerId">
           <option v-for="scorer in scorers.scorers" :key="scorer.id" :value="scorer.id" :disabled="!scorer.updatedAt">
             {{ scorer.name }} · {{ scorer.updatedAt ? new Date(scorer.updatedAt).toLocaleString() : t('statistics.noSnapshot') }}
@@ -245,8 +247,8 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
         </select>
       </label>
       <p v-if="scorers.finishedAt" class="statistics-hint">{{ t('statistics.finishedAt', { date: new Date(scorers.finishedAt).toLocaleString() }) }}</p>
-      <button v-if="scorers.finishedAt" class="match-sync-primary" type="button" :disabled="busy || !scorerId" @click="changeScorer">{{ t('statistics.changeScorer') }}</button>
-      <button v-else class="match-sync-primary" type="button" :disabled="busy || !teamId || (!!currentTeamId && teamId !== currentTeamId) || !scorers.scorers.some((scorer) => scorer.id === scorerId && scorer.updatedAt) || syncStatus !== 'synced'" @click="finishMatch">{{ t('statistics.finishMatch') }}</button>
+      <button v-if="scorers.finishedAt && !scorers.scorerId" class="match-sync-primary" type="button" :disabled="busy || !scorerId" @click="changeScorer">{{ t('statistics.changeScorer') }}</button>
+      <button v-else-if="!scorers.finishedAt" class="match-sync-primary" type="button" :disabled="busy || !teamId || (!!currentTeamId && teamId !== currentTeamId) || !scorers.scorers.some((scorer) => scorer.id === scorerId && scorer.updatedAt) || syncStatus !== 'synced'" @click="finishMatch">{{ t('statistics.finishMatch') }}</button>
       <p v-if="!scorers.finishedAt && currentTeamId && teamId && teamId !== currentTeamId" class="statistics-hint">{{ t('statistics.wrongTeam') }}</p>
       <p v-if="!scorers.finishedAt && syncStatus !== 'synced'" class="statistics-hint">{{ t('statistics.syncBeforeFinish') }}</p>
     </section>

@@ -25,6 +25,7 @@ const props = defineProps<{
   clockRunning: boolean
   clockAvailable: boolean
   teamFouls: Record<string, number>
+  readOnly?: boolean
 }>()
 
 const scoreNotifications = ref<ScoreNotification[]>([])
@@ -48,7 +49,7 @@ const emit = defineEmits<{
 
 <template>
   <section class="scoreboard panel" :class="{ 'clock-running': clockRunning }" :aria-label="t('scoreboard.label')">
-    <TeamScore :team="teams[0]" side="home" :points="scores[0]?.points ?? 0" :fouls="teamFouls[teams[0].id] ?? 0" :notifications="scoreNotifications.filter((item) => item.teamId === teams[0].id)" @name-change="(id, name) => emit('team-name-change', id, name)" @notification-end="removeNotification" />
+    <TeamScore :team="teams[0]" side="home" :points="scores[0]?.points ?? 0" :fouls="teamFouls[teams[0].id] ?? 0" :notifications="scoreNotifications.filter((item) => item.teamId === teams[0].id)" :read-only="readOnly" @name-change="(id, name) => emit('team-name-change', id, name)" @notification-end="removeNotification" />
     <div class="score-middle">
       <div class="score-status">
         <span class="live-pill" :class="{ active: gameStarted }">
@@ -63,25 +64,27 @@ const emit = defineEmits<{
           {{ t(clockRunning ? 'scoreboard.pauseClock' : 'scoreboard.startClock') }}
         </button>
       </div>
-      <button
-        v-if="!gameStarted && !matchFinished"
-        class="start-button"
-        :disabled="!canStart"
-        @click="emit('toggle-game')"
-      >
-        {{ t('scoreboard.start') }}
-        <span aria-hidden="true">▶</span>
-      </button>
-      <button v-if="period !== 0 && !matchFinished" class="new-match-button" type="button" @click="emit('next-period')">
-        {{ t(period !== undefined && period >= regulationPeriods(youth) ? 'scoreboard.nextOvertime' : 'scoreboard.nextPeriod') }}
-      </button>
-      <button v-if="canFinishMatch && !matchFinished" class="new-match-button" type="button" @click="emit('finish-match')">
-        {{ t('statistics.finishMatch') }}
-      </button>
-      <button v-if="canStartNewMatch" class="new-match-button" type="button" @click="emit('new-match')">
-        {{ t('teamSetup.newGame') }}
-      </button>
+      <template v-if="!readOnly">
+        <button
+          v-if="!gameStarted && !matchFinished"
+          class="start-button"
+          :disabled="!canStart"
+          @click="emit('toggle-game')"
+        >
+          {{ t('scoreboard.start') }}
+          <span aria-hidden="true">▶</span>
+        </button>
+        <button v-if="period !== 0 && !matchFinished" class="new-match-button" type="button" @click="emit('next-period')">
+          {{ t(period !== undefined && period >= regulationPeriods(youth) ? 'scoreboard.nextOvertime' : 'scoreboard.nextPeriod') }}
+        </button>
+        <button v-if="canFinishMatch && !matchFinished" class="new-match-button" type="button" @click="emit('finish-match')">
+          {{ t('statistics.finishMatch') }}
+        </button>
+        <button v-if="canStartNewMatch" class="new-match-button" type="button" @click="emit('new-match')">
+          {{ t('teamSetup.newGame') }}
+        </button>
+      </template>
     </div>
-    <TeamScore :team="teams[1]" side="away" :points="scores[1]?.points ?? 0" :fouls="teamFouls[teams[1].id] ?? 0" :notifications="scoreNotifications.filter((item) => item.teamId === teams[1].id)" @name-change="(id, name) => emit('team-name-change', id, name)" @notification-end="removeNotification" />
+    <TeamScore :team="teams[1]" side="away" :points="scores[1]?.points ?? 0" :fouls="teamFouls[teams[1].id] ?? 0" :notifications="scoreNotifications.filter((item) => item.teamId === teams[1].id)" :read-only="readOnly" @name-change="(id, name) => emit('team-name-change', id, name)" @notification-end="removeNotification" />
   </section>
 </template>
