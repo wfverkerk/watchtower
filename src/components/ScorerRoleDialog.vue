@@ -7,8 +7,6 @@ import JoinSidePicker from './JoinSidePicker.vue'
 defineProps<{
   homeName: string
   awayName: string
-  // A viewer needs a session to follow; before anyone started the game there is nothing to watch yet.
-  canWatch: boolean
   busy?: boolean
 }>()
 
@@ -34,14 +32,15 @@ const step = ref<'choose' | 'scorer'>('choose')
       <p class="statistics-hint">{{ homeName }} – {{ awayName }}</p>
 
       <template v-if="step === 'choose'">
+        <p class="role-notice" role="status">{{ t('roles.noScorer') }}</p>
         <div class="role-options">
           <button type="button" class="role-option" :disabled="busy" @click="step = 'scorer'">
             <strong>{{ t('roles.scorerTitle') }}</strong>
             <span>{{ t('roles.scorerText') }}</span>
           </button>
-          <button type="button" class="role-option" :disabled="busy || !canWatch" @click="emit('view')">
+          <button type="button" class="role-option" :disabled="busy" @click="emit('view')">
             <strong>{{ t('roles.viewerTitle') }}</strong>
-            <span>{{ t(canWatch ? 'roles.viewerText' : 'roles.viewerUnavailable') }}</span>
+            <span>{{ t('roles.viewerText') }}</span>
           </button>
         </div>
         <button type="button" class="match-sync-secondary" @click="emit('cancel')">{{ t('sessions.cancelPick') }}</button>

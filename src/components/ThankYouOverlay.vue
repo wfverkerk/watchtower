@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useLocale } from '../i18n/useLocale'
 
 const props = withDefaults(defineProps<{
   teams?: { id: string; name: string; points: number }[]
   duration?: number
-}>(), { teams: () => [], duration: 6500 })
+  // Viewers get their own wording; the scorer is thanked for the registration.
+  viewer?: boolean
+}>(), { teams: () => [], duration: 6500, viewer: false })
 const emit = defineEmits<{ done: [] }>()
 const { t, displayTeamName } = useLocale()
+const label = computed(() => t(props.viewer ? 'thanks.viewerLabel' : 'thanks.label'))
+const title = computed(() => t(props.viewer ? 'thanks.viewerTitle' : 'thanks.title'))
+const subtitle = computed(() => t(props.viewer ? 'thanks.viewerSubtitle' : 'thanks.subtitle'))
 
 const root = ref<HTMLElement | null>(null)
 const confetti = Array.from({ length: 22 }, (_, index) => ({
@@ -49,7 +54,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="root" class="thanks-overlay" role="dialog" aria-modal="true" :aria-label="t('thanks.label')" tabindex="-1" @click="finish">
+  <div ref="root" class="thanks-overlay" role="dialog" aria-modal="true" :aria-label="label" tabindex="-1" @click="finish">
     <span v-for="(piece, index) in confetti" :key="index" class="thanks-confetti" aria-hidden="true"
       :style="{ left: piece.left, animationDelay: piece.delay, animationDuration: piece.fall, background: piece.color, '--turn': piece.turn }"></span>
     <div class="thanks-court" aria-hidden="true">
@@ -70,9 +75,9 @@ onUnmounted(() => {
       </svg>
     </div>
     <div class="thanks-text">
-      <p class="thanks-eyebrow">{{ t('thanks.label') }}</p>
-      <h2>{{ t('thanks.title') }}</h2>
-      <p>{{ t('thanks.subtitle') }}</p>
+      <p class="thanks-eyebrow">{{ label }}</p>
+      <h2>{{ title }}</h2>
+      <p>{{ subtitle }}</p>
       <div v-if="teams.length === 2" class="thanks-score">
         <span>{{ t('thanks.finalScore') }}</span>
         <strong>{{ displayTeamName(teams[0]) }} {{ teams[0].points }} – {{ teams[1].points }} {{ displayTeamName(teams[1]) }}</strong>

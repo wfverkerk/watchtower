@@ -24,6 +24,7 @@ let app: App | undefined
 afterEach(() => {
   app?.unmount()
   document.body.replaceChildren()
+  vi.clearAllMocks()
 })
 
 describe('match viewer page', () => {
@@ -64,5 +65,23 @@ describe('match viewer page', () => {
     document.querySelector<HTMLButtonElement>('.viewer-bar .text-button')!.click()
     await nextTick()
     expect(close).toHaveBeenCalled()
+  })
+
+  it('shows the final score to a viewer when the match ends during watching, but not when it was already finished', async () => {
+    app = createApp({ render: () => h(MatchViewerPage, { matchId: 'finished-match', onClose: vi.fn() }) })
+    app.mount(document.body.appendChild(document.createElement('div')))
+    await vi.waitFor(() => expect(watchViewerMatch).toHaveBeenCalled())
+    const publish = vi.mocked(watchViewerMatch).mock.calls.at(-1)![1]
+    const base = { ownerId: 'owner', sourceId: 'scorer', scorerId: 'scorer', state: null, events: [] }
+
+    publish({ ...base, finishedAt: '2026-11-16T20:00:00Z' })
+    await nextTick()
+    expect(document.querySelector('.thanks-overlay')).toBeNull()
+
+    publish({ ...base, finishedAt: null })
+    publish({ ...base, finishedAt: '2026-11-16T21:00:00Z' })
+    await vi.waitFor(() => expect(document.querySelector('.thanks-overlay')).not.toBeNull())
+    expect(document.querySelector('.thanks-overlay')!.textContent).toContain('Einde wedstrijd!')
+    expect(document.querySelector('.thanks-overlay')!.textContent).toContain('Zoebas U12')
   })
 })

@@ -30,7 +30,7 @@ const emit = defineEmits<{
 }>()
 const { t, locale } = useLocale()
 const allSessions = ref<MatchSession[]>([])
-// The game whose role is being chosen. Without a session nobody has started it yet, so there is nothing to watch.
+// The game whose role is being chosen. Without a session nobody has started it yet; a viewer then opens the session without a scorer.
 const roleGame = ref<{ game: ScheduleGame; sessionId: string | null } | null>(null)
 const roleBusy = ref(false)
 const checking = ref(false)
@@ -195,10 +195,23 @@ async function tapGame(game: ScheduleGame) {
   }
 }
 
-function chooseViewer() {
+async function chooseViewer() {
   const target = roleGame.value
-  roleGame.value = null
-  if (target?.sessionId) emit('view', target.sessionId)
+  if (!target || roleBusy.value) return
+  roleBusy.value = true
+  error.value = ''
+  try {
+    // Opening the session creates it without a scorer, so the viewer can follow until someone scores.
+    const sessionId = target.sessionId
+      ?? (await openScheduleSession(target.game.id, scheduleGameState(target.game), props.displayName)).link.matchId
+    roleGame.value = null
+    emit('view', sessionId)
+  } catch (reason) {
+    console.error('Failed to open the game for viewing.', reason)
+    error.value = errorMessage(reason)
+  } finally {
+    roleBusy.value = false
+  }
 }
 
 async function chooseScorer(side: 'home' | 'away') {
@@ -412,7 +425,6 @@ onUnmounted(() => {
       v-if="roleGame"
       :home-name="roleGame.game.homeTeam"
       :away-name="roleGame.game.awayTeam"
-      :can-watch="!!roleGame.sessionId"
       :busy="roleBusy"
       @view="chooseViewer"
       @scorer="chooseScorer"

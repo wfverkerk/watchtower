@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import ActivityPanel from './ActivityPanel.vue'
 import FoulMarker from './FoulMarker.vue'
 import Scoreboard from './Scoreboard.vue'
+import ThankYouOverlay from './ThankYouOverlay.vue'
 import { errorMessage } from '../domain/guards'
 import { getPeriodTeamFouls, getPlayerFouls, getRecentActions, getScore, getTeamStats, type GameState } from '../domain/game'
 import { useLocale } from '../i18n/useLocale'
@@ -37,6 +38,10 @@ const game = computed<GameState | null>(() => {
   }
 })
 const scores = computed(() => game.value ? getScore(game.value) : [])
+const endOpen = ref(false)
+const endTeams = computed(() => game.value?.teams.map((team, index) => ({
+  id: team.id, name: team.name, points: scores.value[index]?.points ?? 0,
+})) ?? [])
 const playerFouls = computed(() => game.value ? getPlayerFouls(game.value.actions) : {})
 const teamStats = computed(() => game.value ? getTeamStats(game.value) : [])
 const teamFouls = computed(() => game.value ? getPeriodTeamFouls(game.value) : {})
@@ -60,6 +65,18 @@ async function refreshScorer() {
 }
 
 watch(() => match.value?.scorerId, () => { void refreshScorer() })
+
+// Only a match that ends while the viewer is watching gets the end animation; one that was already finished when opened does not.
+let seenOpen = false
+let endShown = false
+watch(match, (value) => {
+  if (!value) return
+  if (!value.finishedAt) { seenOpen = true; return }
+  if (seenOpen && !endShown) {
+    endShown = true
+    endOpen.value = true
+  }
+}, { flush: 'sync' })
 
 onMounted(async () => {
   try {
@@ -130,5 +147,6 @@ onUnmounted(() => {
         hide-stats
       />
     </template>
+    <ThankYouOverlay v-if="endOpen" viewer :teams="endTeams" @done="endOpen = false" />
   </section>
 </template>

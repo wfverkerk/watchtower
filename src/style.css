@@ -56,6 +56,7 @@
 .role-option span { color: var(--muted); font-size: 13px; line-height: 1.35; }
 .role-option:not(:disabled):active { border-color: var(--orange); }
 .role-option:disabled { cursor: not-allowed; opacity: 0.55; }
+.role-notice { margin: 0; padding: 8px 10px; border-radius: 8px; color: var(--ink); background: #f26a3618; font-size: 13px; font-weight: 600; }
 .role-disclaimer { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--orange); border-radius: 10px; background: color-mix(in srgb, var(--orange) 10%, var(--panel)); }
 .role-disclaimer p { margin: 0; font-size: 13px; line-height: 1.4; }
 .thanks-overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; align-content: center; gap: 8px; padding: 24px; overflow: hidden; color: #fff; text-align: center; cursor: pointer; background: radial-gradient(circle at 50% 30%, #3a2a22 0, #1a1411 65%); animation: thanks-fade .4s ease-out both; }
