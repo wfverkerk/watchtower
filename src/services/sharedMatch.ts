@@ -14,7 +14,6 @@ function record(value: unknown): Record<string, unknown> {
 function parseMatchResponse(value: unknown): { link: MatchLink; gameData: GameState } {
   const response = record(Array.isArray(value) ? value[0] : value)
   if (typeof response.match_id !== 'string'
-    || typeof response.join_code !== 'string'
     || typeof response.tracker_id !== 'string'
     || typeof response.display_name !== 'string'
     || typeof response.game_data !== 'object'
@@ -24,27 +23,11 @@ function parseMatchResponse(value: unknown): { link: MatchLink; gameData: GameSt
   return {
     link: {
       matchId: response.match_id,
-      joinCode: response.join_code,
       trackerId: response.tracker_id,
       displayName: response.display_name,
     } satisfies MatchLink,
     gameData: response.game_data as GameState,
   }
-}
-
-export async function createSharedMatch(gameData: GameState, displayName: string) {
-  const trackerId = await ensureAnonymousUser()
-  const response = record(await callRpc('create_shared_match', {
-    p_game_data: gameData,
-    p_display_name: displayName.trim(),
-  }))
-  return parseMatchResponse({
-    match_id: response.match_id,
-    join_code: response.join_code,
-    tracker_id: trackerId,
-    display_name: displayName.trim(),
-    game_data: response.game_data,
-  })
 }
 
 export type SessionStatus = 'open' | 'live' | 'closed' | 'in_review' | 'final'
@@ -107,14 +90,6 @@ export async function setSessionFinal(matchId: string) {
   await callRpc('set_session_final', { p_match_id: matchId })
 }
 
-export async function createMatchSession(gameData: GameState, displayName: string, startsAt: string) {
-  const trackerId = await ensureAnonymousUser()
-  const data = await callRpc('create_match_session', {
-    p_game_data: gameData, p_display_name: displayName.trim(), p_starts_at: startsAt,
-  })
-  return parseMatchResponse({ ...record(data), tracker_id: trackerId, display_name: displayName.trim() })
-}
-
 export async function joinMatchSession(matchId: string, displayName: string) {
   const trackerId = await ensureAnonymousUser()
   const data = await callRpc('join_match_session', {
@@ -142,20 +117,6 @@ export async function loadSharedGame(matchId: string): Promise<GameState> {
   const response = record(data)
   if (!response.game_data || typeof response.game_data !== 'object') throw new Error('Invalid shared match.')
   return response.game_data as GameState
-}
-
-export async function joinSharedMatch(joinCode: string, displayName: string) {
-  const trackerId = await ensureAnonymousUser()
-  const data = await callRpc('join_shared_match', {
-    p_join_code: joinCode.trim().toUpperCase(),
-    p_display_name: displayName.trim(),
-  })
-  const response = record(data)
-  return parseMatchResponse({
-    ...response,
-    tracker_id: trackerId,
-    display_name: displayName.trim(),
-  })
 }
 
 export async function uploadMatchEvents(events: MatchEvent[]) {

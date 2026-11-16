@@ -15,7 +15,7 @@ describe('coach sign-in callback', () => {
   it('does not switch identities while a shared match or pending snapshots exist', () => {
     window.history.replaceState(null, '', '/#access_token=example')
     expect(isAuthCallbackBlocked()).toBe(false)
-    saveMatchLink({ matchId: 'match', trackerId: 'tracker', joinCode: 'CODE', displayName: 'Scorer' })
+    saveMatchLink({ matchId: 'match', trackerId: 'tracker', displayName: 'Scorer' })
     expect(isAuthCallbackBlocked()).toBe(true)
     saveMatchLink(null)
     queueMatchSnapshot('old', 'tracker', createInitialGameState())

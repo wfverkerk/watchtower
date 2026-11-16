@@ -146,7 +146,7 @@ Onderaan **Profiel en voorkeuren** staat de buildcode voor probleemonderzoek. Bi
 
 ## Testgegevens eenmalig wissen
 
-**Let op:** hiermee verdwijnen alle gedeelde wedstrijden, leden en events definitief, ook die van andere scorers. Oude wedstrijdcodes werken daarna niet meer. Lokale wedstrijden, profielen en wachtende events op andere apparaten blijven bestaan; start daar een nieuwe gedeelde wedstrijd om een oude koppeling te vervangen.
+**Let op:** hiermee verdwijnen alle gedeelde wedstrijden, leden en events definitief, ook die van andere scorers. Lokale wedstrijden, profielen en wachtende events op andere apparaten blijven bestaan; start daar een nieuwe gedeelde wedstrijd om een oude koppeling te vervangen.
 
 Voer eerst alle migraties hierboven uit. Maak vervolgens een SQL-script met de bestaande team- en stafseed:
 

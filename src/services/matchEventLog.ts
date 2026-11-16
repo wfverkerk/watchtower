@@ -7,7 +7,6 @@ export const invalidMatchEventsStorageKey = 'watchtower-match-events-recovery-v1
 
 export type MatchLink = {
   matchId: string
-  joinCode: string
   trackerId: string
   displayName: string
   finished?: boolean
@@ -104,7 +103,6 @@ export function loadMatchLink(storage: StringStorage = window.localStorage): Mat
   const value: unknown = JSON.parse(saved)
   if (!isRecord(value)
     || typeof value.matchId !== 'string'
-    || typeof value.joinCode !== 'string'
     || typeof value.trackerId !== 'string'
     || typeof value.displayName !== 'string'
     || (value.finished !== undefined && typeof value.finished !== 'boolean')) {
@@ -112,7 +110,6 @@ export function loadMatchLink(storage: StringStorage = window.localStorage): Mat
   }
   return {
     matchId: value.matchId,
-    joinCode: value.joinCode,
     trackerId: value.trackerId,
     displayName: value.displayName,
     ...(value.finished === true ? { finished: true } : {}),
