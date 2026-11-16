@@ -18,6 +18,7 @@ const props = defineProps<{
   canUndo: boolean
   playerFouls: Record<string, number>
   readOnly?: boolean
+  hideStats?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -135,12 +136,12 @@ function actionIcon(action: GameAction) {
       <span>{{ t('activity.emptyDescription') }}</span>
     </div>
 
-    <div class="divider"></div>
-    <div class="stats-heading">
+    <div v-if="!hideStats" class="divider"></div>
+    <div v-if="!hideStats" class="stats-heading">
       <p class="eyebrow">{{ t('activity.stats') }}</p>
       <span>{{ t('activity.live') }}</span>
     </div>
-    <div class="team-stats">
+    <div v-if="!hideStats" class="team-stats">
       <div v-for="team in teams" :key="team.id" class="team-stat-row">
         <div class="team-stat-name">
           <span class="team-dot" :class="team.id === teams[0]?.id ? 'orange' : 'blue'"></span>

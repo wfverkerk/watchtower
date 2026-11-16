@@ -9,6 +9,7 @@ import { loadLocalMatches } from '../services/localMatches'
 import { joinMatchSession, joinSharedMatch } from '../services/sharedMatch'
 import { loadLiveMatch } from '../services/liveMatch'
 import { loadMatchScorers, restoreMyMatchSnapshot } from '../services/statistics'
+import { uploadLiveState } from '../services/matchLiveState'
 import { useGameSession } from './useGameSession'
 
 vi.mock('../services/supabaseClient', () => ({
@@ -24,6 +25,9 @@ vi.mock('../services/zoebasTeams', () => ({
   loadZoebasTeams: vi.fn(async () => []), loadCachedZoebasTeams: vi.fn(() => null), saveCachedZoebasTeams: vi.fn(),
 }))
 vi.mock('../services/statistics', () => ({ loadMatchScorers: vi.fn(), restoreMyMatchSnapshot: vi.fn() }))
+vi.mock('../services/matchLiveState', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../services/matchLiveState')>(), uploadLiveState: vi.fn(async () => {}),
+}))
 vi.mock('../services/liveMatch', async (importOriginal) => ({ ...await importOriginal<typeof import('../services/liveMatch')>(), loadLiveMatch: vi.fn() }))
 
 let app: App | undefined
@@ -67,6 +71,26 @@ describe('finishing a shared match', () => {
 })
 
 describe('event flows', () => {
+  it('shares the roster, lineup and period with viewers and again after a substitution', async () => {
+    const game = createInitialGameState()
+    game.gameStarted = true
+    game.period = 1
+    saveGameState(game)
+    saveMatchLink({ matchId: 'match', trackerId: 'tracker', joinCode: 'CODE', displayName: 'Scorer' })
+    let session!: ReturnType<typeof useGameSession>
+    app = createApp({ setup() { session = useGameSession(); return () => h('div') } })
+    app.mount(document.body.appendChild(document.createElement('div')))
+
+    await vi.waitFor(() => expect(uploadLiveState).toHaveBeenCalledTimes(1), { timeout: 3000 })
+    expect(vi.mocked(uploadLiveState).mock.calls[0][0]).toBe('match')
+    expect(vi.mocked(uploadLiveState).mock.calls[0][1]).toMatchObject({ teamId: 'home', period: 1, gameStarted: true })
+
+    session.game.players[0].isOnCourt = false
+    await vi.waitFor(() => expect(uploadLiveState).toHaveBeenCalledTimes(2), { timeout: 3000 })
+    const shared = vi.mocked(uploadLiveState).mock.calls[1][1]
+    expect(shared.players.find((player) => player.id === 'home-1')?.isOnCourt).toBe(false)
+  })
+
   async function mountStartedGame() {
     const game = createInitialGameState()
     game.gameStarted = true

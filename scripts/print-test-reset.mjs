@@ -1,20 +1,10 @@
 import { readFileSync } from 'node:fs'
 
-function migrationSection(file, marker) {
-  const contents = readFileSync(new URL(`../supabase/migrations/${file}`, import.meta.url), 'utf8')
-  const start = contents.indexOf(marker)
-  if (start === -1) throw new Error(`Missing expected seed statement in ${file}`)
-  return contents.slice(start).trim()
-}
-
-const catalog = migrationSection(
-  '20261111000000_zoebas_team_catalog.sql',
-  'insert into public.zoebas_teams ',
-)
-const staff = migrationSection(
-  '20261111000200_zoebas_team_staff_roles.sql',
-  'update public.zoebas_teams as teams',
-)
+// The Zoebas team catalog is seeded by the baseline migration.
+const baseline = readFileSync(new URL('../supabase/migrations/20261204000000_baseline.sql', import.meta.url), 'utf8')
+const start = baseline.indexOf('insert into public.zoebas_teams ')
+if (start === -1) throw new Error('Missing the Zoebas team catalog seed in the baseline migration')
+const catalog = baseline.slice(start, baseline.indexOf(';\n', start) + 2).trim()
 
 process.stdout.write(`-- One-time destructive reset of Watchtower test data.
 -- Run the entire script in one Supabase SQL Editor query.
@@ -26,8 +16,6 @@ delete from public.shared_matches;
 delete from public.zoebas_teams;
 
 ${catalog}
-
-${staff}
 
 commit;
 

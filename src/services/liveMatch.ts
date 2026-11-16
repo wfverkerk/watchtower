@@ -17,6 +17,7 @@ export type LiveEvent = {
 export type LiveMatch = {
   sourceId: string
   ownerId: string
+  scorerId?: string | null
   events: LiveEvent[]
   links: LiveScoreLink[]
 }
@@ -29,7 +30,7 @@ export type LiveScoreLink = {
   sourceActionId: string | null
 }
 
-function parseEvent(value: unknown): LiveEvent {
+export function parseEvent(value: unknown): LiveEvent {
   if (!isRecord(value) || typeof value.id !== 'string' || typeof value.tracker_id !== 'string'
     || typeof value.tracker_name !== 'string' || typeof value.action_id !== 'string'
     || (value.event_type !== 'action_added' && value.event_type !== 'action_updated' && value.event_type !== 'action_removed')
@@ -153,4 +154,11 @@ export function currentLiveActions(game: GameState, live: LiveMatch): LiveAction
     else actions.set(key, { trackerId: event.trackerId, trackerName: event.trackerName, action: event.action })
   }
   return [...actions.values()].sort((a, b) => a.action.createdAt - b.action.createdAt)
+}
+
+// With a scorer, successive scorers never write at the same time, so all events together are the official registration.
+// Matches without a scorer only follow the live tracker.
+export function officialLiveActions(game: GameState, live: LiveMatch): LiveAction[] {
+  const actions = currentLiveActions(game, live)
+  return live.scorerId ? actions : actions.filter((item) => item.trackerId === live.sourceId)
 }

@@ -322,7 +322,6 @@ describe('statistics database authorization', () => {
     await db.exec('set role anon')
     expect((await db.query('select name, logo_file from public.opponent_teams order by name')).rows).toEqual(expect.arrayContaining([
       { name: 'Apollo', logo_file: 'APOLLO.png' }, { name: 'Rap Élan', logo_file: 'RAP ÉLAN.WEBP' }, { name: 'Sv Zoebas', logo_file: 'SV ZOEBAS.jpg' },
-      { name: 'HARLEM GLOBETROTTERS', logo_file: 'HARLEM GLOBETROTTERS.png' }, { name: 'WASHINGTON GENERALS', logo_file: 'WASHINGTON GENERALS.png' },
     ]))
     await expect(db.query("insert into public.opponent_teams (name) values ('Hack')")).rejects.toThrow('permission denied')
     await db.exec('reset role')
@@ -467,6 +466,32 @@ describe('statistics database authorization', () => {
     await expect(db.exec(insertEvent(matchId, viewer, 'Viewer'))).rejects.toThrow('not_scorer')
   })
 
+  it('shares the live state only from the scorer and only with members of the match', async () => {
+    const gameData = { teams: [{ id: 'home', name: 'X12-1', color: '#000000' }, { id: 'away', name: 'Opponent', color: '#000000' }], players: [], catalogTeamId: 'x12-1' }
+    await asUser(coach)
+    const matchId = (await db.query<{ result: { match_id: string } }>(
+      "select public.create_match_session($1 || jsonb_build_object('matchInfo', jsonb_build_object('startsAt', now() - interval '1 minute')), 'Coach', now() - interval '1 minute') result", [gameData],
+    )).rows[0].result.match_id
+    await asUser(viewer)
+    await db.query("select public.join_match_session($1, 'Viewer')", [matchId])
+    await asUser(coach)
+    await expect(db.query('select public.set_match_live_state($1, $2)', [matchId, { period: 1 }])).rejects.toThrow('not_scorer')
+    await db.query('select public.transfer_match_scorer($1)', [matchId])
+    await db.query('select public.set_match_live_state($1, $2)', [matchId, { period: 1, players: [] }])
+    await db.query('select public.set_match_live_state($1, $2)', [matchId, { period: 2, players: [] }])
+    await expect(db.query('select public.set_match_live_state($1, $2)', [matchId, { text: 'x'.repeat(70_000) }])).rejects.toThrow('Invalid live state')
+
+    const readState = async () => (await db.query<{ state: { period: number } }>(
+      'select state from public.match_live_state where match_id = $1', [matchId],
+    )).rows
+    await asUser(viewer)
+    expect((await readState()).map((row) => row.state.period)).toEqual([2])
+    await expect(db.query('select public.set_match_live_state($1, $2)', [matchId, { period: 3 }])).rejects.toThrow('not_scorer')
+    await expect(db.query('insert into public.match_live_state (match_id, state, updated_by) values ($1, $2, $3)', [matchId, {}, viewer])).rejects.toThrow('permission denied')
+    await asUser(outsider)
+    expect(await readState()).toEqual([])
+  })
+
   it('closes automatically after 30 minutes without events and moves to review after the closed window', async () => {
     await asUser(coach)
     const gameData = { teams: [{ id: 'home', name: 'X12-1', color: '#000000' }, { id: 'away', name: 'Opponent', color: '#000000' }], players: [], catalogTeamId: 'x12-1' }
@@ -510,55 +535,5 @@ describe('statistics database authorization', () => {
       'select count(*)::integer count from public.statistics_coaches where team_id = $1 and user_id = $2', ['x12-1', newCoach],
     )).rows[0].count
     expect(remaining).toBe(0)
-  })
-
-  it('refreshes the test games: one upcoming game tomorrow, one game today not yet started and one live game with events', async () => {
-    await db.exec('reset role; select public.refresh_test_games();')
-    const upcoming = (await db.query<{ days: number }>(
-      "select (match_date - (now() at time zone 'Europe/Amsterdam')::date)::integer days from public.zoebas_schedule where id = 'test-game-upcoming'",
-    )).rows[0]
-    expect(upcoming.days).toBe(1)
-    const today = (await db.query<{ future: boolean }>(
-      "select (match_date + start_time) > (now() at time zone 'Europe/Amsterdam') future from public.zoebas_schedule where id = 'test-game-today'",
-    )).rows[0]
-    expect(today.future).toBe(true)
-    const live = (await db.query<{ id: string; status: string; events: number }>(
-      `select m.id, public.session_status(m.id) status,
-        (select count(*)::integer from public.match_events e where e.match_id = m.id) events
-       from public.shared_matches m where m.schedule_game_id = 'test-game-live'`,
-    )).rows[0]
-    expect(live.status).toBe('live')
-    expect(live.events).toBe(4)
-    await db.exec('select public.refresh_test_games();')
-    const afterRerun = (await db.query<{ events: number }>(
-      "select count(*)::integer events from public.match_events e join public.shared_matches m on m.id = e.match_id where m.schedule_game_id = 'test-game-live'",
-    )).rows[0].events
-    expect(afterRerun).toBe(4)
-  })
-
-  it('reports the live score of the test live game from the scorer snapshot', async () => {
-    await db.exec('reset role; select public.refresh_test_games(); select public.refresh_test_live_snapshot();')
-    const session = (await db.query<{ home: number; away: number }>(
-      `select (s->>'homeScore')::integer home, (s->>'awayScore')::integer away
-       from jsonb_array_elements(public.list_match_sessions(false)) s where s->>'scheduleId' = 'test-game-live'`,
-    )).rows[0]
-    expect(session).toEqual({ home: 5, away: 2 })
-  })
-
-  it('adds a finished test game with full statistics to the team history', async () => {
-    await db.exec('reset role; select public.refresh_test_history();')
-    await asUser(coach)
-    const history = (await db.query<{ result: { id: string; snapshot: { actions: { type: string; value: number; teamId: string }[] } }[] }>(
-      "select public.statistics_history('x12-1') result",
-    )).rows[0].result
-    const game = history.find((item) => (item.snapshot as { teams: { name: string }[] }).teams[0]?.name === 'Harlem Globetrotters' && item.snapshot.actions.length > 0)
-    expect(game).toBeDefined()
-    const points = (teamId: string) => game!.snapshot.actions
-      .filter((action) => action.type === 'score' && action.teamId === teamId)
-      .reduce((sum, action) => sum + action.value, 0)
-    expect(points('home')).toBe(64)
-    expect(points('away')).toBe(58)
-    const withStats = (await db.query<{ id: string }>('select scheduled_games_with_stats as id from public.scheduled_games_with_stats()')).rows.map((row) => row.id)
-    expect(withStats).toContain('test-game-history')
   })
 })

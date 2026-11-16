@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp, h, type App } from 'vue'
 import UpcomingGamesPage from './UpcomingGamesPage.vue'
 import { useFavoriteTeams } from '../composables/useFavoriteTeams'
-import { openScheduleSession } from '../services/sharedMatch'
+import { joinMatchSession, openScheduleSession, transferMatchScorer } from '../services/sharedMatch'
+import { loadMatchScorers } from '../services/statistics'
 import { loadSchedule } from '../services/zoebasSchedule'
 
 vi.mock('../services/sharedMatch', () => ({
@@ -14,8 +15,12 @@ vi.mock('../services/sharedMatch', () => ({
   }]),
   closeMatchSession: vi.fn(),
   openScheduleSession: vi.fn(),
+  joinMatchSession: vi.fn(async () => ({ link: { matchId: 'match', trackerId: 'me' } })),
+  transferMatchScorer: vi.fn(async () => {}),
   setSessionFinal: vi.fn(),
 }))
+vi.mock('../services/statistics', () => ({ loadMatchScorers: vi.fn() }))
+const scorerInfo = (scorerId: string | null) => ({ finishedAt: null, officialTrackerId: null, scorerId, scorers: [] })
 vi.mock('../services/zoebasSchedule', () => {
   const now = new Date()
   const pad = (value: number) => String(value).padStart(2, '0')
@@ -65,7 +70,8 @@ describe('upcoming sessions', () => {
     expect(document.querySelector('.join-side-picker')).toBeNull()
   })
 
-  it('opens a popover on the game to choose the home side before joining', async () => {
+  it('lets you become the scorer of a game without one, after a disclaimer and a choice of team', async () => {
+    vi.mocked(loadMatchScorers).mockResolvedValueOnce(scorerInfo(null))
     const join = vi.fn()
     app = createApp({ render: () => h(UpcomingGamesPage, {
       configured: true, hasCurrentGame: false, currentMatchId: null, displayName: 'Scorer', onJoin: join,
@@ -73,14 +79,101 @@ describe('upcoming sessions', () => {
     app.mount(document.body.appendChild(document.createElement('div')))
     await vi.waitFor(() => expect(document.querySelector('.schedule-game')).not.toBeNull())
     document.querySelector<HTMLButtonElement>('.schedule-open-trigger')!.click()
-    await vi.waitFor(() => expect(document.querySelector('.join-side-picker')).not.toBeNull())
+    await vi.waitFor(() => expect(document.querySelector('.role-options')).not.toBeNull())
+    expect(joinMatchSession).toHaveBeenCalledWith('match', 'Scorer')
+    expect(document.querySelectorAll<HTMLButtonElement>('.role-option')[1].disabled).toBe(false)
+
+    document.querySelectorAll<HTMLButtonElement>('.role-option')[0].click()
+    await vi.waitFor(() => expect(document.querySelector('.role-disclaimer')).not.toBeNull())
+    expect(document.querySelector('.role-disclaimer')!.textContent).toContain('verantwoordelijk')
     document.querySelectorAll<HTMLButtonElement>('.join-side-option')[1].click()
     await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>('.join-side-picker .match-sync-primary')!.disabled).toBe(false))
     document.querySelector<HTMLButtonElement>('.join-side-picker .match-sync-primary')!.click()
-    expect(join).toHaveBeenCalledWith('match', 'away')
+    await vi.waitFor(() => expect(join).toHaveBeenCalledWith('match', 'away'))
+    expect(transferMatchScorer).toHaveBeenCalledWith('match')
   })
 
-  it('opens the session for a scheduled game when the first joiner picks a side', async () => {
+  it('lets you choose to watch along instead, and watches directly when the game already has a scorer', async () => {
+    vi.mocked(loadMatchScorers).mockResolvedValueOnce(scorerInfo(null)).mockResolvedValueOnce(scorerInfo('someone-else'))
+    const view = vi.fn()
+    const join = vi.fn()
+    app = createApp({ render: () => h(UpcomingGamesPage, {
+      configured: true, hasCurrentGame: false, currentMatchId: null, displayName: 'Viewer', onJoin: join, onView: view,
+    }) })
+    app.mount(document.body.appendChild(document.createElement('div')))
+    await vi.waitFor(() => expect(document.querySelector('.schedule-game')).not.toBeNull())
+    document.querySelector<HTMLButtonElement>('.schedule-open-trigger')!.click()
+    await vi.waitFor(() => expect(document.querySelector('.role-options')).not.toBeNull())
+    document.querySelectorAll<HTMLButtonElement>('.role-option')[1].click()
+    expect(view).toHaveBeenCalledWith('match')
+    await vi.waitFor(() => expect(document.querySelector('.role-options')).toBeNull())
+
+    document.querySelector<HTMLButtonElement>('.schedule-open-trigger')!.click()
+    await vi.waitFor(() => expect(view).toHaveBeenCalledTimes(2))
+    expect(document.querySelector('.role-options')).toBeNull()
+    expect(transferMatchScorer).not.toHaveBeenCalled()
+    expect(join).not.toHaveBeenCalled()
+  })
+
+  it('resumes as the scorer when this device already is the scorer of the game', async () => {
+    vi.mocked(loadMatchScorers).mockResolvedValueOnce(scorerInfo('me'))
+    const join = vi.fn()
+    app = createApp({ render: () => h(UpcomingGamesPage, {
+      configured: true, hasCurrentGame: false, currentMatchId: null, displayName: 'Scorer', onJoin: join,
+    }) })
+    app.mount(document.body.appendChild(document.createElement('div')))
+    await vi.waitFor(() => expect(document.querySelector('.schedule-game')).not.toBeNull())
+    document.querySelector<HTMLButtonElement>('.schedule-open-trigger')!.click()
+    await vi.waitFor(() => expect(join).toHaveBeenCalledWith('match', 'home'))
+    expect(document.querySelector('.role-options')).toBeNull()
+  })
+
+  it('shows why taking the scorer role failed', async () => {
+    vi.mocked(loadMatchScorers).mockResolvedValueOnce(scorerInfo(null))
+    vi.mocked(transferMatchScorer).mockRejectedValueOnce(new Error('Taking over is not possible for this match'))
+    const join = vi.fn()
+    app = createApp({ render: () => h(UpcomingGamesPage, {
+      configured: true, hasCurrentGame: false, currentMatchId: null, displayName: 'Scorer', onJoin: join,
+    }) })
+    app.mount(document.body.appendChild(document.createElement('div')))
+    await vi.waitFor(() => expect(document.querySelector('.schedule-game')).not.toBeNull())
+    document.querySelector<HTMLButtonElement>('.schedule-open-trigger')!.click()
+    await vi.waitFor(() => expect(document.querySelector('.role-options')).not.toBeNull())
+    document.querySelectorAll<HTMLButtonElement>('.role-option')[0].click()
+    await vi.waitFor(() => expect(document.querySelector('.join-side-picker')).not.toBeNull())
+    document.querySelectorAll<HTMLButtonElement>('.join-side-option')[0].click()
+    await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>('.join-side-picker .match-sync-primary')!.disabled).toBe(false))
+    document.querySelector<HTMLButtonElement>('.join-side-picker .match-sync-primary')!.click()
+    await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain('niet worden'))
+    expect(join).not.toHaveBeenCalled()
+  })
+
+  it('lets you watch a game nobody has started yet: the session opens without a scorer', async () => {
+    const now = new Date()
+    const pad = (value: number) => String(value).padStart(2, '0')
+    vi.mocked(loadSchedule).mockResolvedValueOnce([{
+      id: 'game-b', kind: 'program', date: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
+      startTime: `${pad(now.getHours())}:${pad(now.getMinutes())}`, homeTeam: 'Team C', awayTeam: 'Team D',
+      homeScore: null, awayScore: null, status: '', venue: '',
+    }])
+    vi.mocked(openScheduleSession).mockResolvedValueOnce({ link: { matchId: 'new-match' } } as never)
+    const view = vi.fn()
+    const join = vi.fn()
+    app = createApp({ render: () => h(UpcomingGamesPage, {
+      configured: true, hasCurrentGame: false, currentMatchId: null, displayName: 'Viewer', onJoin: join, onView: view,
+    }) })
+    app.mount(document.body.appendChild(document.createElement('div')))
+    await vi.waitFor(() => expect(document.querySelector('.schedule-open-trigger')).not.toBeNull())
+    document.querySelector<HTMLButtonElement>('.schedule-open-trigger')!.click()
+    await vi.waitFor(() => expect(document.querySelector('.role-options')).not.toBeNull())
+    document.querySelectorAll<HTMLButtonElement>('.role-option')[1].click()
+    await vi.waitFor(() => expect(view).toHaveBeenCalledWith('new-match'))
+    expect(openScheduleSession).toHaveBeenCalledWith('game-b', expect.any(Object), 'Viewer')
+    expect(transferMatchScorer).not.toHaveBeenCalled()
+    expect(join).not.toHaveBeenCalled()
+  })
+
+  it('opens the session and becomes its scorer when nobody has started a scheduled game yet', async () => {
     const now = new Date()
     const pad = (value: number) => String(value).padStart(2, '0')
     vi.mocked(loadSchedule).mockResolvedValueOnce([{
@@ -96,11 +189,17 @@ describe('upcoming sessions', () => {
     app.mount(document.body.appendChild(document.createElement('div')))
     await vi.waitFor(() => expect(document.querySelector('.schedule-open-trigger')).not.toBeNull())
     document.querySelector<HTMLButtonElement>('.schedule-open-trigger')!.click()
+    await vi.waitFor(() => expect(document.querySelector('.role-options')).not.toBeNull())
+    expect(document.querySelectorAll<HTMLButtonElement>('.role-option')[1].disabled).toBe(false)
+    expect(document.querySelector('.role-notice')?.textContent).toContain('Er is nog geen scorer')
+    expect(joinMatchSession).not.toHaveBeenCalled()
+    document.querySelectorAll<HTMLButtonElement>('.role-option')[0].click()
     await vi.waitFor(() => expect(document.querySelector('.join-side-picker')).not.toBeNull())
     document.querySelectorAll<HTMLButtonElement>('.join-side-option')[0].click()
     await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>('.join-side-picker .match-sync-primary')!.disabled).toBe(false))
     document.querySelector<HTMLButtonElement>('.join-side-picker .match-sync-primary')!.click()
     await vi.waitFor(() => expect(join).toHaveBeenCalledWith('new-match', 'home'))
+    expect(transferMatchScorer).toHaveBeenCalledWith('new-match')
     expect(openScheduleSession).toHaveBeenCalledWith('game-b', expect.objectContaining({
       teams: [expect.objectContaining({ name: 'Team C' }), expect.objectContaining({ name: 'Team D' })],
     }), 'First')
