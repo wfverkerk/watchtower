@@ -1,9 +1,7 @@
 <script setup lang="ts">
-import { useLocale } from '../i18n/useLocale'
 import TeamLogo from './TeamLogo.vue'
 
 defineProps<{ team: string; club?: string | null; logoUrl?: string | null; position?: number | null }>()
-const { t } = useLocale()
 </script>
 
 <template>
@@ -11,9 +9,8 @@ const { t } = useLocale()
     <img v-if="logoUrl" class="team-logo" :src="logoUrl" alt="" loading="lazy">
     <TeamLogo v-else :name="club || team" placeholder />
     <div class="schedule-names">
-      <strong>{{ club || team }}</strong>
+      <span class="schedule-name-line"><strong>{{ club || team }}</strong><span v-if="position" class="schedule-position">({{ position }})</span></span>
       <span v-if="club && club !== team">{{ team }}</span>
-      <span v-if="position" class="schedule-position">{{ t('sessions.position', { position }) }}</span>
     </div>
   </div>
 </template>

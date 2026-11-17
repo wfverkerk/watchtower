@@ -1,10 +1,15 @@
 name: Zoebas standings refresh
 
-# Stores the ranking positions of the upcoming games of the current week. The first run of a week (Monday) takes them;
-# later runs in that week leave them as they are.
+# Stores the ranking positions of the upcoming games of the current week, twice on Monday: at 00:01 and 06:00
+# Amsterdam time. GitHub schedules in UTC, so the cron lines cover both summer and winter time and the step only
+# runs when the Amsterdam clock is in one of the two windows. The second run is a retry; the function does not
+# change a week that already has positions.
 on:
   schedule:
-    - cron: '*/30 7-21 * * *'
+    - cron: '1 22 * * 0'
+    - cron: '1 23 * * 0'
+    - cron: '0 4 * * 1'
+    - cron: '0 5 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -19,6 +24,11 @@ jobs:
     steps:
       - name: Refresh standings for upcoming games
         run: |
+          local_slot=$(TZ=Europe/Amsterdam date +'%u %H:%M')
+          case "$local_slot" in
+            1\ 00:0[0-9]|1\ 00:[12][0-9]|1\ 00:30|1\ 06:0[0-9]|1\ 06:[12][0-9]|1\ 06:30) ;;
+            *) echo "Amsterdam time is $local_slot; nothing to do in this slot."; exit 0 ;;
+          esac
           if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$SYNC_SECRET" ]; then
             echo "::error::Set VITE_SUPABASE_URL as a variable and SYNC_SECRET as a secret in GitHub Actions."
             exit 1

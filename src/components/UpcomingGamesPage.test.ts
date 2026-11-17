@@ -217,7 +217,7 @@ describe('upcoming sessions', () => {
       configured: true, hasCurrentGame: false, currentMatchId: null, displayName: 'Scorer', onJoin: vi.fn(),
     }) })
     app.mount(document.body.appendChild(document.createElement('div')))
-    await vi.waitFor(() => expect(document.querySelector('.schedule-position')?.textContent).toBe('Positie 2'))
+    await vi.waitFor(() => expect(document.querySelector('.schedule-position')?.textContent).toBe('(2)'))
     expect(document.querySelectorAll('.schedule-position')).toHaveLength(1)
   })
 
