@@ -51,7 +51,7 @@ describe('upcoming sessions', () => {
     expect(card.textContent).toContain('Vrienden')
     expect(card.querySelector('.schedule-score.is-live')?.textContent).toContain('6 – 4')
     expect(card.querySelector('.live-score-label')?.textContent).toBe('Live')
-    expect(document.body.textContent).not.toContain('Geen open wedstrijden vandaag.')
+    expect(document.body.textContent).not.toContain('Geen wedstrijden vandaag.')
     card.querySelector<HTMLButtonElement>('.schedule-open-trigger')!.click()
     expect(resume).toHaveBeenCalled()
   })
