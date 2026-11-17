@@ -134,14 +134,31 @@ async function competitionPositions(competitionId: number) {
   return positions
 }
 
-// Only games that have not started yet are refreshed, so the position is the one from just before the start.
+// The Monday (Amsterdam date) that starts the week of the given instant.
+function weekMonday(now: Date) {
+  const [year, month, day] = localDate(now).split('-').map(Number)
+  const dayOfWeek = new Date(Date.UTC(year, month - 1, day)).getUTCDay()
+  return addDays(localDate(now), -((dayOfWeek + 6) % 7))
+}
+
+function addDays(date: string, days: number) {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
+}
+
+// The position of every team is taken once per week, on the first refresh of that week (Monday), for all games
+// of that week that have not started yet. The stored position_week keeps the later refreshes from changing it.
 async function refreshStandings(supabase: SupabaseClient, now: Date) {
+  const monday = weekMonday(now)
+  const sunday = addDays(monday, 6)
   const { data, error } = await supabase.from('zoebas_schedule')
-    .select('id, competition_id, match_date, start_time, home_team_guid, away_team_guid')
+    .select('id, competition_id, match_date, start_time, home_team_guid, away_team_guid, position_week')
     .eq('kind', 'program')
     .not('competition_id', 'is', null)
+    .gte('match_date', monday)
+    .lte('match_date', sunday)
   if (error) throw new Error(error.message)
-  const upcoming = (data ?? []).filter((game) => amsterdamStart(game.match_date, game.start_time) > now)
+  const upcoming = (data ?? []).filter((game) => game.position_week !== monday
+    && amsterdamStart(game.match_date, game.start_time) > now)
   const byCompetition = new Map<number, typeof upcoming>()
   for (const game of upcoming) {
     byCompetition.set(game.competition_id, [...(byCompetition.get(game.competition_id) ?? []), game])
@@ -157,12 +174,11 @@ async function refreshStandings(supabase: SupabaseClient, now: Date) {
       continue
     }
     for (const game of games) {
-      const change: { home_position?: number; away_position?: number } = {}
+      const change: { home_position?: number; away_position?: number; position_week: string } = { position_week: monday }
       const home = game.home_team_guid ? positions.get(game.home_team_guid) : undefined
       const away = game.away_team_guid ? positions.get(game.away_team_guid) : undefined
       if (home !== undefined) change.home_position = home
       if (away !== undefined) change.away_position = away
-      if (Object.keys(change).length === 0) continue
       const { error: updateError } = await supabase.from('zoebas_schedule').update(change).eq('id', game.id)
       if (updateError) throw new Error(updateError.message)
       updated += 1

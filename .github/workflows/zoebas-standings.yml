@@ -1,7 +1,7 @@
 name: Zoebas standings refresh
 
-# Refreshes the ranking position of the teams in upcoming games every half hour during the day.
-# The Edge Function keeps the last position from before each game starts and stops updating it after that.
+# Stores the ranking positions of the upcoming games of the current week. The first run of a week (Monday) takes them;
+# later runs in that week leave them as they are.
 on:
   schedule:
     - cron: '*/30 7-21 * * *'
