@@ -260,4 +260,50 @@ describe('upcoming sessions', () => {
     expect(document.querySelector('.history-day')).toBeNull()
     useFavoriteTeams().setFavorites([])
   })
+
+  it('selects all teams except test teams and only saves once at least one team is chosen', async () => {
+    useFavoriteTeams().setFavorites([])
+    const game = (id: string, homeTeam: string, awayTeam: string, homeClub: string, awayClub: string) => ({
+      id, kind: 'result' as const, date: '2026-11-08', startTime: '18:00', homeTeam, awayTeam, homeClub, awayClub,
+      homeScore: 60, awayScore: 55, status: 'Finished', venue: '', hasStats: false,
+    })
+    vi.mocked(loadSchedule).mockResolvedValueOnce([
+      game('m1', 'V12-1', 'Team X', 'Zoebas', 'Other'),
+      game('test-game-1', 'Test A', 'Test B', 'Zoebas', 'Zoebas'),
+    ])
+    app = createApp({ render: () => h(UpcomingGamesPage, {
+      configured: true, hasCurrentGame: false, currentMatchId: null, displayName: 'Scorer', onJoin: vi.fn(),
+    }) })
+    app.mount(document.body.appendChild(document.createElement('div')))
+    await vi.waitFor(() => expect(loadSchedule).toHaveBeenCalled())
+    const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent === label)!
+    const selected = () => [...document.querySelectorAll('.favorite-team-tile.is-favorite')].map((tile) => tile.getAttribute('aria-label'))
+    button('Mijn teams').click()
+    await vi.waitFor(() => expect(document.querySelector('.favorite-team-tile')).not.toBeNull())
+    button('Selecteer alles').click()
+    await vi.waitFor(() => expect(selected()).toEqual(['V12-1']))
+    button('Deselecteer alles').click()
+    await vi.waitFor(() => expect(selected()).toEqual([]))
+    expect(button('Opslaan').disabled).toBe(true)
+    button('Selecteer alles').click()
+    await vi.waitFor(() => expect(button('Opslaan').disabled).toBe(false))
+    button('Opslaan').click()
+    await vi.waitFor(() => expect(document.querySelector('.my-teams-editor')).toBeNull())
+    expect(document.querySelector('.landing-toggle .is-active')?.textContent).toBe('Mijn teams')
+    expect(document.body.textContent).toContain('Mijn teams wijzigen')
+    useFavoriteTeams().setFavorites([])
+  })
+
+  it('offers the practice game under the empty overview', async () => {
+    vi.mocked(loadSchedule).mockResolvedValueOnce([])
+    const practice = vi.fn()
+    app = createApp({ render: () => h(UpcomingGamesPage, {
+      configured: true, hasCurrentGame: false, currentMatchId: null, displayName: 'Scorer', onJoin: vi.fn(), onPractice: practice,
+    }) })
+    app.mount(document.body.appendChild(document.createElement('div')))
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Er zijn geen officiële wedstrijden vandaag.'))
+    const practiceButton = [...document.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent === 'Oefenwedstrijd starten')!
+    practiceButton.click()
+    expect(practice).toHaveBeenCalledOnce()
+  })
 })

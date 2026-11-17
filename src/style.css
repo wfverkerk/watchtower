@@ -29,9 +29,9 @@
 .stats-label { justify-self: start; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
 .stats-label.has-stats { background: #d5e8d4; color: #1f5a1a; }
 .stats-label.no-stats { background: var(--line); color: inherit; }
-.landing-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
-.landing-toggle button { border: 0; border-radius: 999px; background: transparent; padding: 6px 14px; font-weight: 700; color: inherit; cursor: pointer; }
-.landing-toggle button.is-active { background: var(--line); }
+.landing-toggle { justify-self: center; display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
+.landing-toggle button { border: 0; border-radius: 999px; background: transparent; padding: 6px 14px; font-weight: 700; color: inherit; opacity: 0.6; cursor: pointer; }
+.landing-toggle button.is-active { background: var(--orange); color: #fff; opacity: 1; }
 .favorite-team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; padding: 2px; }
 .favorite-team-tile { display: flex; justify-content: space-between; align-items: center; gap: 6px; border: 2px solid var(--line); border-radius: 10px; background: transparent; color: inherit; padding: 6px 8px; font-size: 0.85em; font-weight: 600; text-align: left; cursor: pointer; }
 .favorite-tile-heart { color: var(--line); font-size: 1.1em; line-height: 1; }
@@ -626,7 +626,9 @@ h2 { margin-bottom: 0; font-size: 16px; }
 .app-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 22px 0 30px; color: #aaa89f; font-size: 9px; }
 .footer-copy { display: flex; align-items: center; gap: 8px; }
 .footer-ball { color: var(--orange); font-size: 11px; }
-.connection-status { margin-left: auto; width: 0.9em; height: 0.9em; border-radius: 50%; background: #aaa89f; flex: none; }
+.connection-indicator { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.connection-label { color: #aaa89f; font-size: 11px; white-space: nowrap; }
+.connection-status { width: 0.9em; height: 0.9em; border-radius: 50%; background: #aaa89f; flex: none; }
 .connection-status.is-online { background: #3a9d4a; }
 .connection-status.is-offline { background: #d24a3a; }
 

@@ -523,6 +523,7 @@ watch(locale, (value) => {
       @resume="homeOpen = false"
       @join="joinSession"
       @view="viewerMatchId = $event"
+      @practice="openPracticePage"
     />
 
     <TeamSetupDialog
@@ -685,7 +686,7 @@ watch(locale, (value) => {
         :title="t('scoreboard.editPlayersHint')"
         @click="openRosterEditor"
       >{{ t('scoreboard.editPlayers') }}</button>
-      <span class="connection-status" :class="`is-${connection}`" role="status" :aria-label="connectionLabel" :title="connectionLabel"></span>
+      <span class="connection-indicator"><span class="connection-label">{{ connectionLabel }}</span><span class="connection-status" :class="`is-${connection}`" role="status" :aria-label="connectionLabel"></span></span>
     </footer>
 
     <ThankYouOverlay v-if="thankYou" :teams="thankYou.teams" @done="closeThankYou" />
