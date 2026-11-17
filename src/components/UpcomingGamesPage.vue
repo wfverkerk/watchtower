@@ -381,12 +381,12 @@ onUnmounted(() => {
         <summary class="schedule-day-summary">{{ formatDay(day.date) }} <small>{{ day.games.length }}</small></summary>
         <article v-for="game in day.games" :key="game.id" class="session-row schedule-game">
           <div class="schedule-match">
-            <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
+            <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" :position="game.homePosition" />
             <span class="schedule-center">
               <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
               <time class="schedule-time">{{ game.startTime }}</time>
             </span>
-            <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
+            <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" :position="game.awayPosition" />
           </div>
         </article>
       </details>

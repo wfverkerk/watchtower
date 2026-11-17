@@ -15,6 +15,7 @@
 .schedule-time { font-size: 2em; line-height: 1.2; }
 .schedule-time.is-small { font-size: 0.9em; line-height: normal; }
 .schedule-venue { font-size: 0.9em; opacity: 0.75; }
+.schedule-position { font-size: 0.8em; font-weight: 700; color: var(--orange); }
 .schedule-score { display: inline-flex; align-items: center; gap: 8px; padding: 4px 14px; border-radius: 12px; background: var(--line); font-size: 2em; line-height: 1.2; }
 .schedule-score .is-winner { font-weight: 800; }
 .schedule-score.is-live { flex-direction: column; gap: 0; background: #e5484d; color: #fff; animation: live-score-pulse 1.6s ease-in-out infinite; }

@@ -1,0 +1,34 @@
+name: Zoebas standings refresh
+
+# Refreshes the ranking position of the teams in upcoming games every half hour during the day.
+# The Edge Function keeps the last position from before each game starts and stops updating it after that.
+on:
+  schedule:
+    - cron: '*/30 7-21 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
+    steps:
+      - name: Refresh standings for upcoming games
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$SYNC_SECRET" ]; then
+            echo "::error::Set VITE_SUPABASE_URL as a variable and SYNC_SECRET as a secret in GitHub Actions."
+            exit 1
+          fi
+          status=$(curl --silent --output /tmp/standings.json --write-out '%{http_code}' \
+            --request POST \
+            --header "Authorization: Bearer $SYNC_SECRET" \
+            "$VITE_SUPABASE_URL/functions/v1/sync-zoebas-schedule?mode=standings")
+          cat /tmp/standings.json; echo
+          if [ "$status" != "200" ]; then
+            echo "::error::Standings refresh failed with HTTP $status"
+            exit 1
+          fi

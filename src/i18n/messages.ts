@@ -379,7 +379,7 @@ export const messages = {
       skip: 'Tik om door te gaan',
     },
     sessions: {
-      eyebrow: 'SAMEN BASKETBALLEN', title: 'Wedstrijden', refresh: 'Vernieuwen',
+      position: 'Positie {position}', eyebrow: 'SAMEN BASKETBALLEN', title: 'Wedstrijden', refresh: 'Vernieuwen',
       current: 'Huidige wedstrijd', resume: 'Verder met wedstrijd', finishFirst: 'Sluit je huidige wedstrijd af voordat je een andere wedstrijd registreert.',
       open: 'Gestarte sessies', empty: 'Er zijn geen open sessies.', loadError: 'Sessies konden niet worden geladen',
       opensBefore: 'Deelnemen kan vanaf 15 minuten voor aanvang.', closed: 'Gesloten',
@@ -818,7 +818,7 @@ export const messages = {
       skip: 'Tap to continue',
     },
     sessions: {
-      eyebrow: 'BASKETBALL TOGETHER', title: 'Games', refresh: 'Refresh',
+      position: 'Position {position}', eyebrow: 'BASKETBALL TOGETHER', title: 'Games', refresh: 'Refresh',
       current: 'Current game', resume: 'Continue game', finishFirst: 'Finish your current game before recording another game.',
       open: 'Open sessions', empty: 'There are no open sessions.', loadError: 'Could not load sessions',
       opensBefore: 'Joining opens 15 minutes before the start.', closed: 'Closed',
@@ -1257,7 +1257,7 @@ export const messages = {
       skip: 'Klepnutím pokračujte',
     },
     sessions: {
-      eyebrow: 'BASKETBAL SPOLEČNĚ', title: 'Zápasy', refresh: 'Obnovit',
+      position: 'Pozice {position}', eyebrow: 'BASKETBAL SPOLEČNĚ', title: 'Zápasy', refresh: 'Obnovit',
       current: 'Aktuální zápas', resume: 'Pokračovat v zápase', finishFirst: 'Před zápisem dalšího zápasu ukončete aktuální zápas.',
       open: 'Otevřené relace', empty: 'Žádné otevřené relace.', loadError: 'Relace se nepodařilo načíst',
       opensBefore: 'Připojit se lze 15 minut před začátkem.', closed: 'Uzavřeno',
