@@ -11,7 +11,7 @@
 .schedule-side .team-logo { width: 56px; height: 56px; }
 .schedule-names { display: grid; justify-items: center; line-height: 1.2; min-width: 0; overflow-wrap: anywhere; }
 .schedule-names span { font-size: 0.85em; opacity: 0.75; }
-.schedule-center { display: grid; justify-items: center; gap: 4px; text-align: center; min-width: 0; overflow-wrap: anywhere; }
+.schedule-center { display: grid; justify-items: center; align-self: center; gap: 4px; text-align: center; min-width: 0; overflow-wrap: anywhere; }
 .schedule-time { font-size: 2em; line-height: 1.2; }
 .schedule-time.is-small { font-size: 0.9em; line-height: normal; }
 .schedule-venue { font-size: 0.9em; opacity: 0.75; }
