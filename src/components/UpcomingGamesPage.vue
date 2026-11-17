@@ -7,6 +7,7 @@ import { gameStartMs, groupByDay, groupTeams, localDateKey, scheduleBucket, team
 import { sessionPhase } from '../domain/sessionWindow'
 import { createInitialGameState, type GameState } from '../domain/game'
 import { useFavoriteTeams } from '../composables/useFavoriteTeams'
+import { isZoebasName, withStartingColors } from '../composables/teamColors'
 import { useOpponentTeams } from '../composables/useOpponentTeams'
 import { useLocale } from '../i18n/useLocale'
 import { joinMatchSession, listMatchSessions, openScheduleSession, setSessionFinal, transferMatchScorer, type MatchSession, type SessionStatus } from '../services/sharedMatch'
@@ -128,10 +129,10 @@ function scheduleGameState(game: ScheduleGame): GameState {
   const state = createInitialGameState()
   return {
     ...state,
-    teams: [
-      { id: 'home', name: game.homeTeam, color: '#f26a36' },
-      { id: 'away', name: game.awayTeam, color: '#5d72d9' },
-    ],
+    teams: withStartingColors(
+      { id: 'home', name: game.homeTeam, ...(game.homeClub ? { club: game.homeClub } : {}), zoebas: isZoebasName(game.homeClub) || isZoebasName(game.homeTeam) },
+      { id: 'away', name: game.awayTeam, ...(game.awayClub ? { club: game.awayClub } : {}), zoebas: isZoebasName(game.awayClub) || isZoebasName(game.awayTeam) },
+    ),
     players: [],
     matchInfo: { id: game.id, date: game.date, startTime: game.startTime, venue: game.venue, startsAt: new Date(gameStartMs(game)).toISOString() },
   }

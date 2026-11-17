@@ -25,7 +25,7 @@ import {
   type StatType,
   type TurnoverType,
 } from '../domain/game'
-import { clockRemaining, formatClock, isYouthTeam, newPeriodClock, pauseClock, reconcileClock, startClock } from '../domain/gameClock'
+import { isYouthTeam, newPeriodClock, pauseClock, reconcileClock } from '../domain/gameClock'
 import { lineupChanges } from '../domain/matchTimeline'
 import { getEventFlow } from '../domain/eventFlow'
 import { localDateKey } from '../domain/schedule'
@@ -65,6 +65,7 @@ import { buildLiveState, uploadLiveState, type LiveState } from '../services/mat
 import type { ZoebasMatch } from '../services/zoebasMatches'
 import { isAppLocale, useLocale } from '../i18n/useLocale'
 import { errorMessage } from '../domain/guards'
+import { isZoebasName, withStartingColors } from './teamColors'
 
 type PendingAction = { type: StatType; value: number }
 
@@ -147,7 +148,6 @@ export function useGameSession() {
   const teamStats = computed(() => getTeamStats(game))
   const playerFouls = computed(() => getPlayerFouls(game.actions))
   const periodTeamFouls = computed(() => getPeriodTeamFouls(game))
-  const clockDisplay = computed(() => formatClock(game.clock ? clockRemaining(game.clock, clockNow.value) : 0))
   const recentActions = computed(() => getRecentActions(game, game.actions.length, t('app.unknownPlayer')))
   const lineupError = computed(() => lineupErrorKey.value ? t(lineupErrorKey.value) : '')
   const storageError = computed(() => storageErrorKey.value ? t(storageErrorKey.value) : '')
@@ -632,10 +632,10 @@ export function useGameSession() {
     const opponentName = selectedMatch
       ? matchOwnTeamIsHome ? selectedMatch.awayTeamName : selectedMatch.homeTeamName
       : manualOpponentName.trim() || awayProfile.name.trim()
-    const teams = [
-      { id: 'home', name: homeProfile.name.trim(), color: '#f26a36' },
-      { id: 'away', name: opponentName, color: '#5d72d9', ...(opponentClub.trim() ? { club: opponentClub.trim() } : {}) },
-    ]
+    const teams = withStartingColors(
+      { id: 'home', name: homeProfile.name.trim(), zoebas: true },
+      { id: 'away', name: opponentName, ...(opponentClub.trim() ? { club: opponentClub.trim() } : {}), zoebas: isZoebasName(opponentName) || isZoebasName(opponentClub) },
+    )
     const players = [homeProfile, awayProfile].flatMap<Player>((profile, index) => [
       ...profile.players.filter((player) => player.isParticipating).map((player, playerIndex) => ({
         id: `${teams[index].id}-${player.id}`,
@@ -980,14 +980,6 @@ export function useGameSession() {
     if (next !== game.clock) game.clock = next
   }
 
-  function toggleClock() {
-    updateClock()
-    if (!game.clock || !game.gameStarted) return
-    game.clock = game.clock.deadline === null
-      ? startClock(game.clock, clockNow.value)
-      : pauseClock(game.clock, clockNow.value)
-  }
-
   onMounted(async () => {
     let hasSavedSelection = false
     let loadedGame: GameState | null = null
@@ -1227,7 +1219,6 @@ export function useGameSession() {
     teamStats,
     playerFouls,
     periodTeamFouls,
-    clockDisplay,
     recentActions,
     pendingAction,
     pendingScorerId,
@@ -1274,7 +1265,6 @@ export function useGameSession() {
     editAction,
     undoLastAction,
     toggleGame,
-    toggleClock,
     applyTeamSetup,
     saveGameRoster,
     openTeamSetup,

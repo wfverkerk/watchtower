@@ -28,7 +28,7 @@ export type TurnoverType =
   | 'kicked_ball'
 
 // club is set when the team name alone does not identify the club, such as a typed practice opponent.
-export type Team = { id: string; name: string; color: string; club?: string }
+export type Team = { id: string; name: string; color: string; club?: string; zoebas?: boolean }
 export type Player = {
   id: string
   name: string
@@ -202,10 +202,11 @@ export function parseGameState(value: unknown, locale: AppLocale = 'nl'): GameSt
       || typeof team.id !== 'string'
       || typeof team.name !== 'string'
       || typeof team.color !== 'string'
-      || (team.club !== undefined && typeof team.club !== 'string')) {
+      || (team.club !== undefined && typeof team.club !== 'string')
+      || (team.zoebas !== undefined && typeof team.zoebas !== 'boolean')) {
       throw new Error('Opgeslagen teamgegevens zijn ongeldig.')
     }
-    return { id: team.id, name: team.name, color: team.color, ...(team.club ? { club: team.club } : {}) }
+    return { id: team.id, name: team.name, color: team.color, ...(team.club ? { club: team.club } : {}), ...(team.zoebas ? { zoebas: true } : {}) }
   })
   if (teams.length !== 2 || new Set(teams.map((team) => team.id)).size !== 2) {
     throw new Error('Een wedstrijd moet precies twee verschillende teams hebben.')

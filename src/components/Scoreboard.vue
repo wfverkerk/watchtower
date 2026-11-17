@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useLocale } from '../i18n/useLocale'
 import type { Team } from '../domain/game'
 import { regulationPeriods } from '../domain/gameClock'
@@ -20,13 +20,15 @@ const props = defineProps<{
   canStartNewMatch: boolean
   period?: number
   youth: boolean
-  clockDisplay: string
-  clockPhase?: 'period' | 'halftime'
-  clockRunning: boolean
-  clockAvailable: boolean
   teamFouls: Record<string, number>
   readOnly?: boolean
 }>()
+
+const periodText = computed(() => {
+  const period = props.period ?? 0
+  if (period <= 0) return ''
+  return !props.youth || period > regulationPeriods(props.youth) ? formatPeriod(period, props.youth, true) : String(period)
+})
 
 const scoreNotifications = ref<ScoreNotification[]>([])
 watch(() => props.scoreNotification, (notification) => {
@@ -39,31 +41,24 @@ function removeNotification(id: number) {
 
 const emit = defineEmits<{
   'team-name-change': [teamId: string, name: string]
+  'team-color-change': [teamId: string, color: string]
   'toggle-game': []
   'new-match': []
   'next-period': []
-  'toggle-clock': []
   'finish-match': []
 }>()
 </script>
 
 <template>
-  <section class="scoreboard panel" :class="{ 'clock-running': clockRunning }" :aria-label="t('scoreboard.label')">
-    <TeamScore :team="teams[0]" side="home" :points="scores[0]?.points ?? 0" :fouls="teamFouls[teams[0].id] ?? 0" :notifications="scoreNotifications.filter((item) => item.teamId === teams[0].id)" :read-only="readOnly" @name-change="(id, name) => emit('team-name-change', id, name)" @notification-end="removeNotification" />
+  <section class="scoreboard panel" :aria-label="t('scoreboard.label')">
+    <TeamScore :team="teams[0]" side="home" :points="scores[0]?.points ?? 0" :fouls="teamFouls[teams[0].id] ?? 0" :notifications="scoreNotifications.filter((item) => item.teamId === teams[0].id)" :read-only="readOnly" @name-change="(id, name) => emit('team-name-change', id, name)" @color-change="(id, color) => emit('team-color-change', id, color)" @notification-end="removeNotification" />
     <div class="score-middle">
       <div class="score-status">
         <span class="live-pill" :class="{ active: gameStarted }">
           <span></span>{{ t(matchFinished ? 'statistics.finished' : gameStarted ? 'scoreboard.live' : 'scoreboard.ready') }}
         </span>
-        <span v-if="period !== undefined && period > 0" class="period-label">{{ formatPeriod(period, youth) }}</span>
       </div>
-      <div v-if="clockAvailable" class="game-clock">
-        <span v-if="clockPhase === 'halftime'" class="period-label">{{ t('scoreboard.halftime') }}</span>
-        <time :aria-label="`${t('scoreboard.clock')}: ${clockDisplay}`"><span>{{ clockDisplay.split(':')[0] }}</span><span>:</span><span>{{ clockDisplay.split(':')[1] }}</span></time>
-        <button type="button" class="clock-button" :disabled="!gameStarted || (!clockRunning && clockDisplay === '00:00')" @click="emit('toggle-clock')">
-          {{ t(clockRunning ? 'scoreboard.pauseClock' : 'scoreboard.startClock') }}
-        </button>
-      </div>
+      <span v-if="periodText" class="score-period">{{ periodText }}</span>
       <template v-if="!readOnly">
         <button
           v-if="!gameStarted && !matchFinished"
@@ -85,6 +80,6 @@ const emit = defineEmits<{
         </button>
       </template>
     </div>
-    <TeamScore :team="teams[1]" side="away" :points="scores[1]?.points ?? 0" :fouls="teamFouls[teams[1].id] ?? 0" :notifications="scoreNotifications.filter((item) => item.teamId === teams[1].id)" :read-only="readOnly" @name-change="(id, name) => emit('team-name-change', id, name)" @notification-end="removeNotification" />
+    <TeamScore :team="teams[1]" side="away" :points="scores[1]?.points ?? 0" :fouls="teamFouls[teams[1].id] ?? 0" :notifications="scoreNotifications.filter((item) => item.teamId === teams[1].id)" :read-only="readOnly" @name-change="(id, name) => emit('team-name-change', id, name)" @color-change="(id, color) => emit('team-color-change', id, color)" @notification-end="removeNotification" />
   </section>
 </template>

@@ -21,6 +21,7 @@ import { isAuthCallbackBlocked } from './services/supabaseClient'
 import { loadSharedGame } from './services/sharedMatch'
 import { isPlatformAdmin } from './services/admin'
 import { useGameSession } from './composables/useGameSession'
+import { rememberTeamColor } from './composables/teamColors'
 import ThankYouOverlay from './components/ThankYouOverlay.vue'
 import { useScreenWakeLock } from './composables/useScreenWakeLock'
 import { useSupabaseConnection } from './composables/useSupabaseConnection'
@@ -112,7 +113,6 @@ const {
   teamStats,
   playerFouls,
   periodTeamFouls,
-  clockDisplay,
   recentActions,
   pendingAction,
   pendingScorerId,
@@ -158,7 +158,6 @@ const {
   editAction,
   undoLastAction,
   toggleGame,
-  toggleClock,
   applyTeamSetup,
   saveGameRoster,
   openTeamSetup,
@@ -212,7 +211,7 @@ const wakeLockStatus = useScreenWakeLock(computed(() =>
 ))
 const updateAvailable = ref(false)
 const offlineSetupError = ref(false)
-const updateBlocked = computed(() => game.gameStarted && game.clock?.deadline != null)
+const updateBlocked = computed(() => game.gameStarted)
 let updateActivated = false
 let updateRequested = false
 let updateServiceWorker: ((reloadPage?: boolean) => Promise<void>) | undefined
@@ -315,6 +314,13 @@ function updateTeamName(teamId: string, name: string) {
   if (team) team.name = name
 }
 
+function updateTeamColor(teamId: string, color: string) {
+  const team = game.teams.find((item) => item.id === teamId)
+  if (!team || team.zoebas) return
+  team.color = color
+  rememberTeamColor(team.name, color)
+}
+
 function handleEditAction(action: GameAction) {
   editAction(action)
 }
@@ -368,7 +374,6 @@ watch(homeOpen, (open) => {
 })
 
 function openRosterEditor() {
-  if (game.clock?.deadline != null) toggleClock()
   rosterEditing.value = true
   window.scrollTo(0, 0)
 }
@@ -577,16 +582,12 @@ watch(locale, (value) => {
         :can-start-new-match="canStartNewMatch"
         :period="game.period"
         :youth="game.youth ?? false"
-        :clock-display="clockDisplay"
-        :clock-phase="game.clock?.phase"
-        :clock-running="game.clock?.deadline != null"
-        :clock-available="!!game.clock"
         :team-fouls="periodTeamFouls"
         @team-name-change="updateTeamName"
+        @team-color-change="updateTeamColor"
         @toggle-game="toggleGame"
         @new-match="homeOpen = true"
         @next-period="beginPeriod"
-        @toggle-clock="toggleClock"
         @finish-match="finishCurrentMatch"
       />
       <section v-if="game.gameStarted || (game.period !== undefined && game.period > 0)" class="court-lineup panel" :aria-label="t('picker.fieldPlayers')">
