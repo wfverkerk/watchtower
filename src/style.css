@@ -219,7 +219,6 @@ button:disabled { cursor: not-allowed; }
 .match-sync-message, .match-sync-footnote { margin: 12px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .match-sync-error { margin: 12px 0 0; color: #b14c41; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
 .shared-match-details { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 18px 0; color: var(--muted); font-size: 11px; }
-.shared-match-code { padding: 9px 16px; border: 1px dashed var(--orange); border-radius: 8px; color: var(--ink); background: var(--page); font-family: 'Space Grotesk', sans-serif; font-size: 24px; letter-spacing: 3px; }
 .match-sync-status { margin: 3px 0 0; color: var(--ink); font-size: 11px; font-weight: 700; }
 .match-sync-status-offline, .match-sync-status-error { color: #b14c41; }
 .match-sync-status-syncing { color: #5d72d9; }

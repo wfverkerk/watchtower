@@ -73,7 +73,7 @@ describe('statistics page', () => {
     const status = ref('offline')
     vi.stubGlobal('confirm', vi.fn(() => true))
     app = createApp({ render: () => h(StatisticsPage, {
-      matchLink: { matchId: 'match', joinCode: 'CODE', trackerId: 'scorer', displayName: 'Scorer' },
+      matchLink: { matchId: 'match', trackerId: 'scorer', displayName: 'Scorer' },
       syncStatus: status.value, onFinished: finished,
     }) })
     app.mount(document.body.appendChild(document.createElement('div')))

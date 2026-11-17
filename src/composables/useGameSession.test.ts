@@ -6,7 +6,7 @@ import { saveGameState } from '../services/gameStorage'
 import { loadMatchEvents, saveMatchLink } from '../services/matchEventLog'
 import { loadPendingMatchSnapshots } from '../services/matchSnapshots'
 import { loadLocalMatches } from '../services/localMatches'
-import { joinMatchSession, joinSharedMatch } from '../services/sharedMatch'
+import { joinMatchSession } from '../services/sharedMatch'
 import { loadLiveMatch } from '../services/liveMatch'
 import { loadMatchScorers, restoreMyMatchSnapshot } from '../services/statistics'
 import { uploadLiveState } from '../services/matchLiveState'
@@ -17,7 +17,7 @@ vi.mock('../services/supabaseClient', () => ({
   isSupabaseConfigured: () => true,
 }))
 vi.mock('../services/sharedMatch', () => ({
-  createSharedMatch: vi.fn(), joinSharedMatch: vi.fn(), joinMatchSession: vi.fn(),
+  joinMatchSession: vi.fn(),
   uploadMatchEvents: vi.fn(async () => {}),
   uploadMatchSnapshot: vi.fn(async () => {}),
 }))
@@ -44,7 +44,7 @@ describe('finishing a shared match', () => {
     game.period = 1
     game.clock = { phase: 'period', remainingMs: 60_000, deadline: Date.now() + 60_000 }
     saveGameState(game)
-    saveMatchLink({ matchId: 'match', trackerId: 'tracker', joinCode: 'CODE', displayName: 'Scorer' })
+    saveMatchLink({ matchId: 'match', trackerId: 'tracker', displayName: 'Scorer' })
     let session!: ReturnType<typeof useGameSession>
     app = createApp({ setup() { session = useGameSession(); return () => h('div') } })
     app.mount(document.body.appendChild(document.createElement('div')))
@@ -76,7 +76,7 @@ describe('event flows', () => {
     game.gameStarted = true
     game.period = 1
     saveGameState(game)
-    saveMatchLink({ matchId: 'match', trackerId: 'tracker', joinCode: 'CODE', displayName: 'Scorer' })
+    saveMatchLink({ matchId: 'match', trackerId: 'tracker', displayName: 'Scorer' })
     let session!: ReturnType<typeof useGameSession>
     app = createApp({ setup() { session = useGameSession(); return () => h('div') } })
     app.mount(document.body.appendChild(document.createElement('div')))
@@ -166,8 +166,8 @@ describe('local match preservation', () => {
     await vi.waitFor(() => expect(session.teamSetupInitializing.value).toBe(false))
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
-      expect(await session.joinSharedMatch('CODE', 'Scorer')).toBe(false)
-      expect(joinSharedMatch).not.toHaveBeenCalled()
+      expect(await session.joinSharedMatch('match', 'Scorer')).toBe(false)
+      expect(joinMatchSession).not.toHaveBeenCalled()
       expect(session.game.actions[0].id).toBe('score')
       expect(session.finishLocalMatch()).toBe(true)
       expect(loadLocalMatches()[0].game.actions[0].id).toBe('score')
@@ -182,7 +182,7 @@ describe('registering for the away side', () => {
   it('turns the away team into the own team without leaking the other side\'s players or the catalog team', async () => {
     const initial = createInitialGameState()
     initial.catalogTeamId = 'x12-1'
-    const link = { matchId: 'match', trackerId: 'tracker', joinCode: 'CODE', displayName: 'Scorer' }
+    const link = { matchId: 'match', trackerId: 'tracker', displayName: 'Scorer' }
     vi.mocked(joinMatchSession).mockResolvedValue({ link, gameData: initial } as Awaited<ReturnType<typeof joinMatchSession>>)
     vi.mocked(restoreMyMatchSnapshot).mockImplementation(async (_id, game) => ({ revision: 0, game }))
     vi.mocked(loadMatchScorers).mockResolvedValue({ finishedAt: null, officialTrackerId: null, scorers: [] })
@@ -202,7 +202,7 @@ describe('registering for the away side', () => {
     app.mount(document.body.appendChild(document.createElement('div')))
     await vi.waitFor(() => expect(session.teamSetupInitializing.value).toBe(false))
 
-    expect(await session.joinSharedMatch('match', 'Scorer', true, 'away')).toBe(true)
+    expect(await session.joinSharedMatch('match', 'Scorer', 'away')).toBe(true)
     expect(session.game.teams.map((team) => team.id)).toEqual(['away', 'home'])
     expect(session.game.teams.map((team) => team.color)).toEqual(['#f26a36', '#5d72d9'])
     expect(session.game.catalogTeamId).toBeUndefined()

@@ -54,8 +54,7 @@ import {
   type MatchLink,
 } from '../services/matchEventLog'
 import {
-  createMatchSession, createSharedMatch as createSharedMatchRecord, joinMatchSession,
-  joinSharedMatch as joinSharedMatchRecord, uploadMatchEvents, uploadMatchSnapshot,
+  joinMatchSession, uploadMatchEvents, uploadMatchSnapshot,
 } from '../services/sharedMatch'
 import { loadPendingMatchSnapshots, queueMatchSnapshot, setMatchSnapshotBase, syncQueuedMatchSnapshots } from '../services/matchSnapshots'
 import { ensureAnonymousUser, isSupabaseConfigured } from '../services/supabaseClient'
@@ -272,45 +271,7 @@ export function useGameSession() {
     }
   }
 
-  async function createSharedMatch(displayName: string, startsAt?: string) {
-    if (!matchSyncConfigured) {
-      matchSyncError.value = t('sync.notConfigured')
-      return false
-    }
-    try {
-      const gameData: GameState = {
-        teams: game.teams.map((team) => ({ ...team })),
-        players: game.players.map((player) => ({ ...player })),
-        actions: game.actions.map((action) => ({ ...action })),
-        gameStarted: game.gameStarted,
-        ...(game.catalogTeamId ? { catalogTeamId: game.catalogTeamId } : {}),
-        ...(game.matchInfo ? { matchInfo: { ...game.matchInfo } } : {}),
-        ...(game.period !== undefined ? { period: game.period } : {}),
-        ...(game.youth !== undefined ? { youth: game.youth } : {}),
-        ...(game.clock ? { clock: { ...game.clock } } : {}),
-        ...(game.timeline ? { timeline: game.timeline.map((event) => ({ ...event })) } : {}),
-      }
-      const created = startsAt
-        ? await createMatchSession(gameData, displayName, startsAt)
-        : await createSharedMatchRecord(gameData, displayName)
-      saveMatchLink(created.link)
-      matchLink.value = created.link
-      matchSyncError.value = ''
-      const initialEvents = game.actions.map((action) => makeMatchEvent(action, 'action_added', created.link))
-      appendMatchEvents(initialEvents)
-      queueMatchSnapshot(created.link.matchId, created.link.trackerId, game)
-      matchSyncStatus.value = initialEvents.length ? 'syncing' : 'synced'
-      scheduleMatchSync()
-      return true
-    } catch (error) {
-      console.error('Failed to create a shared match.', error)
-      matchSyncError.value = errorMessage(error)
-      matchSyncStatus.value = 'error'
-      return false
-    }
-  }
-
-  async function joinSharedMatch(joinCode: string, displayName: string, bySessionId = false, side: 'home' | 'away' = 'home') {
+  async function joinSharedMatch(matchId: string, displayName: string, side: 'home' | 'away' = 'home') {
     if (!matchSyncConfigured) {
       matchSyncError.value = t('sync.notConfigured')
       return false
@@ -319,9 +280,7 @@ export function useGameSession() {
       if (!game.localFinishedAt && !matchLink.value?.finished && (game.period !== undefined || game.actions.length)) {
         throw new Error(t('sessions.finishFirst'))
       }
-      const joined = bySessionId
-        ? await joinMatchSession(joinCode, displayName)
-        : await joinSharedMatchRecord(joinCode, displayName)
+      const joined = await joinMatchSession(matchId, displayName)
       const initialGame = parseGameState(joined.gameData, currentLocale.value)
       if (loadMatchEvents().some((event) => event.matchId === joined.link.matchId && !event.synced)) {
         throw new Error('Pending actions must be synchronized before rejoining this match.')
@@ -332,7 +291,7 @@ export function useGameSession() {
         restored.game.teams = [{ ...restored.game.teams[1] }, { ...restored.game.teams[0] }]
       }
       const awaySide = restored.game.teams[0].id !== sessionTeams[0].id
-      if (bySessionId && restored.revision === 0) {
+      if (restored.revision === 0) {
         const live = await loadLiveMatch(joined.link.matchId)
         const opponentId = restored.game.teams[1].id
         restored.game.actions = currentLiveActions(initialGame, live)
@@ -371,7 +330,7 @@ export function useGameSession() {
       initializeClock()
       saveMatchLink(joined.link)
       matchLink.value = joined.link
-      if (bySessionId && restored.revision === 0 && game.actions.length) {
+      if (restored.revision === 0 && game.actions.length) {
         appendMatchEvents(game.actions.map((action) => makeMatchEvent(action, 'action_added', joined.link)))
       }
       selectedTeamId.value = game.teams[0].id
@@ -1328,7 +1287,6 @@ export function useGameSession() {
     markMatchFinished,
     finishLocalMatch,
     releaseFinishedMatch,
-    createSharedMatch,
     joinSharedMatch,
   }
 }

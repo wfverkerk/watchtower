@@ -65,10 +65,14 @@ describe('statistics database authorization', () => {
     await expect(db.query("select public.statistics_save_player('x12-1', null, 'Test', '1', false)")).rejects.toThrow('Coach access')
 
     const localId = `home-${privatePlayer.id}`
-    const created = (await db.query<{ result: { match_id: string; join_code: string; game_data: unknown } }>(
-      "select public.create_shared_match($1, 'Viewer') result",
-      [{ players: [{ id: localId, name: 'Secret Name', jerseyNumber: '12' }],
-        timeline: [{ type: 'substitution', in: [{ id: localId, name: 'Secret Name', jerseyNumber: '12' }], out: [] }] }],
+    const startsAt = new Date().toISOString()
+    const created = (await db.query<{ result: { match_id: string; game_data: unknown } }>(
+      'select public.create_match_session($1, $2, $3) result',
+      [{ teams: [{ id: 'home', name: 'Team', color: '#000000' }, { id: 'away', name: 'Opponent', color: '#000000' }],
+        matchInfo: { startsAt },
+        players: [{ id: localId, name: 'Secret Name', jerseyNumber: '12' }],
+        timeline: [{ type: 'substitution', in: [{ id: localId, name: 'Secret Name', jerseyNumber: '12' }], out: [] }] },
+      'Viewer', startsAt],
     )).rows[0].result
     expect(JSON.stringify(created.game_data)).not.toContain('Secret Name')
 
@@ -101,7 +105,7 @@ describe('statistics database authorization', () => {
 
     await asUser(outsider)
     await expect(db.query('select public.match_select_official_scorer($1, $2)', [created.match_id, viewer])).rejects.toThrow('Match membership')
-    await db.query("select public.join_shared_match($1, 'Other scorer')", [created.join_code])
+    await db.query("select public.join_match_session($1, 'Other scorer')", [created.match_id])
     await expect(db.query('select * from public.match_scorer_snapshots')).rejects.toThrow('permission denied')
     await expect(db.query("select public.statistics_link_player('x12-1', $1, $2, $3, $4)", [
       created.match_id, viewer, localId, privatePlayer.id,
@@ -119,12 +123,11 @@ describe('statistics database authorization', () => {
   it('enforces session timing and close permissions on both joining paths', async () => {
     await asUser(coach)
     const game = { teams: [{ id: 'home', name: 'Team', color: '#000000' }, { id: 'away', name: 'Opponent', color: '#000000' }], players: [], catalogTeamId: 'x12-1' }
-    const created = (await db.query<{ result: { match_id: string; join_code: string } }>(
+    const created = (await db.query<{ result: { match_id: string } }>(
       "select public.create_match_session($1 || jsonb_build_object('matchInfo', jsonb_build_object('startsAt', now() + interval '16 minutes')), 'Coach', now() + interval '16 minutes') result", [game],
     )).rows[0].result
     await asUser(viewer)
     await expect(db.query("select public.join_match_session($1, 'Viewer')", [created.match_id])).rejects.toThrow('not opened')
-    await expect(db.query("select public.join_shared_match($1, 'Viewer')", [created.join_code])).rejects.toThrow('not opened')
     await expect(db.query('select public.close_match_session($1)', [created.match_id])).rejects.toThrow('creator or a team coach')
     await db.exec(`reset role; update public.shared_matches set session_starts_at = now() + interval '10 minutes' where id = '${created.match_id}';`)
     await asUser(viewer)

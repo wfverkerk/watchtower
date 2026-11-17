@@ -1,6 +1,6 @@
--- Baseline: the schema of all migrations up to 20261204, without test data or test-only functions.
--- For a new Supabase project run this file first, then the newer migrations in order.
--- Existing projects that already ran the older migrations do not need to run this file.
+-- Baseline: the complete schema of Watchtower (all migrations through 20261206), without test data.
+-- For a new Supabase project run this file once in the SQL editor. Existing projects already have this schema
+-- and do not run it again.
 
 --
 -- PostgreSQL database dump
@@ -10,6 +10,7 @@
 -- Dumped from database version 18.6
 -- Dumped by pg_dump version 18.6
 
+SELECT pg_catalog.set_config('search_path', '', false);
 SET check_function_bodies = false;
 
 --
@@ -99,8 +100,18 @@ CREATE FUNCTION public.create_match_session(p_game_data jsonb, p_display_name te
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
-declare v_result jsonb;
+declare
+  v_match_id uuid;
+  v_name text := nullif(trim(p_display_name), '');
+  clean_game jsonb;
 begin
+  if auth.uid() is null then raise exception 'Sign in anonymously before creating a match.'; end if;
+  if v_name is null or length(v_name) > 60 then
+    raise exception 'Display name must contain 1 to 60 characters.';
+  end if;
+  if p_game_data is null or jsonb_typeof(p_game_data) <> 'object' then
+    raise exception 'Match data must be a JSON object.';
+  end if;
   if p_starts_at is null then raise exception 'A start time is required'; end if;
   if jsonb_typeof(p_game_data->'matchInfo'->'startsAt') is distinct from 'string'
     or (p_game_data->'matchInfo'->>'startsAt')::timestamptz is distinct from p_starts_at then
@@ -113,46 +124,14 @@ begin
          or jsonb_typeof(t->'color') is distinct from 'string') then
     raise exception 'Two team names are required';
   end if;
-  v_result := public.create_shared_match(p_game_data, p_display_name);
-  update public.shared_matches set session_starts_at = p_starts_at, live_tracker_id = auth.uid()
-    where id = (v_result->>'match_id')::uuid;
-  return v_result;
-end;
-$$;
-
-
---
--- Name: create_shared_match(jsonb, text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.create_shared_match(p_game_data jsonb, p_display_name text) RETURNS jsonb
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO ''
-    AS $$
-declare
-  created_match_id uuid;
-  new_join_code text;
-  clean_display_name text := nullif(trim(p_display_name), '');
-  clean_game jsonb;
-begin
-  if auth.uid() is null then raise exception 'Sign in anonymously before creating a match.'; end if;
-  if clean_display_name is null or length(clean_display_name) > 60 then
-    raise exception 'Display name must contain 1 to 60 characters.';
-  end if;
-  if p_game_data is null or jsonb_typeof(p_game_data) <> 'object' then
-    raise exception 'Match data must be a JSON object.';
-  end if;
   clean_game := public.redact_private_match_players(p_game_data);
-  loop
-    new_join_code := upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 12));
-    insert into public.shared_matches (join_code, owner_id, game_data)
-    values (new_join_code, auth.uid(), clean_game)
-    on conflict (join_code) do nothing returning id into created_match_id;
-    exit when created_match_id is not null;
-  end loop;
+  insert into public.shared_matches (owner_id, game_data, session_starts_at)
+    values (auth.uid(), clean_game, p_starts_at)
+    returning id into v_match_id;
   insert into public.shared_match_members (match_id, user_id, display_name)
-  values (created_match_id, auth.uid(), clean_display_name);
-  return jsonb_build_object('match_id', created_match_id, 'join_code', new_join_code, 'game_data', clean_game);
+    values (v_match_id, auth.uid(), v_name);
+  update public.shared_matches set live_tracker_id = auth.uid() where id = v_match_id;
+  return jsonb_build_object('match_id', v_match_id, 'game_data', clean_game);
 end;
 $$;
 
@@ -205,34 +184,7 @@ begin
   insert into public.shared_match_members (match_id, user_id, display_name)
     values (v_match.id, auth.uid(), v_name)
     on conflict (match_id, user_id) do update set display_name = excluded.display_name;
-  return jsonb_build_object('match_id', v_match.id, 'join_code', v_match.join_code, 'game_data', v_match.game_data);
-end;
-$$;
-
-
---
--- Name: join_shared_match(text, text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.join_shared_match(p_join_code text, p_display_name text) RETURNS jsonb
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO ''
-    AS $$
-declare
-  v_match public.shared_matches%rowtype;
-  v_name text := nullif(trim(p_display_name), '');
-begin
-  if auth.uid() is null then raise exception 'Sign in before joining a match'; end if;
-  if v_name is null or length(v_name) > 60 then raise exception 'Display name must contain 1 to 60 characters'; end if;
-  select * into v_match from public.shared_matches where join_code = upper(trim(p_join_code)) for update;
-  if not found then raise exception 'No match was found for that code'; end if;
-  if v_match.session_starts_at is not null then
-    return public.join_match_session(v_match.id, v_name);
-  end if;
-  insert into public.shared_match_members (match_id, user_id, display_name)
-    values (v_match.id, auth.uid(), v_name)
-    on conflict (match_id, user_id) do update set display_name = excluded.display_name;
-  return jsonb_build_object('match_id', v_match.id, 'join_code', v_match.join_code, 'game_data', v_match.game_data);
+  return jsonb_build_object('match_id', v_match.id, 'game_data', v_match.game_data);
 end;
 $$;
 
@@ -796,6 +748,32 @@ begin
     raise exception 'The scorer is not a participant';
   end if;
   update public.shared_matches set live_tracker_id = p_tracker_id where id = p_match_id;
+end;
+$$;
+
+
+--
+-- Name: set_match_live_state(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_match_live_state(p_match_id uuid, p_state jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_scorer uuid;
+begin
+  select scorer_id into v_scorer from public.shared_matches where id = p_match_id;
+  if not found then raise exception 'Unknown match'; end if;
+  if v_scorer is distinct from auth.uid() then
+    raise exception 'not_scorer: only the scorer of this match can share the live state';
+  end if;
+  perform public.session_guard_write(p_match_id);
+  if jsonb_typeof(p_state) is distinct from 'object' or octet_length(p_state::text) > 65536 then
+    raise exception 'Invalid live state';
+  end if;
+  insert into public.match_live_state (match_id, state, updated_by)
+    values (p_match_id, p_state, auth.uid())
+    on conflict (match_id) do update set state = excluded.state, updated_by = excluded.updated_by, updated_at = now();
 end;
 $$;
 
@@ -1392,6 +1370,19 @@ ALTER TABLE public.match_events ALTER COLUMN sequence_id ADD GENERATED ALWAYS AS
 
 
 --
+-- Name: match_live_state; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.match_live_state (
+    match_id uuid NOT NULL,
+    state jsonb NOT NULL,
+    updated_by uuid NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT match_live_state_state_check CHECK (((jsonb_typeof(state) = 'object'::text) AND (octet_length((state)::text) <= 65536)))
+);
+
+
+--
 -- Name: match_offline_submissions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1476,7 +1467,6 @@ CREATE TABLE public.shared_match_members (
 
 CREATE TABLE public.shared_matches (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    join_code text NOT NULL,
     owner_id uuid NOT NULL,
     game_data jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -1492,7 +1482,6 @@ CREATE TABLE public.shared_matches (
     scorer_since timestamp with time zone,
     CONSTRAINT shared_matches_game_data_check CHECK ((jsonb_typeof(game_data) = 'object'::text)),
     CONSTRAINT shared_matches_game_data_size CHECK ((octet_length((game_data)::text) <= 1048576)),
-    CONSTRAINT shared_matches_join_code_check CHECK ((join_code ~ '^[A-F0-9]{12}$'::text)),
     CONSTRAINT shared_matches_review_status_check CHECK ((review_status = ANY (ARRAY['in_review'::text, 'final'::text])))
 );
 
@@ -1653,6 +1642,14 @@ ALTER TABLE ONLY public.match_events
 
 
 --
+-- Name: match_live_state match_live_state_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_live_state
+    ADD CONSTRAINT match_live_state_pkey PRIMARY KEY (match_id);
+
+
+--
 -- Name: match_offline_submissions match_offline_submissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1698,14 +1695,6 @@ ALTER TABLE ONLY public.platform_admins
 
 ALTER TABLE ONLY public.shared_match_members
     ADD CONSTRAINT shared_match_members_pkey PRIMARY KEY (match_id, user_id);
-
-
---
--- Name: shared_matches shared_matches_join_code_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.shared_matches
-    ADD CONSTRAINT shared_matches_join_code_key UNIQUE (join_code);
 
 
 --
@@ -1915,6 +1904,22 @@ ALTER TABLE ONLY public.match_events
 
 ALTER TABLE ONLY public.match_events
     ADD CONSTRAINT match_events_tracker_id_fkey FOREIGN KEY (tracker_id) REFERENCES auth.users(id);
+
+
+--
+-- Name: match_live_state match_live_state_match_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_live_state
+    ADD CONSTRAINT match_live_state_match_id_fkey FOREIGN KEY (match_id) REFERENCES public.shared_matches(id) ON DELETE CASCADE;
+
+
+--
+-- Name: match_live_state match_live_state_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.match_live_state
+    ADD CONSTRAINT match_live_state_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id);
 
 
 --
@@ -2172,6 +2177,15 @@ CREATE POLICY "Members can read score links" ON public.match_score_links FOR SEL
 
 
 --
+-- Name: match_live_state Members can read the live state; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Members can read the live state" ON public.match_live_state FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
+   FROM public.shared_match_members member
+  WHERE ((member.match_id = match_live_state.match_id) AND (member.user_id = auth.uid())))));
+
+
+--
 -- Name: shared_match_members Members can read their own membership; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -2201,6 +2215,12 @@ CREATE POLICY "Trackers can append their own events" ON public.match_events FOR 
 --
 
 ALTER TABLE public.match_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: match_live_state; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.match_live_state ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: match_offline_submissions; Type: ROW SECURITY; Schema: public; Owner: -
@@ -2349,14 +2369,6 @@ GRANT ALL ON FUNCTION public.create_match_session(p_game_data jsonb, p_display_n
 
 
 --
--- Name: FUNCTION create_shared_match(p_game_data jsonb, p_display_name text); Type: ACL; Schema: public; Owner: -
---
-
-REVOKE ALL ON FUNCTION public.create_shared_match(p_game_data jsonb, p_display_name text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.create_shared_match(p_game_data jsonb, p_display_name text) TO authenticated;
-
-
---
 -- Name: FUNCTION create_statistics_team(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -2377,14 +2389,6 @@ GRANT ALL ON FUNCTION public.is_platform_admin() TO authenticated;
 
 REVOKE ALL ON FUNCTION public.join_match_session(p_match_id uuid, p_display_name text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.join_match_session(p_match_id uuid, p_display_name text) TO authenticated;
-
-
---
--- Name: FUNCTION join_shared_match(p_join_code text, p_display_name text); Type: ACL; Schema: public; Owner: -
---
-
-REVOKE ALL ON FUNCTION public.join_shared_match(p_join_code text, p_display_name text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.join_shared_match(p_join_code text, p_display_name text) TO authenticated;
 
 
 --
@@ -2527,6 +2531,14 @@ GRANT ALL ON FUNCTION public.set_live_match_tracker(p_match_id uuid, p_tracker_i
 
 
 --
+-- Name: FUNCTION set_match_live_state(p_match_id uuid, p_state jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.set_match_live_state(p_match_id uuid, p_state jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.set_match_live_state(p_match_id uuid, p_state jsonb) TO authenticated;
+
+
+--
 -- Name: FUNCTION set_match_score_link(p_match_id uuid, p_source_id uuid, p_contributor_id uuid, p_contributor_action_id text, p_mode text, p_source_action_id text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -2662,6 +2674,13 @@ GRANT ALL ON FUNCTION public.transfer_match_scorer(p_match_id uuid) TO authentic
 --
 
 GRANT SELECT,INSERT ON TABLE public.match_events TO authenticated;
+
+
+--
+-- Name: TABLE match_live_state; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.match_live_state TO authenticated;
 
 
 --
@@ -2865,6 +2884,16 @@ begin
      and not exists (select 1 from pg_catalog.pg_publication_tables
        where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'match_score_links') then
     alter publication supabase_realtime add table public.match_score_links;
+  end if;
+end;
+$$;
+
+do $$
+begin
+  if exists (select 1 from pg_catalog.pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_catalog.pg_publication_tables
+       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'match_live_state') then
+    alter publication supabase_realtime add table public.match_live_state;
   end if;
 end;
 $$;

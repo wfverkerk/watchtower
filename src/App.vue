@@ -5,7 +5,6 @@ import ActivityPanel from './components/ActivityPanel.vue'
 import FoulMarker from './components/FoulMarker.vue'
 import GameControls from './components/GameControls.vue'
 import LineupDialog from './components/LineupDialog.vue'
-import MatchSyncDialog from './components/MatchSyncDialog.vue'
 import PlayerPickerDialog from './components/PlayerPickerDialog.vue'
 import Scoreboard from './components/Scoreboard.vue'
 import TeamSetupDialog from './components/TeamSetupDialog.vue'
@@ -32,7 +31,6 @@ const { connection } = useSupabaseConnection()
 const connectionLabel = computed(() => t(connection.value === 'online'
   ? 'app.connectionOnline'
   : connection.value === 'offline' ? 'app.connectionOffline' : 'app.connectionChecking'))
-const matchSyncOpen = ref(false)
 const userProfile = ref<UserProfile | null>(null)
 const userProfileOpen = ref(false)
 const userProfileError = ref('')
@@ -54,7 +52,6 @@ watch(userProfileOpen, (open) => {
 })
 const coachLoginOpen = ref(false)
 const homeOpen = ref(true)
-const newOnlineSession = ref(false)
 const practiceSetup = ref(false)
 const sharedInitialGame = ref<GameState | null>(null)
 const sharedInitialError = ref('')
@@ -174,7 +171,6 @@ const {
   markMatchFinished,
   finishLocalMatch,
   releaseFinishedMatch,
-  createSharedMatch,
   joinSharedMatch,
 } = useGameSession()
 const hasCurrentGame = computed(() => {
@@ -275,23 +271,12 @@ const nextPeriodLabel = computed(() => {
   return formatPeriod(period, game.youth ?? false, true)
 })
 
-async function createMatch(displayName: string) {
-  if (await createSharedMatch(displayName, game.matchInfo?.startsAt)) {
-    matchSyncOpen.value = false
-    pageError.value = ''
-  }
-}
-
-async function joinMatch(joinCode: string, displayName: string) {
-  if (await joinSharedMatch(joinCode, displayName)) matchSyncOpen.value = false
-}
-
 async function joinSession(id: string, side: 'home' | 'away' = 'home') {
   if (!userProfile.value) return
   pageError.value = ''
   try {
     if (!hasCurrentGame.value) {
-      if (await joinSharedMatch(id, userProfile.value.name, true, side)) {
+      if (await joinSharedMatch(id, userProfile.value.name, side)) {
         homeOpen.value = false
         if (!game.gameStarted && !teamPlayers.value.length) openRosterEditor()
       } else pageError.value = matchSyncError.value
@@ -344,11 +329,6 @@ async function saveTeamSetup(
 ) {
   if (!applyTeamSetup(profiles, profileIds, match, manualOpponentName, manualStart, practiceSetup.value, opponentClub)) return
   practiceSetup.value = false
-  if (newOnlineSession.value && userProfile.value && game.matchInfo) {
-    const startsAt = game.matchInfo.startsAt ?? new Date(`${game.matchInfo.date}T${game.matchInfo.startTime}:00`).toISOString()
-    if (!await createSharedMatch(userProfile.value.name, startsAt)) pageError.value = matchSyncError.value
-  }
-  newOnlineSession.value = false
 }
 
 function openStatistics() {
@@ -461,16 +441,7 @@ watch(locale, (value) => {
           <span :class="matchLink || matchSyncStatus !== 'local' ? `sync-dot-${matchSyncStatus}` : ''"></span>
           {{ matchLink || matchSyncStatus !== 'local' ? t(`sync.status.${matchSyncStatus}`) : t('app.savedLocally') }}
         </span>
-        <button v-if="!teamSetupOpen && !homeOpen" class="share-match-button" type="button" :aria-label="t('sync.open')" :title="t('sync.open')" @click="matchSyncOpen = true">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="18" cy="5" r="3" />
-            <circle cx="6" cy="12" r="3" />
-            <circle cx="18" cy="19" r="3" />
-            <path d="m8.7 10.7 6.6-4.4m-6.6 7 6.6 4.4" />
-          </svg>
-        </button>
-        <button class="avatar" type="button" :aria-label="userProfile?.name ? `${t('app.profile')}: ${userProfile.name}` : t('app.profile')" :title="t('app.profile')" @click="userProfileOpen = true">
-          {{ userProfile?.name.trim().charAt(0).toLocaleUpperCase() || '?' }}
+        <button class="avatar" type="button" :aria-label="userProfile?.name ? `${t('app.profile')}: ${userProfile.name}` : t('app.profile')" :title="t('app.profile')" @click="userProfileOpen = true">          {{ userProfile?.name.trim().charAt(0).toLocaleUpperCase() || '?' }}
         </button>
       </div>
     </header>
@@ -562,7 +533,7 @@ watch(locale, (value) => {
       :catalog-loading="teamCatalogLoading"
       :catalog-error="teamCatalogError"
       :catalog-cached="teamCatalogCached"
-      :local-only="!newOnlineSession && !practiceSetup"
+      :local-only="!practiceSetup"
       :practice="practiceSetup"
       :can-cancel="practiceSetup || canCancelTeamSetup"
       :error="storageError"
@@ -703,17 +674,6 @@ watch(locale, (value) => {
       @toggle="toggleDraftCourtPlayer"
     />
     </template>
-    <MatchSyncDialog
-      v-if="matchSyncOpen && !userProfileOpen && !coachLoginOpen"
-      :configured="matchSyncConfigured"
-      :default-display-name="userProfile?.name"
-      :match-link="matchLink"
-      :status="matchSyncStatus"
-      :error="matchSyncError"
-      @close="matchSyncOpen = false"
-      @create="createMatch"
-      @join="joinMatch"
-    />
 
     <footer class="app-footer">
       <div class="footer-copy"><span class="footer-ball">◉</span> {{ t('app.footer') }} <span>·</span> Watchtower</div>

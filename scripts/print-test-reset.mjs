@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 
 // The Zoebas team catalog is seeded by the baseline migration.
-const baseline = readFileSync(new URL('../supabase/migrations/20261204000000_baseline.sql', import.meta.url), 'utf8')
+const baseline = readFileSync(new URL('../supabase/migrations/20261206000000_baseline.sql', import.meta.url), 'utf8')
 const start = baseline.indexOf('insert into public.zoebas_teams ')
 if (start === -1) throw new Error('Missing the Zoebas team catalog seed in the baseline migration')
 const catalog = baseline.slice(start, baseline.indexOf(';\n', start) + 2).trim()
