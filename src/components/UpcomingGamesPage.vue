@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import PageHeader from './PageHeader.vue'
 import ScorerRoleDialog from './ScorerRoleDialog.vue'
 import ScheduleSide from './ScheduleSide.vue'
 import { errorMessage } from '../domain/guards'
@@ -27,6 +26,7 @@ const emit = defineEmits<{
   resume: []
   join: [id: string, side: 'home' | 'away']
   view: [id: string]
+  practice: []
 }>()
 const { t, locale } = useLocale()
 const allSessions = ref<MatchSession[]>([])
@@ -87,6 +87,19 @@ function toggleDraft(teamName: string) {
   draftFavorites.value = draftFavorites.value.includes(teamName)
     ? draftFavorites.value.filter((name) => name !== teamName)
     : [...draftFavorites.value, teamName]
+}
+
+// Test teams are left out, so they are only ever selected by hand.
+const selectableTeamNames = computed(() => teamNames.value.filter((name) => !testTeamNames.value.has(name)))
+const allDraftSelected = computed(() => selectableTeamNames.value.length > 0
+  && selectableTeamNames.value.every((name) => draftFavorites.value.includes(name)))
+
+function pickAllTeams() {
+  draftFavorites.value = [...selectableTeamNames.value]
+}
+
+function clearTeams() {
+  draftFavorites.value = []
 }
 
 function saveMyTeams() {
@@ -294,19 +307,20 @@ onUnmounted(() => {
 
 <template>
   <section class="sessions-page">
-    <PageHeader :eyebrow="t('sessions.eyebrow')" :title="t('sessions.title')">
-      <div class="landing-toggle" role="group" :aria-label="t('sessions.myTeams')">
-        <button type="button" :class="{ 'is-active': mode === 'mine' }" :aria-pressed="mode === 'mine' ? 'true' : 'false'" @click="selectMine">{{ t('sessions.myTeams') }}</button>
-        <button type="button" :class="{ 'is-active': mode === 'all' }" :aria-pressed="mode === 'all' ? 'true' : 'false'" @click="selectAll">{{ t('sessions.allTeams') }}</button>
-      </div>
-    </PageHeader>
+    <div class="landing-toggle" role="group" :aria-label="t('sessions.myTeams')">
+      <button type="button" :class="{ 'is-active': mode === 'mine' }" :aria-pressed="mode === 'mine' ? 'true' : 'false'" @click="selectMine">{{ t('sessions.myTeams') }}</button>
+      <button type="button" :class="{ 'is-active': mode === 'all' }" :aria-pressed="mode === 'all' ? 'true' : 'false'" @click="selectAll">{{ t('sessions.allTeams') }}</button>
+    </div>
     <p v-if="!configured" class="notice">{{ t('sync.notConfigured') }}</p>
     <p v-if="error" class="notice" role="alert">{{ t('sessions.loadError') }}: {{ error }}</p>
     <p v-if="checking" class="statistics-hint" role="status">{{ t('roles.checking') }}</p>
     <p v-if="scheduleError" class="notice" role="alert">{{ t('sessions.scheduleError') }}: {{ scheduleError }}</p>
     <section v-if="editing" class="panel statistics-card my-teams-editor">
       <h2>{{ t('sessions.pickMyTeams') }}</h2>
-      <p class="statistics-hint">{{ t('sessions.myTeamsHint') }}</p>
+      <div class="session-actions">
+        <button type="button" class="match-sync-secondary" :disabled="allDraftSelected" @click="pickAllTeams">{{ t('sessions.selectAllTeams') }}</button>
+        <button type="button" class="match-sync-secondary" :disabled="!draftFavorites.length" @click="clearTeams">{{ t('sessions.deselectAllTeams') }}</button>
+      </div>
       <div v-for="section in teamSections" :key="section.group" class="favorite-team-section">
         <h3>{{ t(teamGroupLabelKeys[section.group]) }}</h3>
         <div class="favorite-team-grid">
@@ -326,12 +340,15 @@ onUnmounted(() => {
         </div>
       </div>
       <div class="session-actions">
-        <button type="button" class="match-sync-primary" @click="saveMyTeams">{{ t('sessions.saveMyTeams') }}</button>
+        <button type="button" class="match-sync-primary" :disabled="!draftFavorites.length" @click="saveMyTeams">{{ t('sessions.saveMyTeams') }}</button>
       </div>
     </section>
     <template v-if="!editing">
     <section class="panel statistics-card">
       <p v-if="!openGames.length && !practiceGame" class="statistics-hint">{{ t('sessions.openEmpty') }}</p>
+      <div v-if="!openGames.length && !practiceGame" class="session-actions">
+        <button type="button" class="match-sync-primary" :disabled="hasCurrentGame" @click="emit('practice')">{{ t('sessions.practiceStart') }}</button>
+      </div>
       <article v-if="practiceGame" class="session-row schedule-game is-live practice-open-game">
         <button type="button" class="schedule-open-trigger" @click="emit('resume')">
           <span class="schedule-match">

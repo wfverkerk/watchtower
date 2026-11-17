@@ -1,10 +1,10 @@
 <script setup lang="ts">
-defineProps<{ eyebrow: string; title: string }>()
+defineProps<{ eyebrow?: string; title: string }>()
 </script>
 
 <template>
   <header class="page-header">
-    <div><p class="eyebrow">{{ eyebrow }}</p><h1>{{ title }}</h1></div>
+    <div><p v-if="eyebrow" class="eyebrow">{{ eyebrow }}</p><h1>{{ title }}</h1></div>
     <slot />
   </header>
 </template>
