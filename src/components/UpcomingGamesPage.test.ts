@@ -205,6 +205,22 @@ describe('upcoming sessions', () => {
     }), 'First')
   })
 
+  it('shows the ranking position of a team in an upcoming game', async () => {
+    const tomorrow = new Date(Date.now() + 86_400_000)
+    const pad = (value: number) => String(value).padStart(2, '0')
+    vi.mocked(loadSchedule).mockResolvedValueOnce([{
+      id: 'game-p', kind: 'program', date: `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`,
+      startTime: '18:00', homeTeam: 'X12-1', awayTeam: 'Team B', homeScore: null, awayScore: null, status: '', venue: '',
+      homePosition: 2, awayPosition: null,
+    }])
+    app = createApp({ render: () => h(UpcomingGamesPage, {
+      configured: true, hasCurrentGame: false, currentMatchId: null, displayName: 'Scorer', onJoin: vi.fn(),
+    }) })
+    app.mount(document.body.appendChild(document.createElement('div')))
+    await vi.waitFor(() => expect(document.querySelector('.schedule-position')?.textContent).toBe('(2)'))
+    expect(document.querySelectorAll('.schedule-position')).toHaveLength(1)
+  })
+
   it('groups history per day in collapsed sections and labels games with statistics', async () => {
     const result = (id: string, date: string, hasStats: boolean) => ({
       id, kind: 'result' as const, date, startTime: '18:00', homeTeam: 'Team A', awayTeam: 'Team B',

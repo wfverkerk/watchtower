@@ -16,6 +16,9 @@ export type ScheduleGame = {
   awayClub?: string | null
   homeLogoUrl?: string | null
   awayLogoUrl?: string | null
+  // Position on the ranking just before the start of the game.
+  homePosition?: number | null
+  awayPosition?: number | null
 }
 
 export type ScheduleBucket = 'open' | 'upcoming' | 'history'
