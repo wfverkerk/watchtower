@@ -96,7 +96,7 @@ function actionIcon(action: GameAction) {
       <template v-for="entry in activityItems" :key="`${entry.kind}-${entry.kind === 'action' ? entry.item.action.id : entry.item.id}`">
       <div v-if="entry.kind === 'action'" class="activity-row" :style="{ '--activity-color': teams.find((team) => team.id === entry.item.action.teamId)?.color ?? 'var(--muted)' }">
         <template v-for="item in [entry.item]" :key="item.action.id">
-        <span class="activity-dot" :class="item.action.teamId === teams[0]?.id ? 'orange' : 'blue'"></span>
+        <span class="activity-dot"></span>
         <span class="activity-action-icon" :class="`activity-action-icon-${item.action.type}`" aria-hidden="true">{{ actionIcon(item.action) }}</span>
         <div class="activity-description">
           <strong>
@@ -117,7 +117,7 @@ function actionIcon(action: GameAction) {
         </template>
       </div>
       <div v-else class="activity-row" :style="{ '--activity-color': entry.item.type === 'substitution' ? teams[0]?.color : 'var(--muted)' }">
-        <span class="activity-dot orange"></span>
+        <span class="activity-dot" :class="{ orange: entry.item.type !== 'substitution' }"></span>
         <span class="activity-action-icon" aria-hidden="true">{{ entry.item.type === 'substitution' ? '⇄' : '◷' }}</span>
         <div class="activity-description">
           <strong>{{ entry.item.type === 'substitution' ? t('activity.substitution') : t(entry.item.type === 'period_start' ? 'activity.periodStart' : 'activity.periodEnd', { period: formatPeriod(entry.item.period, youth) }) }}</strong>
@@ -144,7 +144,7 @@ function actionIcon(action: GameAction) {
     <div v-if="!hideStats" class="team-stats">
       <div v-for="team in teams" :key="team.id" class="team-stat-row">
         <div class="team-stat-name">
-          <span class="team-dot" :class="team.id === teams[0]?.id ? 'orange' : 'blue'"></span>
+          <span class="team-dot" :style="{ background: team.color }"></span>
           <strong>{{ displayTeamName(team) }}</strong>
         </div>
         <div class="stat-values">

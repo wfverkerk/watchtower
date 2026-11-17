@@ -117,9 +117,6 @@ onUnmounted(() => {
         :can-start-new-match="false"
         :period="game.period"
         :youth="game.youth ?? false"
-        clock-display="00:00"
-        :clock-running="false"
-        :clock-available="false"
         :team-fouls="teamFouls"
         read-only
       />
