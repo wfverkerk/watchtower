@@ -23,8 +23,6 @@ export type ScheduleGame = {
 
 export type ScheduleBucket = 'open' | 'upcoming' | 'history'
 
-export const gameDurationMs = 180 * 60_000
-
 export function gameStartMs(game: Pick<ScheduleGame, 'date' | 'startTime'>) {
   return new Date(`${game.date}T${game.startTime}:00`).getTime()
 }
@@ -39,7 +37,7 @@ export function scheduleBucket(game: ScheduleGame, now: number, today = localDat
   if (game.kind === 'result') return 'history'
   if (game.date < today) return 'history'
   if (game.date > today) return 'upcoming'
-  return now >= gameStartMs(game) + gameDurationMs ? 'history' : 'open'
+  return 'open'
 }
 
 export type TeamGroup = 'young' | 'middle' | 'other' | 'test'

@@ -16,9 +16,11 @@ const base: ScheduleGame = {
 const now = new Date(2026, 10, 15, 12, 30).getTime()
 
 describe('schedule buckets', () => {
-  it('shows a game of today as open until three hours after its start', () => {
+  it('keeps planned games of today open until the local day ends', () => {
     expect(scheduleBucket(base, now)).toBe('open')
-    expect(scheduleBucket(base, new Date(2026, 10, 15, 15, 0).getTime())).toBe('history')
+    expect(scheduleBucket(base, new Date(2026, 10, 15, 15, 0).getTime())).toBe('open')
+    expect(scheduleBucket(base, new Date(2026, 10, 15, 23, 59).getTime())).toBe('open')
+    expect(scheduleBucket(base, new Date(2026, 10, 16, 0, 0).getTime())).toBe('history')
   })
 
   it('puts later days in upcoming and earlier days or results in history', () => {
