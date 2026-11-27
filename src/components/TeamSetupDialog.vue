@@ -10,6 +10,7 @@ import OpponentTeamInput from './OpponentTeamInput.vue'
 import TeamLogo from './TeamLogo.vue'
 import { useOpponentTeams } from '../composables/useOpponentTeams'
 import BaseDialog from './BaseDialog.vue'
+import AppButton from './ui/AppButton.vue'
 import { loadStatisticsRoster, loadStatisticsTeams, type StatisticsPlayer } from '../services/statistics'
 import { getSupabaseClient } from '../services/supabaseClient'
 import { groupTeams, teamGroupLabelKeys } from '../domain/schedule'
@@ -430,24 +431,25 @@ function stepCompleted(index: number) {
 
 <template>
   <BaseDialog
-    :backdrop-class="home ? 'team-setup-page' : 'team-setup-backdrop'"
-    :dialog-class="`team-setup-dialog panel${home ? ' team-setup-home-card' : ''}`"
+    :variant="home ? 'page' : 'wizard'"
+    :size="home ? 'wide' : 'md'"
+    :dialog-class="home ? 'team-setup-home-card' : ''"
     :modal="!home"
     :close-on-escape="canCancel && !jerseySaving"
     :label="t(rosterProfile ? 'scoreboard.editPlayers' : practice ? 'teamSetup.practiceTitle' : 'teamSetup.title')"
     @close="emit('cancel')"
   >
-      <header v-if="canCancel" class="team-setup-header">
-        <button class="team-setup-close" type="button" :disabled="jerseySaving" :aria-label="t('teamSetup.cancel')" @click="emit('cancel')">×</button>
+      <header v-if="canCancel" class="team-setup-header mb-3.5 flex justify-end max-sm:mb-2.5">
+        <button class="team-setup-close size-8 rounded-full border border-line bg-white text-xl text-[#716f68]" type="button" :disabled="jerseySaving" :aria-label="t('teamSetup.cancel')" @click="emit('cancel')">×</button>
       </header>
-      <p v-if="error || (!rosterProfile && catalogError) || draftStorageError" class="notice team-setup-notice" role="alert">{{ error || catalogError || t(draftStorageError) }}</p>
-      <div v-if="jerseyError" class="notice team-setup-notice" role="alert">
+      <p v-if="error || (!rosterProfile && catalogError) || draftStorageError" class="notice team-setup-notice mb-3 mt-0" role="alert">{{ error || catalogError || t(draftStorageError) }}</p>
+      <div v-if="jerseyError" class="notice team-setup-notice mb-3 mt-0" role="alert">
         <p>{{ jerseyError }}</p>
         <button type="button" :disabled="jerseyLoading || jerseySaving" @click="reloadJerseys">{{ t('teamSetup.reloadJerseys') }}</button>
       </div>
 
       <h2 v-if="rosterProfile">{{ t('scoreboard.editPlayers') }}</h2>
-      <div v-else class="team-setup-steps" role="tablist" :aria-label="t('teamSetup.title')">
+      <div v-else class="team-setup-steps mb-4 grid grid-cols-3 gap-[7px] max-sm:mb-2.5" role="tablist" :aria-label="t('teamSetup.title')">
         <button
           v-for="(wizardStep, index) in steps"
           :key="wizardStep"
@@ -456,12 +458,13 @@ function stepCompleted(index: number) {
           role="tab"
           :aria-selected="step === index"
           :aria-current="step === index ? 'step' : undefined"
+          class="flex min-h-[42px] min-w-0 items-center justify-center gap-[5px] rounded-[7px] border border-b-[3px] border-line bg-[#faf9f7] px-[3px] py-[5px] text-[11px] font-semibold text-[#77756e] disabled:opacity-60 [&.selected]:border-orange [&.selected]:bg-[#fff3ec] [&.selected]:text-[#984b2c] [&.selected_.team-setup-step-number]:bg-orange [&.selected_.team-setup-step-number]:text-white [&.completed]:border-b-[#478c59] [&.completed]:text-[#397f4c] [&.completed_.team-setup-step-number]:bg-[#478c59] [&.completed_.team-setup-step-number]:text-white"
           :class="{ selected: step === index, completed: stepCompleted(index) && step !== index }"
           @click="navigateTo(index)"
-        ><span class="team-setup-step-number" aria-hidden="true">{{ stepCompleted(index) && step !== index ? '✓' : index + 1 }}</span><span class="team-setup-step-label">{{ index === 0 && validTeam ? currentProfile?.name : t(`teamSetup.${wizardStep}`) }}</span></button>
+        ><span class="team-setup-step-number grid size-5 shrink-0 basis-5 place-items-center rounded-full bg-[#e8e6e1] text-[10px] text-[#77756e]" aria-hidden="true">{{ stepCompleted(index) && step !== index ? '✓' : index + 1 }}</span><span class="team-setup-step-label min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{{ index === 0 && validTeam ? currentProfile?.name : t(`teamSetup.${wizardStep}`) }}</span></button>
       </div>
 
-      <div ref="stepContent" class="team-setup-team">
+      <div ref="stepContent" class="team-setup-team min-h-0 overflow-y-auto [&_.team-setup-error]:mt-2 [&_.team-setup-error]:text-[11px] [&_.team-setup-error]:text-[#b9472c] [&_.team-setup-field]:flex [&_.team-setup-field]:min-w-0 [&_.team-setup-field]:flex-1 [&_.team-setup-field]:flex-col [&_.team-setup-field]:gap-[5px] [&_.team-setup-field]:text-[10px] [&_.team-setup-field]:font-semibold [&_.team-setup-field]:text-[#77756e] [&_.team-setup-hint]:mt-1 [&_.team-setup-hint]:mb-[9px] [&_.team-setup-hint]:text-[10px] [&_.team-setup-hint]:leading-[1.4] [&_.team-setup-hint]:text-[#85827b] [&_.team-setup-matches]:mt-[13px] [&_.team-setup-matches]:grid [&_.team-setup-matches]:gap-[7px] [&_.team-setup-matches_h3]:m-0 [&_.team-setup-matches_h3]:text-xs [&_.team-setup-matches_h3]:text-ink [&_.team-setup-matches_h4]:m-0 [&_.team-setup-matches_h4]:mt-[5px] [&_.team-setup-matches_h4]:text-xs [&_.team-setup-matches_h4]:text-ink [&_.team-setup-player_input]:min-h-[37px] [&_.team-setup-player_input]:min-w-0 [&_.team-setup-player_input]:rounded-md [&_.team-setup-player_input]:border [&_.team-setup-player_input]:border-line [&_.team-setup-player_input]:bg-white [&_.team-setup-player_input]:px-[9px] [&_.team-setup-player_input]:py-[7px] [&_.team-setup-player_input]:text-xs [&_.team-setup-player_input]:text-ink [&_.team-setup-field_input]:min-h-[37px] [&_.team-setup-field_input]:min-w-0 [&_.team-setup-field_input]:rounded-md [&_.team-setup-field_input]:border [&_.team-setup-field_input]:border-line [&_.team-setup-field_input]:bg-white [&_.team-setup-field_input]:px-[9px] [&_.team-setup-field_input]:py-[7px] [&_.team-setup-field_input]:text-xs [&_.team-setup-field_input]:text-ink [&_.team-setup-field_select]:min-h-[37px] [&_.team-setup-field_select]:min-w-0 [&_.team-setup-field_select]:rounded-md [&_.team-setup-field_select]:border [&_.team-setup-field_select]:border-line [&_.team-setup-field_select]:bg-white [&_.team-setup-field_select]:px-[9px] [&_.team-setup-field_select]:py-[7px] [&_.team-setup-field_select]:text-xs [&_.team-setup-field_select]:text-ink dark:[&_.team-setup-player_input]:bg-control dark:[&_.team-setup-field_input]:bg-control dark:[&_.team-setup-field_select]:bg-control">
         <template v-if="step === 0">
           <h3>{{ t('teamSetup.chooseClubTeam') }}</h3>
           <p v-if="practice" class="team-setup-hint">{{ t('teamSetup.practiceHint') }}</p>
@@ -470,16 +473,17 @@ function stepCompleted(index: number) {
           <p v-else-if="!catalogError && !availableTeams.length" class="team-setup-hint" role="status">{{ t('teamSetup.noTeamsWithPlayers') }}</p>
           <div v-for="section in teamSections" :key="section.group" class="favorite-team-section">
             <h3 :id="`team-group-${section.group}`">{{ t(teamGroupLabelKeys[section.group]) }}</h3>
-            <div class="team-setup-team-grid" role="group" :aria-labelledby="`team-group-${section.group}`">
+            <div class="team-setup-team-grid grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-2" role="group" :aria-labelledby="`team-group-${section.group}`">
               <button v-for="team in section.teams" :key="team.id" type="button"
+                class="flex min-h-12 items-center justify-center gap-2 rounded-[7px] border border-line bg-panel p-2 font-semibold text-ink focus-visible:outline-2 focus-visible:outline-orange focus-visible:outline-offset-2 aria-pressed:border-orange aria-pressed:bg-[color-mix(in_srgb,var(--orange)_12%,var(--panel))]"
                 :aria-pressed="selectedCatalogTeamId === team.id" :disabled="jerseySaving"
                 @click="selectedCatalogTeamId = team.id"><TeamLogo :name="team.name" /><span>{{ team.name }}</span></button>
             </div>
           </div>
-          <div v-if="localOnly" class="team-setup-field">
+          <div v-if="localOnly" class="team-setup-field flex min-w-0 flex-1 flex-col gap-[5px] text-[10px] font-semibold text-[#77756e]">
             <label for="local-team-name">{{ t('sessions.localTeam') }}</label>
             <input id="local-team-name" v-model="localTeamName" type="text" maxlength="60">
-            <button type="button" class="match-sync-secondary" :disabled="!localTeamName.trim()" @click="addLocalTeam">{{ t('sessions.addLocalTeam') }}</button>
+            <AppButton :disabled="!localTeamName.trim()" @click="addLocalTeam">{{ t('sessions.addLocalTeam') }}</AppButton>
           </div>
         </template>
         <section v-if="step === 2 && practice" class="team-setup-matches" aria-labelledby="practice-opponent-heading">
@@ -490,21 +494,21 @@ function stepCompleted(index: number) {
             <span>{{ t('teamSetup.opponentTeam') }}</span>
             <input v-model="opponentTeamName" type="text" maxlength="40" :placeholder="t('teamSetup.opponentTeamPlaceholder')">
           </label>
-          <div class="team-setup-roster-heading">
-            <h4>{{ t('teamSetup.opponentPlayers') }}</h4>
-            <span>{{ t('teamSetup.participantCount', { count: enteredOpponentPlayers.length }) }}</span>
+          <div class="team-setup-roster-heading mt-4 flex items-center justify-between gap-2">
+            <h4 class="m-0 text-[13px] text-[#6f6d67]">{{ t('teamSetup.opponentPlayers') }}</h4>
+            <span class="text-[10px] text-[#85827b]">{{ t('teamSetup.participantCount', { count: enteredOpponentPlayers.length }) }}</span>
           </div>
-          <div class="team-setup-player team-setup-column-heading" aria-hidden="true">
+          <div class="team-setup-player team-setup-column-heading mb-[5px] grid grid-cols-[54px_minmax(0,1fr)_76px] gap-1.5 text-[10px] font-semibold text-muted max-xs:grid-cols-[44px_minmax(0,1fr)_76px] max-xs:gap-1 [&>span:first-child]:text-center [&>span:last-child]:text-center" aria-hidden="true">
             <span>#</span><span>{{ t('teamSetup.name') }}</span><span></span>
           </div>
-          <div class="team-setup-roster">
-            <div v-for="player in opponentPlayers" :key="player.id" class="team-setup-player">
-              <input v-model="player.jerseyNumber" class="team-setup-jersey-input" type="text" inputmode="numeric" maxlength="2" :aria-label="t('teamSetup.jerseyNumber')" placeholder="#" @input="player.jerseyNumber = player.jerseyNumber.replace(/\D/g, '').slice(0, 2)">
+          <div class="team-setup-roster grid gap-1.5">
+            <div v-for="player in opponentPlayers" :key="player.id" class="team-setup-player grid grid-cols-[54px_minmax(0,1fr)_76px] gap-1.5 max-xs:grid-cols-[44px_minmax(0,1fr)_76px] max-xs:gap-1 [&_input]:w-full">
+              <input v-model="player.jerseyNumber" class="team-setup-jersey-input text-center" type="text" inputmode="numeric" maxlength="2" :aria-label="t('teamSetup.jerseyNumber')" placeholder="#" @input="player.jerseyNumber = player.jerseyNumber.replace(/\D/g, '').slice(0, 2)">
               <input v-model="player.name" type="text" :aria-label="t('teamSetup.playerName')" :placeholder="t('teamSetup.playerName')" maxlength="60">
-              <button class="team-setup-opponent-remove" type="button" :aria-label="t('teamSetup.removePlayer')" :title="t('teamSetup.removePlayer')" @click="opponentPlayers = opponentPlayers.filter((item) => item.id !== player.id)">×</button>
+              <button class="team-setup-opponent-remove min-h-9 min-w-9 justify-self-center rounded-md border border-line bg-transparent text-base text-muted" type="button" :aria-label="t('teamSetup.removePlayer')" :title="t('teamSetup.removePlayer')" @click="opponentPlayers = opponentPlayers.filter((item) => item.id !== player.id)">×</button>
             </div>
           </div>
-          <button class="team-setup-add-player" type="button" @click="opponentPlayers.push(newOpponentPlayer())">+ {{ t('teamSetup.addPlayer') }}</button>
+          <button class="team-setup-add-player mt-2 min-h-[37px] w-full rounded-md border border-line bg-white px-2.5 text-[11px] font-semibold whitespace-nowrap text-[#5f5d57]" type="button" @click="opponentPlayers.push(newOpponentPlayer())">+ {{ t('teamSetup.addPlayer') }}</button>
           <p v-if="opponentError" class="team-setup-error">{{ opponentError }}</p>
         </section>
         <section v-if="step === 2 && !practice" class="team-setup-matches" aria-labelledby="team-match-heading">
@@ -522,7 +526,7 @@ function stepCompleted(index: number) {
             <button
               v-for="match in upcomingMatches"
               :key="match.id"
-              class="team-setup-match-option"
+              class="team-setup-match-option grid gap-[3px] rounded-[7px] border border-line bg-panel p-[9px_10px] text-left text-[10px] text-ink disabled:cursor-not-allowed disabled:opacity-55 [&.selected]:border-orange [&.selected]:bg-[color-mix(in_srgb,var(--orange)_8%,var(--panel))] [&>span]:text-muted [&_strong]:text-[11px]"
               :class="{ selected: selectedMatchId === match.id }"
               type="button"
               :disabled="match.status === 'Cancelled'"
@@ -530,17 +534,17 @@ function stepCompleted(index: number) {
               @click="selectMatch(match)"
             >
               <span class="team-setup-match-date">{{ formatMatchDate(match) }}</span>
-              <strong class="team-setup-match-teams"><TeamLogo :name="match.homeTeamName" />{{ match.homeTeamName }} – <TeamLogo :name="match.awayTeamName" />{{ match.awayTeamName }}</strong>
+              <strong class="team-setup-match-teams flex flex-wrap items-center gap-1 [&_.team-logo]:size-5"><TeamLogo :name="match.homeTeamName" />{{ match.homeTeamName }} – <TeamLogo :name="match.awayTeamName" />{{ match.awayTeamName }}</strong>
               <span v-if="match.venue">{{ t('teamSetup.venue', { venue: match.venue }) }}</span>
-              <span v-if="match.id === recommendedMatch?.id" class="team-setup-match-badge">{{ t('teamSetup.recommendedMatch') }}</span>
-              <span v-if="match.status === 'Cancelled'" class="team-setup-match-badge">{{ t('teamSetup.cancelledMatch') }}</span>
+              <span v-if="match.id === recommendedMatch?.id" class="team-setup-match-badge font-bold text-orange!">{{ t('teamSetup.recommendedMatch') }}</span>
+              <span v-if="match.status === 'Cancelled'" class="team-setup-match-badge font-bold text-orange!">{{ t('teamSetup.cancelledMatch') }}</span>
             </button>
             <h4>{{ t('teamSetup.results') }}</h4>
             <p v-if="!pastMatches.length" class="team-setup-hint">{{ t('teamSetup.noPastMatches') }}</p>
             <button
               v-for="match in pastMatches"
               :key="match.id"
-              class="team-setup-match-option"
+              class="team-setup-match-option grid gap-[3px] rounded-[7px] border border-line bg-panel p-[9px_10px] text-left text-[10px] text-ink disabled:cursor-not-allowed disabled:opacity-55 [&.selected]:border-orange [&.selected]:bg-[color-mix(in_srgb,var(--orange)_8%,var(--panel))] [&>span]:text-muted [&_strong]:text-[11px]"
               :class="{ selected: selectedMatchId === match.id }"
               type="button"
               :disabled="match.status === 'Cancelled'"
@@ -548,10 +552,10 @@ function stepCompleted(index: number) {
               @click="selectMatch(match)"
             >
               <span class="team-setup-match-date">{{ formatMatchDate(match) }}</span>
-              <strong class="team-setup-match-teams"><TeamLogo :name="match.homeTeamName" />{{ match.homeTeamName }} {{ match.homeScore ?? '–' }} – {{ match.awayScore ?? '–' }} <TeamLogo :name="match.awayTeamName" />{{ match.awayTeamName }}</strong>
+              <strong class="team-setup-match-teams flex flex-wrap items-center gap-1 [&_.team-logo]:size-5"><TeamLogo :name="match.homeTeamName" />{{ match.homeTeamName }} {{ match.homeScore ?? '–' }} – {{ match.awayScore ?? '–' }} <TeamLogo :name="match.awayTeamName" />{{ match.awayTeamName }}</strong>
               <span v-if="match.venue">{{ t('teamSetup.venue', { venue: match.venue }) }}</span>
-              <span v-if="match.id === recommendedMatch?.id" class="team-setup-match-badge">{{ t('teamSetup.recommendedMatch') }}</span>
-              <span v-if="match.status === 'Cancelled'" class="team-setup-match-badge">{{ t('teamSetup.cancelledMatch') }}</span>
+              <span v-if="match.id === recommendedMatch?.id" class="team-setup-match-badge font-bold text-orange!">{{ t('teamSetup.recommendedMatch') }}</span>
+              <span v-if="match.status === 'Cancelled'" class="team-setup-match-badge font-bold text-orange!">{{ t('teamSetup.cancelledMatch') }}</span>
             </button>
           </template>
           <p v-else-if="!matchLoading && !matchError" class="team-setup-hint">{{ t('teamSetup.noMatches') }}</p>
@@ -571,11 +575,11 @@ function stepCompleted(index: number) {
         </div>
       </div>
 
-      <footer class="team-setup-footer">
-        <button v-if="rosterProfile" class="team-setup-secondary" type="button" :disabled="jerseySaving" @click="emit('cancel')">{{ t('teamSetup.cancel') }}</button>
-        <button v-else-if="step > 0" class="team-setup-secondary" type="button" :disabled="jerseySaving" @click="step--">{{ t('teamSetup.back') }}</button>
-        <button v-if="rosterProfile" class="team-setup-primary" type="button" :disabled="!canAdvance || jerseySaving || jerseyLoading" @click="saveRoster">{{ t('teamSetup.saveAndContinue') }}</button>
-        <button v-else class="team-setup-primary" type="button" :disabled="!canAdvance || jerseySaving" @click="advance">{{ t(step === steps.length - 1 ? 'teamSetup.saveAndContinue' : 'teamSetup.next') }}</button>
+      <footer class="team-setup-footer mt-3.5 flex justify-end gap-2">
+        <button v-if="rosterProfile" class="team-setup-secondary min-h-[42px] rounded-[7px] border border-line bg-[#faf9f7] px-[15px] text-xs font-bold text-[#66645e] dark:bg-control dark:text-ink" type="button" :disabled="jerseySaving" @click="emit('cancel')">{{ t('teamSetup.cancel') }}</button>
+        <button v-else-if="step > 0" class="team-setup-secondary min-h-[42px] rounded-[7px] border border-line bg-[#faf9f7] px-[15px] text-xs font-bold text-[#66645e] dark:bg-control dark:text-ink" type="button" :disabled="jerseySaving" @click="step--">{{ t('teamSetup.back') }}</button>
+        <button v-if="rosterProfile" class="team-setup-primary min-h-[42px] rounded-[7px] border-0 bg-orange px-[15px] text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-[#e8e6e1] disabled:text-[#aaa79f] dark:disabled:bg-[#30343c] dark:disabled:text-[#8d929c]" type="button" :disabled="!canAdvance || jerseySaving || jerseyLoading" @click="saveRoster">{{ t('teamSetup.saveAndContinue') }}</button>
+        <button v-else class="team-setup-primary min-h-[42px] rounded-[7px] border-0 bg-orange px-[15px] text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-[#e8e6e1] disabled:text-[#aaa79f] dark:disabled:bg-[#30343c] dark:disabled:text-[#8d929c]" type="button" :disabled="!canAdvance || jerseySaving" @click="advance">{{ t(step === steps.length - 1 ? 'teamSetup.saveAndContinue' : 'teamSetup.next') }}</button>
       </footer>
   </BaseDialog>
 </template>

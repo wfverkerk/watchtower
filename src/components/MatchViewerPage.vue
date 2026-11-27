@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import ActivityPanel from './ActivityPanel.vue'
 import FoulMarker from './FoulMarker.vue'
 import Scoreboard from './Scoreboard.vue'
+import AppNotice from './ui/AppNotice.vue'
 import ThankYouOverlay from './ThankYouOverlay.vue'
 import { errorMessage } from '../domain/guards'
 import { getPeriodTeamFouls, getPlayerFouls, getRecentActions, getScore, getTeamStats, type GameState } from '../domain/game'
@@ -96,14 +97,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="viewer-page">
-    <div class="viewer-bar">
+  <section class="viewer-page grid gap-2.5">
+    <div class="viewer-bar flex flex-wrap items-center justify-between gap-2">
       <button type="button" class="text-button" @click="emit('close')">← {{ t('roles.backToGames') }}</button>
-      <span class="viewer-badge" role="status">
+      <span class="viewer-badge rounded-full bg-[#f26a3622] px-2.5 py-1 text-[11px] font-bold text-ink" role="status">
         {{ t('roles.viewing') }}<template v-if="match && match.scorerId && scorerName"> · {{ t('roles.scorerIs', { name: scorerName }) }}</template>
       </span>
     </div>
-    <p v-if="error" class="notice" role="alert">{{ error }}</p>
+    <AppNotice v-if="error" tone="error" role="alert">{{ error }}</AppNotice>
     <p v-else-if="!game" class="statistics-hint" role="status">{{ t('statistics.loading') }}</p>
     <template v-if="game">
       <p v-if="!match?.scorerId && !match?.finishedAt" class="statistics-hint">{{ t('roles.noScorer') }}</p>
@@ -120,7 +121,7 @@ onUnmounted(() => {
         :team-fouls="teamFouls"
         read-only
       />
-      <section class="court-lineup panel viewer-lineup" :aria-label="t('roles.lineup')">
+      <section class="court-lineup panel viewer-lineup mt-0 [&_.statistics-hint]:m-0" :aria-label="t('roles.lineup')">
         <ul v-if="started && onCourt.length" class="court-lineup-players" tabindex="0">
           <li v-for="player in onCourt" :key="player.id">
             <span class="court-lineup-number">{{ player.jerseyNumber || '—' }}</span>

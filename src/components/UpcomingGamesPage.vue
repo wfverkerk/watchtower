@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import ScorerRoleDialog from './ScorerRoleDialog.vue'
 import ScheduleSide from './ScheduleSide.vue'
+import AppButton from './ui/AppButton.vue'
+import AppCard from './ui/AppCard.vue'
+import AppNotice from './ui/AppNotice.vue'
+import StatusBadge from './ui/StatusBadge.vue'
 import { errorMessage } from '../domain/guards'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { gameStartMs, groupByDay, groupTeams, localDateKey, scheduleBucket, teamGroupLabelKeys, winnerSide, type ScheduleGame } from '../domain/schedule'
@@ -307,137 +311,134 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="sessions-page">
-    <div class="landing-toggle" role="group" :aria-label="t('sessions.myTeams')">
-      <button type="button" :class="{ 'is-active': mode === 'mine' }" :aria-pressed="mode === 'mine' ? 'true' : 'false'" @click="selectMine">{{ t('sessions.myTeams') }}</button>
-      <button type="button" :class="{ 'is-active': mode === 'all' }" :aria-pressed="mode === 'all' ? 'true' : 'false'" @click="selectAll">{{ t('sessions.allTeams') }}</button>
+  <section class="sessions-page grid gap-4 pb-8">
+    <div class="landing-toggle inline-flex justify-self-center gap-0.5 rounded-full border border-line p-[3px]" role="group" :aria-label="t('sessions.myTeams')">
+      <button type="button" class="cursor-pointer rounded-full border-0 bg-transparent px-3.5 py-1.5 font-bold text-inherit opacity-60 [&.is-active]:bg-orange [&.is-active]:text-white [&.is-active]:opacity-100" :class="{ 'is-active': mode === 'mine' }" :aria-pressed="mode === 'mine' ? 'true' : 'false'" @click="selectMine">{{ t('sessions.myTeams') }}</button>
+      <button type="button" class="cursor-pointer rounded-full border-0 bg-transparent px-3.5 py-1.5 font-bold text-inherit opacity-60 [&.is-active]:bg-orange [&.is-active]:text-white [&.is-active]:opacity-100" :class="{ 'is-active': mode === 'all' }" :aria-pressed="mode === 'all' ? 'true' : 'false'" @click="selectAll">{{ t('sessions.allTeams') }}</button>
     </div>
-    <p v-if="!configured" class="notice">{{ t('sync.notConfigured') }}</p>
-    <p v-if="error" class="notice" role="alert">{{ t('sessions.loadError') }}: {{ error }}</p>
+    <AppNotice v-if="!configured" tone="error">{{ t('sync.notConfigured') }}</AppNotice>
+    <AppNotice v-if="error" tone="error" role="alert">{{ t('sessions.loadError') }}: {{ error }}</AppNotice>
     <p v-if="checking" class="statistics-hint" role="status">{{ t('roles.checking') }}</p>
-    <p v-if="scheduleError" class="notice" role="alert">{{ t('sessions.scheduleError') }}: {{ scheduleError }}</p>
-    <section v-if="editing" class="panel statistics-card my-teams-editor">
-      <h2>{{ t('sessions.pickMyTeams') }}</h2>
-      <div class="session-actions">
-        <button type="button" class="match-sync-secondary" :disabled="allDraftSelected" @click="pickAllTeams">{{ t('sessions.selectAllTeams') }}</button>
-        <button type="button" class="match-sync-secondary" :disabled="!draftFavorites.length" @click="clearTeams">{{ t('sessions.deselectAllTeams') }}</button>
+    <AppNotice v-if="scheduleError" tone="error" role="alert">{{ t('sessions.scheduleError') }}: {{ scheduleError }}</AppNotice>
+    <AppCard v-if="editing" class="my-teams-editor" :title="t('sessions.pickMyTeams')">
+      <div class="session-actions flex flex-wrap gap-2">
+        <AppButton :disabled="allDraftSelected" @click="pickAllTeams">{{ t('sessions.selectAllTeams') }}</AppButton>
+        <AppButton :disabled="!draftFavorites.length" @click="clearTeams">{{ t('sessions.deselectAllTeams') }}</AppButton>
       </div>
-      <div v-for="section in teamSections" :key="section.group" class="favorite-team-section">
-        <h3>{{ t(teamGroupLabelKeys[section.group]) }}</h3>
-        <div class="favorite-team-grid">
+      <div v-for="section in teamSections" :key="section.group" class="favorite-team-section mb-3 grid gap-1.5">
+        <h3 class="m-0 text-[0.95em] opacity-75">{{ t(teamGroupLabelKeys[section.group]) }}</h3>
+        <div class="favorite-team-grid grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2 p-0.5">
           <button
             v-for="name in section.teams"
             :key="name"
             type="button"
-            class="favorite-team-tile"
+            class="favorite-team-tile flex cursor-pointer items-center justify-between gap-1.5 rounded-[10px] border-2 border-line bg-transparent px-2 py-1.5 text-left text-[0.85em] font-semibold text-inherit [&.is-favorite]:border-[#e0457b] [&.is-favorite_.favorite-tile-heart]:text-[#e0457b]"
             :class="{ 'is-favorite': draftFavorites.includes(name) }"
             :aria-pressed="draftFavorites.includes(name) ? 'true' : 'false'"
             :aria-label="name"
             @click="toggleDraft(name)"
           >
             <span>{{ name }}</span>
-            <span class="favorite-tile-heart" aria-hidden="true">♥</span>
+            <span class="favorite-tile-heart text-[1.1em] leading-none text-line" aria-hidden="true">♥</span>
           </button>
         </div>
       </div>
-      <div class="session-actions">
-        <button type="button" class="match-sync-primary" :disabled="!draftFavorites.length" @click="saveMyTeams">{{ t('sessions.saveMyTeams') }}</button>
+      <div class="session-actions flex flex-wrap gap-2">
+        <AppButton variant="primary" :disabled="!draftFavorites.length" @click="saveMyTeams">{{ t('sessions.saveMyTeams') }}</AppButton>
       </div>
-    </section>
+    </AppCard>
     <template v-if="!editing">
-    <section class="panel statistics-card">
+    <AppCard>
       <p v-if="!openGames.length && !practiceGame" class="statistics-hint">{{ t('sessions.openEmpty') }}</p>
-      <div v-if="!openGames.length && !practiceGame" class="session-actions">
-        <button type="button" class="match-sync-primary" :disabled="hasCurrentGame" @click="emit('practice')">{{ t('sessions.practiceStart') }}</button>
+      <div v-if="!openGames.length && !practiceGame" class="session-actions flex flex-wrap gap-2">
+        <AppButton variant="primary" :disabled="hasCurrentGame" @click="emit('practice')">{{ t('sessions.practiceStart') }}</AppButton>
       </div>
-      <article v-if="practiceGame" class="session-row schedule-game is-live practice-open-game">
-        <button type="button" class="schedule-open-trigger" @click="emit('resume')">
-          <span class="schedule-match">
+      <article v-if="practiceGame" class="session-row schedule-game is-live practice-open-game relative grid gap-1.5 border-t border-line py-3.5">
+        <button type="button" class="schedule-open-trigger grid w-full cursor-pointer gap-1.5 border-0 bg-transparent p-0 text-left text-inherit after:absolute after:inset-0 after:rounded-[inherit] after:content-['']" @click="emit('resume')">
+          <span class="schedule-match grid grid-cols-[minmax(0,1fr)_minmax(0,10rem)_minmax(0,1fr)] items-center gap-3">
             <ScheduleSide :team="practiceGame.homeTeam" :club="zoebasClubName" />
-            <span class="schedule-center">
-              <span class="schedule-venue">{{ t('sessions.practiceBadge') }}</span>
-              <span class="schedule-score is-live">
+            <span class="schedule-center grid min-w-0 items-center justify-items-center gap-1 self-center text-center break-anywhere">
+              <span class="schedule-venue text-[0.9em] opacity-75">{{ t('sessions.practiceBadge') }}</span>
+              <span class="schedule-score is-live inline-flex animate-[live-score-pulse_1.6s_ease-in-out_infinite] flex-col items-center rounded-xl bg-[#e5484d] px-3.5 py-1 text-[2em] leading-[1.2] text-white motion-reduce:animate-none">
                 <span>{{ practiceGame.homeScore }} – {{ practiceGame.awayScore }}</span>
-                <span class="live-score-label">{{ statusLabel('live') }}</span>
+                <span class="live-score-label text-[0.4em] font-bold tracking-[0.08em] uppercase">{{ statusLabel('live') }}</span>
               </span>
-              <time class="schedule-time is-small">{{ practiceGame.startTime }}</time>
+              <time class="schedule-time is-small text-[0.9em] leading-normal">{{ practiceGame.startTime }}</time>
             </span>
             <ScheduleSide :team="practiceGame.awayTeam" :club="practiceGame.awayClub" />
           </span>
         </button>
       </article>
-      <article v-for="game in openGames" :key="game.id" class="session-row schedule-game" :class="{ 'is-live': sessionForGame(game)?.status === 'live' }">
-        <button type="button" class="schedule-open-trigger" :disabled="!canPick(game)" @click="tapGame(game)">
-          <span class="schedule-match">
+      <article v-for="game in openGames" :key="game.id" class="session-row schedule-game relative grid gap-1.5 border-t border-line py-3.5" :class="{ 'is-live': sessionForGame(game)?.status === 'live' }">
+        <button type="button" class="schedule-open-trigger grid w-full cursor-pointer gap-1.5 border-0 bg-transparent p-0 text-left text-inherit after:absolute after:inset-0 after:rounded-[inherit] after:content-['']" :disabled="!canPick(game)" @click="tapGame(game)">
+          <span class="schedule-match grid grid-cols-[minmax(0,1fr)_minmax(0,10rem)_minmax(0,1fr)] items-center gap-3">
             <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
-            <span v-if="isLiveGame(game)" class="schedule-center">
-              <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
-              <span class="schedule-score is-live">
+            <span v-if="isLiveGame(game)" class="schedule-center grid min-w-0 items-center justify-items-center gap-1 self-center text-center break-anywhere">
+              <span v-if="game.venue" class="schedule-venue text-[0.9em] opacity-75">{{ game.venue }}</span>
+              <span class="schedule-score is-live inline-flex animate-[live-score-pulse_1.6s_ease-in-out_infinite] flex-col items-center rounded-xl bg-[#e5484d] px-3.5 py-1 text-[2em] leading-[1.2] text-white motion-reduce:animate-none">
                 <span>{{ sessionForGame(game)?.homeScore ?? 0 }} – {{ sessionForGame(game)?.awayScore ?? 0 }}</span>
-                <span class="live-score-label">{{ statusLabel('live') }}</span>
+                <span class="live-score-label text-[0.4em] font-bold tracking-[0.08em] uppercase">{{ statusLabel('live') }}</span>
               </span>
-              <time class="schedule-time is-small">{{ game.startTime }}</time>
+              <time class="schedule-time is-small text-[0.9em] leading-normal">{{ game.startTime }}</time>
             </span>
-            <span v-else class="schedule-center">
-              <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
-              <time class="schedule-time">{{ game.startTime }}</time>
+            <span v-else class="schedule-center grid min-w-0 items-center justify-items-center gap-1 self-center text-center break-anywhere">
+              <span v-if="game.venue" class="schedule-venue text-[0.9em] opacity-75">{{ game.venue }}</span>
+              <time class="schedule-time text-[2em] leading-[1.2]">{{ game.startTime }}</time>
             </span>
             <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </span>
         </button>
-        <span v-if="sessionForGame(game) && !isLiveGame(game)" class="session-status" :data-status="sessionForGame(game)!.status">{{ statusLabel(sessionForGame(game)!.status) }}</span>
+        <StatusBadge v-if="sessionForGame(game) && !isLiveGame(game)" :status="sessionForGame(game)!.status">{{ statusLabel(sessionForGame(game)!.status) }}</StatusBadge>
         <span v-else-if="!sessionForGame(game) && !canPick(game)" class="statistics-hint">{{ t('sessions.opensBefore') }}</span>
-        <div v-if="sessionForGame(game)?.canReview && sessionForGame(game)?.status === 'in_review'" class="session-actions">
-          <button type="button" class="match-sync-primary" @click="finalizeSession(sessionForGame(game)!.id)">{{ t('sessions.finalise') }}</button>
+        <div v-if="sessionForGame(game)?.canReview && sessionForGame(game)?.status === 'in_review'" class="session-actions relative z-1 flex flex-wrap gap-2">
+          <AppButton variant="primary" @click="finalizeSession(sessionForGame(game)!.id)">{{ t('sessions.finalise') }}</AppButton>
         </div>
       </article>
-    </section>
-    <section class="panel statistics-card">
-      <h2>{{ t('sessions.upcomingTitle') }}</h2>
+    </AppCard>
+    <AppCard :title="t('sessions.upcomingTitle')">
       <p v-if="!upcomingDays.length" class="statistics-hint">{{ t('sessions.upcomingEmpty') }}</p>
-      <details v-for="(day, index) in upcomingDays" :key="day.date" class="history-day" :open="isExpandedDay(day.date, index)">
-        <summary class="schedule-day-summary">{{ formatDay(day.date) }} <small>{{ day.games.length }}</small></summary>
-        <article v-for="game in day.games" :key="game.id" class="session-row schedule-game">
-          <div class="schedule-match">
+      <details v-for="(day, index) in upcomingDays" :key="day.date" class="history-day border-t border-line py-2" :open="isExpandedDay(day.date, index)">
+        <summary class="schedule-day-summary cursor-pointer py-1.5 font-bold capitalize [&_small]:ml-1.5 [&_small]:font-normal [&_small]:opacity-70">{{ formatDay(day.date) }} <small>{{ day.games.length }}</small></summary>
+        <article v-for="game in day.games" :key="game.id" class="session-row schedule-game relative grid gap-1.5 border-t border-line py-3.5">
+          <div class="schedule-match grid grid-cols-[minmax(0,1fr)_minmax(0,10rem)_minmax(0,1fr)] items-center gap-3">
             <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" :position="game.homePosition" />
-            <span class="schedule-center">
-              <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
-              <time class="schedule-time">{{ game.startTime }}</time>
+            <span class="schedule-center grid min-w-0 items-center justify-items-center gap-1 self-center text-center break-anywhere">
+              <span v-if="game.venue" class="schedule-venue text-[0.9em] opacity-75">{{ game.venue }}</span>
+              <time class="schedule-time text-[2em] leading-[1.2]">{{ game.startTime }}</time>
             </span>
             <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" :position="game.awayPosition" />
           </div>
         </article>
       </details>
-    </section>
-    <section class="panel statistics-card">
-      <h2>{{ t('sessions.historyTitle') }}</h2>
+    </AppCard>
+    <AppCard :title="t('sessions.historyTitle')">
       <p v-if="!historyGames.length" class="statistics-hint">{{ t('sessions.historyEmpty') }}</p>
-      <details v-for="day in historyDays" :key="day.date" class="history-day">
-        <summary>{{ formatDay(day.date) }} <small>{{ day.games.length }}</small></summary>
-        <article v-for="game in day.games" :key="game.id" class="session-row schedule-game">
-          <span class="stats-label" :class="game.hasStats ? 'has-stats' : 'no-stats'">{{ game.hasStats ? t('sessions.withStats') : t('sessions.withoutStats') }}</span>
-          <div class="schedule-match">
+      <details v-for="day in historyDays" :key="day.date" class="history-day border-t border-line py-2">
+        <summary class="cursor-pointer py-1.5 font-bold capitalize [&_small]:ml-1.5 [&_small]:font-normal [&_small]:opacity-70">{{ formatDay(day.date) }} <small>{{ day.games.length }}</small></summary>
+        <article v-for="game in day.games" :key="game.id" class="session-row schedule-game relative grid gap-1.5 border-t border-line py-3.5">
+          <span class="stats-label justify-self-start rounded-full px-2.5 py-0.5 text-xs font-bold" :class="game.hasStats ? 'has-stats bg-[#d5e8d4] text-[#1f5a1a]' : 'no-stats bg-line text-inherit'">{{ game.hasStats ? t('sessions.withStats') : t('sessions.withoutStats') }}</span>
+          <div class="schedule-match grid grid-cols-[minmax(0,1fr)_minmax(0,10rem)_minmax(0,1fr)] items-center gap-3">
             <ScheduleSide :team="game.homeTeam" :club="game.homeClub" :logo-url="game.homeLogoUrl" />
-            <span class="schedule-center">
-              <span v-if="game.venue" class="schedule-venue">{{ game.venue }}</span>
-              <span class="schedule-score">
-                <span :class="winnerSide(game) === 'home' ? 'is-winner' : 'is-loser'">{{ game.homeScore ?? '–' }}</span>
+            <span class="schedule-center grid min-w-0 items-center justify-items-center gap-1 self-center text-center break-anywhere">
+              <span v-if="game.venue" class="schedule-venue text-[0.9em] opacity-75">{{ game.venue }}</span>
+              <span class="schedule-score inline-flex items-center gap-2 rounded-xl bg-line px-3.5 py-1 text-[2em] leading-[1.2]">
+                <span :class="winnerSide(game) === 'home' ? 'is-winner font-extrabold' : 'is-loser'">{{ game.homeScore ?? '–' }}</span>
                 –
-                <span :class="winnerSide(game) === 'away' ? 'is-winner' : 'is-loser'">{{ game.awayScore ?? '–' }}</span>
+                <span :class="winnerSide(game) === 'away' ? 'is-winner font-extrabold' : 'is-loser'">{{ game.awayScore ?? '–' }}</span>
               </span>
-              <time class="schedule-time is-small">{{ game.startTime }}</time>
+              <time class="schedule-time is-small text-[0.9em] leading-normal">{{ game.startTime }}</time>
             </span>
             <ScheduleSide :team="game.awayTeam" :club="game.awayClub" :logo-url="game.awayLogoUrl" />
           </div>
-          <div v-if="sessionForGame(game)?.canReview && sessionForGame(game)?.status === 'in_review'" class="session-actions">
-            <button type="button" class="match-sync-primary" @click="finalizeSession(sessionForGame(game)!.id)">{{ t('sessions.finalise') }}</button>
+          <div v-if="sessionForGame(game)?.canReview && sessionForGame(game)?.status === 'in_review'" class="session-actions flex flex-wrap gap-2">
+            <AppButton variant="primary" @click="finalizeSession(sessionForGame(game)!.id)">{{ t('sessions.finalise') }}</AppButton>
           </div>
         </article>
       </details>
-    </section>
+    </AppCard>
     </template>
-    <div v-if="!editing && showMine" class="session-actions my-teams-change">
-      <button type="button" class="match-sync-secondary" @click="startEditing">{{ t('sessions.changeMyTeams') }}</button>
+    <div v-if="!editing && showMine" class="session-actions my-teams-change mt-4 flex flex-wrap gap-2">
+      <AppButton @click="startEditing">{{ t('sessions.changeMyTeams') }}</AppButton>
     </div>
     <ScorerRoleDialog
       v-if="roleGame"

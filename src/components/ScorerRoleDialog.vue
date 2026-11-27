@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useLocale } from '../i18n/useLocale'
 import BaseDialog from './BaseDialog.vue'
 import JoinSidePicker from './JoinSidePicker.vue'
+import AppButton from './ui/AppButton.vue'
 
 defineProps<{
   homeName: string
@@ -22,34 +23,34 @@ const step = ref<'choose' | 'scorer'>('choose')
 
 <template>
   <BaseDialog
-    backdrop-class="match-dialog-backdrop"
-    dialog-class="panel user-profile-dialog"
+    dialog-class="user-profile-dialog"
+    size="lg"
     labelledby="role-dialog-title"
     @close="emit('cancel')"
   >
-    <div class="role-dialog">
-      <h2 id="role-dialog-title">{{ t('roles.title') }}</h2>
+    <div class="role-dialog grid gap-3">
+      <h2 id="role-dialog-title" class="m-0 text-[19px]">{{ t('roles.title') }}</h2>
       <p class="statistics-hint">{{ homeName }} – {{ awayName }}</p>
 
       <template v-if="step === 'choose'">
-        <p class="role-notice" role="status">{{ t('roles.noScorer') }}</p>
-        <div class="role-options">
-          <button type="button" class="role-option" :disabled="busy" @click="step = 'scorer'">
-            <strong>{{ t('roles.scorerTitle') }}</strong>
-            <span>{{ t('roles.scorerText') }}</span>
+        <p class="role-notice m-0 rounded-lg bg-[#f26a3618] px-2.5 py-2 text-[13px] font-semibold text-ink" role="status">{{ t('roles.noScorer') }}</p>
+        <div class="role-options grid gap-2.5">
+          <button type="button" class="role-option grid gap-1 rounded-xl border border-line bg-panel p-3.5 text-left text-ink not-disabled:active:border-orange disabled:cursor-not-allowed disabled:opacity-55" :disabled="busy" @click="step = 'scorer'">
+            <strong class="text-base">{{ t('roles.scorerTitle') }}</strong>
+            <span class="text-[13px] leading-[1.35] text-muted">{{ t('roles.scorerText') }}</span>
           </button>
-          <button type="button" class="role-option" :disabled="busy" @click="emit('view')">
-            <strong>{{ t('roles.viewerTitle') }}</strong>
-            <span>{{ t('roles.viewerText') }}</span>
+          <button type="button" class="role-option grid gap-1 rounded-xl border border-line bg-panel p-3.5 text-left text-ink not-disabled:active:border-orange disabled:cursor-not-allowed disabled:opacity-55" :disabled="busy" @click="emit('view')">
+            <strong class="text-base">{{ t('roles.viewerTitle') }}</strong>
+            <span class="text-[13px] leading-[1.35] text-muted">{{ t('roles.viewerText') }}</span>
           </button>
         </div>
-        <button type="button" class="match-sync-secondary" @click="emit('cancel')">{{ t('sessions.cancelPick') }}</button>
+        <AppButton @click="emit('cancel')">{{ t('sessions.cancelPick') }}</AppButton>
       </template>
 
       <template v-else>
-        <div class="role-disclaimer" role="note">
+        <div class="role-disclaimer grid gap-1 rounded-[10px] border border-orange bg-[color-mix(in_srgb,var(--orange)_10%,var(--panel))] p-3">
           <strong>{{ t('roles.disclaimerTitle') }}</strong>
-          <p>{{ t('roles.disclaimer') }}</p>
+          <p class="m-0 text-[13px] leading-[1.4]">{{ t('roles.disclaimer') }}</p>
         </div>
         <JoinSidePicker
           :home-name="homeName"

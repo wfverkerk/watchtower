@@ -3,6 +3,7 @@ import { useLocale } from '../i18n/useLocale'
 import type { Player } from '../domain/game'
 import PlayerSelectionList from './PlayerSelectionList.vue'
 import BaseDialog from './BaseDialog.vue'
+import DialogHeader from './DialogHeader.vue'
 
 const { t } = useLocale()
 
@@ -24,19 +25,14 @@ const emit = defineEmits<{
 
 <template>
   <BaseDialog
-    backdrop-class="player-picker-backdrop"
-    dialog-class="player-picker panel lineup-picker"
+    variant="player"
+    dialog-class="lineup-picker"
     labelledby="lineup-picker-title"
     :label="t('lineup.dialog', { team: teamName })"
     close-on-backdrop
     @close="emit('cancel')"
   >
-      <div class="player-picker-heading">
-        <div>
-          <p class="eyebrow">{{ teamName }} · {{ t('lineup.heading') }}</p>
-          <h2 id="lineup-picker-title">{{ periodLabel === undefined ? t('lineup.chooseFive') : t('lineup.chooseForPeriod', { period: periodLabel }) }}</h2>
-        </div>
-      </div>
+      <DialogHeader :eyebrow="`${teamName} · ${t('lineup.heading')}`" :title="periodLabel === undefined ? t('lineup.chooseFive') : t('lineup.chooseForPeriod', { period: periodLabel })" title-id="lineup-picker-title" />
       <p class="lineup-count">{{ t('lineup.selectedCount', { count: selectedPlayerIds.length }) }}</p>
       <p v-if="error" class="form-error" role="alert">{{ error }}</p>
       <PlayerSelectionList

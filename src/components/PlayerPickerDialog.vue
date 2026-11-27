@@ -7,6 +7,7 @@ import type { EventFlowStep } from '../domain/eventFlow'
 import ShotLocationPicker from './ShotLocationPicker.vue'
 import EventFlowPlayerButton from './EventFlowPlayerButton.vue'
 import BaseDialog from './BaseDialog.vue'
+import DialogHeader from './DialogHeader.vue'
 
 type PendingAction = { type: StatType; value: number }
 
@@ -78,8 +79,7 @@ function actionLabel(action: PendingAction) {
 
 <template>
   <BaseDialog
-    backdrop-class="player-picker-backdrop"
-    dialog-class="player-picker panel"
+    variant="player"
     labelledby="player-picker-title"
     :label="t(action.type === 'score' ? 'picker.scoringDialog' : 'picker.playerDialog', { team: teamName, action: actionLabel(action) })"
     close-on-backdrop
@@ -102,12 +102,7 @@ function actionLabel(action: PendingAction) {
         </div>
       </div>
 
-      <div class="player-picker-heading">
-        <div>
-          <p class="eyebrow">{{ teamName }} · {{ actionLabel(action) }}</p>
-          <h2 id="player-picker-title">{{ questionLabel }}</h2>
-        </div>
-      </div>
+      <DialogHeader :eyebrow="`${teamName} · ${actionLabel(action)}`" :title="questionLabel" title-id="player-picker-title" />
 
       <template v-if="currentStep === 'player'">
         <template v-if="action.type === 'foul'">

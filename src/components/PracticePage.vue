@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import PageHeader from './PageHeader.vue'
+import AppButton from './ui/AppButton.vue'
+import AppCard from './ui/AppCard.vue'
+import AppNotice from './ui/AppNotice.vue'
 import { onMounted, ref } from 'vue'
 import { errorMessage } from '../domain/guards'
 import { fullTeamName, isPracticeGame } from '../domain/game'
@@ -95,34 +98,32 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="sessions-page practice-page">
+  <section class="sessions-page practice-page grid gap-4 pb-8">
     <PageHeader :eyebrow="t('sessions.practiceEyebrow')" :title="t('sessions.practiceTitle')">
-      <button class="match-sync-secondary" type="button" @click="emit('close')">{{ t('sessions.practiceBack') }}</button>
+      <AppButton @click="emit('close')">{{ t('sessions.practiceBack') }}</AppButton>
     </PageHeader>
-    <p v-if="!configured" class="notice">{{ t('sync.notConfigured') }}</p>
-    <p v-if="error" class="notice" role="alert">{{ error }}</p>
-    <p v-if="localError" class="notice" role="alert">{{ localError }}</p>
-    <section class="panel statistics-card practice-card">
-      <h2>{{ t('sessions.practiceTitle') }}</h2>
+    <AppNotice v-if="!configured" tone="error">{{ t('sync.notConfigured') }}</AppNotice>
+    <AppNotice v-if="error" tone="error" role="alert">{{ error }}</AppNotice>
+    <AppNotice v-if="localError" tone="error" role="alert">{{ localError }}</AppNotice>
+    <AppCard class="practice-card" :title="t('sessions.practiceTitle')">
       <p class="statistics-hint">{{ t('sessions.practiceHint') }}</p>
-      <div class="session-actions">
-        <button type="button" class="match-sync-primary" :disabled="hasCurrentGame" @click="emit('start')">{{ t('sessions.practiceStart') }}</button>
+      <div class="session-actions flex flex-wrap gap-2">
+        <AppButton variant="primary" :disabled="hasCurrentGame" @click="emit('start')">{{ t('sessions.practiceStart') }}</AppButton>
       </div>
       <p v-if="hasCurrentGame" class="statistics-hint">{{ t('sessions.finishFirst') }}</p>
-    </section>
-    <section class="panel statistics-card">
-      <h2>{{ t('sessions.localFinished') }}</h2>
+    </AppCard>
+    <AppCard :title="t('sessions.localFinished')">
       <p v-if="!localMatches.length" class="statistics-hint">{{ t('sessions.localEmpty') }}</p>
-      <div v-for="match in localMatches" :key="match.id" class="session-row">
+      <div v-for="match in localMatches" :key="match.id" class="session-row grid gap-1.5 border-t border-line py-3.5">
         <strong>{{ fullTeamName(match.game.teams[0]) }} – {{ fullTeamName(match.game.teams[1]) }}</strong>
         <span>{{ match.game.matchInfo?.date }} {{ match.game.matchInfo?.startTime }}</span>
-        <span v-if="isPracticeGame(match.game)" class="session-status practice-badge">{{ t('sessions.practiceBadge') }}</span>
+        <span v-if="isPracticeGame(match.game)" class="session-status practice-badge justify-self-start rounded-full bg-line px-2.5 py-0.5 text-xs font-bold">{{ t('sessions.practiceBadge') }}</span>
         <template v-if="match.submission?.resultMatchId">
           <span class="statistics-hint">{{ t(match.submission.statisticsTeamId ? 'sessions.practiceInStatistics' : 'sessions.submitted') }}</span>
           <template v-if="isPracticeGame(match.game) && !match.submission.statisticsTeamId">
             <p v-if="statisticsErrors[match.id]" class="statistics-hint" role="alert">{{ statisticsErrors[match.id] }}</p>
             <p class="statistics-hint">{{ t('sessions.practiceStatisticsHint') }}</p>
-            <button type="button" class="match-sync-secondary" :disabled="!configured || !!submitting" @click="retryStatistics(match)">{{ t('sessions.practiceAddToStatistics') }}</button>
+            <AppButton :disabled="!configured || !!submitting" @click="retryStatistics(match)">{{ t('sessions.practiceAddToStatistics') }}</AppButton>
           </template>
         </template>
         <template v-else>
@@ -134,10 +135,10 @@ onMounted(() => {
               </option>
             </select>
           </label>
-          <button type="button" class="match-sync-primary" :disabled="!configured || !!submitting || !match.game.matchInfo?.startsAt" @click="submit(match)">{{ t('sessions.submit') }}</button>
+          <AppButton variant="primary" :disabled="!configured || !!submitting || !match.game.matchInfo?.startsAt" @click="submit(match)">{{ t('sessions.submit') }}</AppButton>
           <span v-if="!match.game.matchInfo?.startsAt" class="statistics-hint">{{ t('sessions.missingStart') }}</span>
         </template>
       </div>
-    </section>
+    </AppCard>
   </section>
 </template>

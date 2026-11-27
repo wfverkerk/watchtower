@@ -15,6 +15,6 @@ const source = computed(() => {
 </script>
 
 <template>
-  <img v-if="source" class="team-logo" :src="source" alt="" loading="lazy" @error="failedSource = source">
-  <span v-else-if="placeholder" class="team-logo team-logo-empty" aria-hidden="true"></span>
+  <img v-if="source" class="team-logo size-7 flex-none rounded object-contain" :src="source" alt="" loading="lazy" @error="failedSource = source">
+  <span v-else-if="placeholder" class="team-logo team-logo-empty size-7 flex-none rounded bg-page" aria-hidden="true"></span>
 </template>
