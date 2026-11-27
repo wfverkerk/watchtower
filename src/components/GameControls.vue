@@ -10,6 +10,7 @@ defineProps<{
   gameStarted: boolean
   canStart: boolean
   awaitingFirstPeriod: boolean
+  expertMode: boolean
 }>()
 
 const emit = defineEmits<{
@@ -90,11 +91,14 @@ const emit = defineEmits<{
       </div>
       <div class="action-group">
         <p class="field-label action-label">{{ t('controls.rebounds') }}</p>
-        <div class="action-grid action-grid-two">
-          <button class="action-card" @click="emit('add-action', 'offensive_rebound')">
+        <div class="action-grid" :class="{ 'action-grid-two': expertMode }">
+          <button v-if="!expertMode" class="action-card" @click="emit('add-action', 'rebound')">
+            <span class="action-icon">↕</span><span>{{ t('controls.rebound') }}</span>
+          </button>
+          <button v-if="expertMode" class="action-card" @click="emit('add-action', 'offensive_rebound')">
             <span class="action-icon">↗</span><span>{{ t('controls.offensive') }}</span>
           </button>
-          <button class="action-card" @click="emit('add-action', 'defensive_rebound')">
+          <button v-if="expertMode" class="action-card" @click="emit('add-action', 'defensive_rebound')">
             <span class="action-icon">↙</span><span>{{ t('controls.defensive') }}</span>
           </button>
         </div>

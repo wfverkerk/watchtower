@@ -18,7 +18,7 @@ describe('profile settings', () => {
     })
     app.mount(document.body.appendChild(document.createElement('div')))
     expect(document.querySelector('.profile-build-id')).toBeNull()
-    profile.value = { name: 'Jamie', description: '', locale: 'nl', keepScreenAwake: true }
+    profile.value = { name: 'Jamie', description: '', locale: 'nl', keepScreenAwake: true, expertMode: false }
     await nextTick()
     expect(document.querySelector('.profile-build-id')?.textContent).toBe(`Build: ${__BUILD_ID__}`)
   })

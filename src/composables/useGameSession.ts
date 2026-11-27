@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch, type Ref } from 'vue'
 import {
   canStartGame as isReadyToStart,
   createInitialGameState,
@@ -73,13 +73,13 @@ function cloneProfiles(profiles: TeamProfile[]) {
   return profiles.map((profile) => ({ ...profile, players: profile.players.map((player) => ({ ...player })) }))
 }
 
-export function useGameSession() {
+export function useGameSession(expertMode: Readonly<Ref<boolean>> = ref(false)) {
   const { t, locale, displayPlayerName } = useLocale()
   const currentLocale = computed(() => isAppLocale(locale.value) ? locale.value : 'nl')
   const game = reactive<GameState>(createInitialGameState(currentLocale.value))
   const selectedTeamId = ref(game.teams[0].id)
   const pendingAction = ref<PendingAction | null>(null)
-  const pendingFlow = computed(() => pendingAction.value ? getEventFlow(pendingAction.value) : [])
+  const pendingFlow = computed(() => pendingAction.value ? getEventFlow(pendingAction.value, expertMode.value) : [])
   const pendingFlowIndex = ref(0)
   const pendingScorerId = ref('')
   const pendingAssistId = ref<string | 'none' | null>(null)
@@ -464,7 +464,7 @@ export function useGameSession() {
   function commitPendingAction() {
     const action = pendingAction.value
     if (!action || !pendingScorerId.value || (!game.gameStarted && !matchLink.value?.finished)) return
-    if (action.type === 'foul' && !pendingFoulType.value) return
+    if (expertMode.value && action.type === 'foul' && !pendingFoulType.value) return
     if (action.type === 'score') {
       commitScore(action)
     } else if (action.type === 'missed_shot') {

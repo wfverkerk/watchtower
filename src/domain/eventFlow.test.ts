@@ -11,4 +11,11 @@ describe('event flows', () => {
     expect(getEventFlow({ type: 'missed_shot', value: 3 })).toEqual(['player', 'rebound', 'location'])
     expect(getEventFlow({ type: 'missed_shot', value: 1 })).toEqual(['player', 'rebound'])
   })
+
+  it('only asks for the player when expert mode is off', () => {
+    expect(getEventFlow({ type: 'score', value: 3 }, false)).toEqual(['player'])
+    expect(getEventFlow({ type: 'missed_shot', value: 2 }, false)).toEqual(['player'])
+    expect(getEventFlow({ type: 'foul', value: 1 }, false)).toEqual(['player'])
+    expect(getEventFlow({ type: 'turnover', value: 1 }, false)).toEqual(['player'])
+  })
 })

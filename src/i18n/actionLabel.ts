@@ -34,6 +34,9 @@ const pluralRules: Record<AppLocale, Intl.PluralRules> = {
   nl: new Intl.PluralRules('nl'),
   en: new Intl.PluralRules('en'),
   cs: new Intl.PluralRules('cs'),
+  pl: new Intl.PluralRules('pl'),
+  el: new Intl.PluralRules('el'),
+  tr: new Intl.PluralRules('tr'),
 }
 
 function pointsKey(prefix: 'score' | 'missed', value: number, locale: AppLocale): TranslationKey {

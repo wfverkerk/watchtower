@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createApp, h, type App } from 'vue'
+import { createApp, h, ref, type App } from 'vue'
 import { createInitialGameState, foulCoachId } from '../domain/game'
 import { saveGameState } from '../services/gameStorage'
 import { loadMatchEvents, saveMatchLink } from '../services/matchEventLog'
@@ -91,17 +91,35 @@ describe('event flows', () => {
     expect(shared.players.find((player) => player.id === 'home-1')?.isOnCourt).toBe(false)
   })
 
-  async function mountStartedGame() {
+  async function mountStartedGame(expertMode = ref(true)) {
     const game = createInitialGameState()
     game.gameStarted = true
     game.period = 1
     saveGameState(game)
     let session!: ReturnType<typeof useGameSession>
-    app = createApp({ setup() { session = useGameSession(); return () => h('div') } })
+    app = createApp({ setup() { session = useGameSession(expertMode); return () => h('div') } })
     app.mount(document.body.appendChild(document.createElement('div')))
     await vi.waitFor(() => expect(session.game.gameStarted).toBe(true))
     return session
   }
+
+  it('records detailed events after one player selection when expert mode is off', async () => {
+    const session = await mountStartedGame(ref(false))
+
+    session.addAction('score', 3)
+    session.selectPlayer('home-1')
+    session.addAction('foul', 1)
+    session.selectPlayer(foulCoachId('home'))
+    session.addAction('turnover', 1)
+    session.selectPlayer('home-2')
+
+    expect(session.pendingAction.value).toBeNull()
+    expect(session.game.actions).toMatchObject([
+      { type: 'score', value: 3, playerId: 'home-1' },
+      { type: 'foul', playerId: foulCoachId('home'), foulType: undefined },
+      { type: 'turnover', playerId: 'home-2', turnoverType: 'turnover' },
+    ])
+  })
 
   it('asks for the rebound after a missed home shot and records a defensive rebound for the opponent', async () => {
     const session = await mountStartedGame()
