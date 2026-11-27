@@ -85,7 +85,7 @@ function actionLabel(action: PendingAction) {
     close-on-backdrop
     @close="emit('cancel')"
   >
-      <div class="event-flow-progress">
+      <div v-if="flow.length > 1" class="event-flow-progress">
         <div class="event-flow-meta">
           <button v-if="stepIndex > 0" type="button" class="event-flow-back" @click="emit('go-to-step', stepIndex - 1)">{{ t('picker.back') }}</button>
           <span>{{ t('picker.flowStep', { step: stepIndex + 1, total: flow.length }) }}</span>
@@ -244,7 +244,7 @@ function actionLabel(action: PendingAction) {
         </div>
       </section>
 
-      <div v-if="action.type !== 'turnover'" class="scoring-picker-footer">
+      <div v-if="flow.length > 1 && action.type !== 'turnover'" class="scoring-picker-footer">
         <button class="picker-cancel" @click="emit('cancel')">{{ t('picker.cancel') }}</button>
         <button class="picker-confirm" :disabled="!scorerId" @click="emit('finish')">{{ t('picker.submit') }}</button>
       </div>

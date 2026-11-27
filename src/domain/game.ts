@@ -132,6 +132,9 @@ export function createInitialGameState(locale: AppLocale = 'nl'): GameState {
     nl: { home: 'Thuis', away: 'Uit', player: 'Speler' },
     en: { home: 'Home', away: 'Away', player: 'Player' },
     cs: { home: 'Domácí', away: 'Hosté', player: 'Hráč' },
+    pl: { home: 'Gospodarze', away: 'Goście', player: 'Gracz' },
+    el: { home: 'Γηπεδούχοι', away: 'Φιλοξενούμενοι', player: 'Παίκτης' },
+    tr: { home: 'Ev sahibi', away: 'Deplasman', player: 'Oyuncu' },
   }[locale]
   const teams: Team[] = [
     { id: 'home', name: names.home, color: '#f26a36' },

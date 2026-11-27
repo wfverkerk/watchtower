@@ -49,16 +49,16 @@ export function useLocale() {
 
   function displayTeamName(team: { id: string; name: string }) {
     const defaultNames = team.id === 'home'
-      ? ['Thuis', 'Home', 'Domácí']
+      ? ['Thuis', 'Home', 'Domácí', 'Gospodarze', 'Γηπεδούχοι', 'Ev sahibi']
       : team.id === 'away'
-        ? ['Uit', 'Away', 'Hosté']
+        ? ['Uit', 'Away', 'Hosté', 'Goście', 'Φιλοξενούμενοι', 'Deplasman']
         : []
     if (defaultNames.includes(team.name)) return translate(team.id === 'home' ? 'app.home' : 'app.away')
     return team.name
   }
 
   function displayPlayerName(name: string) {
-    const defaultPlayer = /^(?:Speler|Player|Hráč) (\d+)$/.exec(name)
+    const defaultPlayer = /^(?:Speler|Player|Hráč|Gracz|Παίκτης|Oyuncu) (\d+)$/.exec(name)
     return defaultPlayer ? translate('app.defaultPlayer', { number: defaultPlayer[1] }) : name
   }
 

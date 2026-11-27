@@ -31,6 +31,7 @@ const name = ref(props.profile?.name ?? '')
 const description = ref(props.profile?.description ?? '')
 const selectedLocale = ref<AppLocale>(props.profile?.locale ?? locale.value)
 const keepScreenAwake = ref(props.profile?.keepScreenAwake ?? true)
+const expertMode = ref(props.profile?.expertMode ?? false)
 const databasePlayerNames = computed(() => [...new Set(props.teams.flatMap((team) => team.playerNames).filter(Boolean))])
 const examplePlayerName = ref('')
 const canSave = computed(() => name.value.trim().length > 0)
@@ -52,6 +53,7 @@ function save() {
     description: description.value.trim(),
     locale: selectedLocale.value,
     keepScreenAwake: keepScreenAwake.value,
+    expertMode: expertMode.value,
   })
 }
 </script>
@@ -120,6 +122,14 @@ function save() {
           <span>
             <strong>{{ t('userProfile.keepScreenAwake') }}</strong>
             <small>{{ t('userProfile.keepScreenAwakeHint') }}</small>
+          </span>
+        </label>
+
+        <label class="profile-screen-setting">
+          <input v-model="expertMode" type="checkbox">
+          <span>
+            <strong>{{ t('userProfile.expertMode') }}</strong>
+            <small>{{ t('userProfile.expertModeHint') }}</small>
           </span>
         </label>
 

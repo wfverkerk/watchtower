@@ -171,7 +171,7 @@ const {
   finishLocalMatch,
   releaseFinishedMatch,
   joinSharedMatch,
-} = useGameSession()
+} = useGameSession(computed(() => userProfile.value?.expertMode ?? false))
 const hasCurrentGame = computed(() => {
   if (matchLink.value) return !matchLink.value.finished
   return !game.localFinishedAt && (game.period !== undefined || game.actions.length > 0)
@@ -605,6 +605,7 @@ watch(locale, (value) => {
     <div class="content-grid">
       <GameControls
         v-if="!game.localFinishedAt"
+        :expert-mode="userProfile?.expertMode ?? false"
         :team-id="selectedTeamId"
         :team-players="teamPlayers"
         :game-started="game.gameStarted || !!matchLink?.finished"
