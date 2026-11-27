@@ -5,6 +5,8 @@ import { useLocale } from '../i18n/useLocale'
 import { getSupabaseClient } from '../services/supabaseClient'
 import BaseDialog from './BaseDialog.vue'
 import DialogHeader from './DialogHeader.vue'
+import AppButton from './ui/AppButton.vue'
+import FormField from './ui/FormField.vue'
 
 const props = defineProps<{ hasMatch: boolean; releaseMatch: () => Promise<void> }>()
 const emit = defineEmits<{ close: [] }>()
@@ -63,18 +65,18 @@ async function switchIdentity(action: 'login' | 'logout') {
 </script>
 
 <template>
-  <BaseDialog backdrop-class="match-dialog-backdrop" dialog-class="match-dialog panel" :label="t('statistics.coachLogin')" close-on-backdrop @close="emit('close')">
+  <BaseDialog :label="t('statistics.coachLogin')" close-on-backdrop @close="emit('close')">
     <DialogHeader :title="t('statistics.coachLogin')" :close-label="t('picker.cancel')" @close="emit('close')" />
     <p class="match-dialog-description">{{ t('statistics.coachAccessHint') }}</p>
     <template v-if="signedInEmail">
       <p>{{ t('statistics.signedIn', { email: signedInEmail }) }}</p>
-      <button class="match-sync-secondary" type="button" :disabled="busy" @click="switchIdentity('logout')">{{ t('statistics.signOut') }}</button>
+      <AppButton :disabled="busy" @click="switchIdentity('logout')">{{ t('statistics.signOut') }}</AppButton>
     </template>
     <form v-else class="match-sync-form" @submit.prevent="switchIdentity('login')">
-      <label class="match-sync-field">{{ t('statistics.email') }}
+      <FormField>{{ t('statistics.email') }}
         <input v-model="email" type="email" required autocomplete="email">
-      </label>
-      <button class="match-sync-primary" type="submit" :disabled="busy || !email.trim()">{{ t('statistics.sendLink') }}</button>
+      </FormField>
+      <AppButton variant="primary" type="submit" :disabled="busy || !email.trim()">{{ t('statistics.sendLink') }}</AppButton>
     </form>
     <p v-if="message" role="status">{{ message }}</p>
     <p v-if="error" class="match-sync-error" role="alert">{{ error }}</p>

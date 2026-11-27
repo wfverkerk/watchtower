@@ -6,6 +6,8 @@ import { isScoreCandidate, reconcileLiveScores } from '../domain/liveReconciliat
 import { getActionTranslation } from '../i18n/actionLabel'
 import { isAppLocale, useLocale } from '../i18n/useLocale'
 import { currentLiveActions, loadLiveMatch, setLiveScoreLink, watchLiveMatch, type LiveAction, type LiveMatch } from '../services/liveMatch'
+import AppCard from './ui/AppCard.vue'
+import AppNotice from './ui/AppNotice.vue'
 
 const props = defineProps<{ matchId: string; initialGame: GameState; embedded?: boolean }>()
 const { t, locale } = useLocale()
@@ -80,22 +82,20 @@ onUnmounted(() => {
 
 <template>
   <section class="sessions-page">
-    <p v-if="error" class="notice" role="alert">{{ error }}</p>
-    <p v-if="offline" class="notice" role="status">{{ t('sessions.liveOffline') }}</p>
+    <AppNotice v-if="error" tone="error" role="alert">{{ error }}</AppNotice>
+    <AppNotice v-if="offline" tone="error" role="status">{{ t('sessions.liveOffline') }}</AppNotice>
     <p v-if="!live && !error" class="statistics-hint" role="status">{{ t('statistics.loading') }}</p>
-    <section v-if="live" class="panel statistics-card">
-      <h2 v-if="embedded">{{ t('sessions.live') }}</h2>
+    <AppCard v-if="live" :title="embedded ? t('sessions.live') : undefined">
       <div class="live-score">
         <strong>{{ initialGame.teams[0].name }}</strong>
         <b>{{ scores[0]?.points ?? 0 }} – {{ scores[1]?.points ?? 0 }}</b>
         <strong>{{ initialGame.teams[1].name }}</strong>
       </div>
       <p class="statistics-hint">{{ t('sessions.sourceScore') }}</p>
-    </section>
-    <section v-if="live" class="panel statistics-card">
-      <h2>{{ t('activity.recent') }}</h2>
+    </AppCard>
+    <AppCard v-if="live" :title="t('activity.recent')">
       <p class="statistics-hint">{{ t('sessions.independentActions') }}</p>
-      <p v-if="reconciled.invalidLinks.length" class="notice" role="alert">{{ t('sessions.invalidLink') }}</p>
+      <AppNotice v-if="reconciled.invalidLinks.length" tone="error" role="alert">{{ t('sessions.invalidLink') }}</AppNotice>
       <div v-for="item in [...reconciled.official].reverse()" :key="`${item.trackerId}:${item.action.id}`" class="session-row">
         <strong>{{ teamName(item.action.teamId) }}</strong>
         <span v-if="item.action.playerId">{{ playerLabel(item.action.playerId) }}</span>
@@ -122,6 +122,6 @@ onUnmounted(() => {
           </select>
         </label>
       </details>
-    </section>
+    </AppCard>
   </section>
 </template>

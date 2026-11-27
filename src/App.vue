@@ -26,6 +26,7 @@ import ThankYouOverlay from './components/ThankYouOverlay.vue'
 import { useScreenWakeLock } from './composables/useScreenWakeLock'
 import { useSupabaseConnection } from './composables/useSupabaseConnection'
 import { isAppLocale, saveLocale, useLocale } from './i18n/useLocale'
+import AppNotice from './components/ui/AppNotice.vue'
 
 const { t, locale, displayTeamName, displayPlayerName, formatPeriod } = useLocale()
 const { connection } = useSupabaseConnection()
@@ -429,42 +430,42 @@ watch(locale, (value) => {
 </script>
 
 <template>
-  <main class="app-shell" :class="{ 'game-live': game.gameStarted }">
-    <header class="topbar">
-      <a class="brand" href="#" :aria-label="t('app.brandHome')" @click.prevent="homeOpen = true; practiceOpen = false; viewerMatchId = null">
-        <span class="brand-mark">W</span>
-        <span>watchtower<span class="brand-dot">.</span></span>
+  <main class="app-shell mx-auto w-[calc(100%-64px)] max-w-[1120px] max-sm:w-[calc(100%-32px)] max-sm:max-w-[480px] max-xs:w-[calc(100%-24px)]!" :class="{ 'game-live': game.gameStarted }">
+    <header class="topbar flex h-[74px] items-center justify-between max-sm:h-[62px]">
+      <a class="brand inline-flex items-center gap-2.5 font-display text-[19px] font-bold tracking-[-0.8px] text-ink no-underline" href="#" :aria-label="t('app.brandHome')" @click.prevent="homeOpen = true; practiceOpen = false; viewerMatchId = null">
+        <span class="brand-mark grid size-[30px] place-items-center rounded-[9px] bg-orange text-[15px] text-white">W</span>
+        <span>watchtower<span class="brand-dot text-orange">.</span></span>
       </a>
-      <div class="topbar-right">
-        <button class="share-match-button" type="button" :aria-label="t('sessions.practiceMenu')" :title="t('sessions.practiceMenu')" @click="openPracticePage">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3H9zM7 5.5H5v15h14v-15h-2M12 10.5v6M9 13.5h6" /></svg>
+      <div class="topbar-right flex items-center gap-[18px] max-xs:gap-2.5">
+        <button class="share-match-button grid size-8 shrink-0 basis-8 place-items-center rounded-full border border-line bg-panel p-0 text-ink hover:bg-page" type="button" :aria-label="t('sessions.practiceMenu')" :title="t('sessions.practiceMenu')" @click="openPracticePage">
+          <svg class="size-4 fill-none stroke-current" stroke-width="1.7" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3H9zM7 5.5H5v15h14v-15h-2M12 10.5v6M9 13.5h6" /></svg>
         </button>
-        <button class="share-match-button" type="button" :aria-label="t('statistics.title')" :title="t('statistics.title')" @click="openStatistics">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V12h4v8M10 20V5h4v15M16 20V9h4v11M2 20h20" /></svg>
+        <button class="share-match-button grid size-8 shrink-0 basis-8 place-items-center rounded-full border border-line bg-panel p-0 text-ink hover:bg-page" type="button" :aria-label="t('statistics.title')" :title="t('statistics.title')" @click="openStatistics">
+          <svg class="size-4 fill-none stroke-current" stroke-width="1.7" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V12h4v8M10 20V5h4v15M16 20V9h4v11M2 20h20" /></svg>
         </button>
-        <span v-if="!teamSetupOpen && !homeOpen" class="offline-indicator">
-          <span :class="matchLink || matchSyncStatus !== 'local' ? `sync-dot-${matchSyncStatus}` : ''"></span>
+        <span v-if="!teamSetupOpen && !homeOpen" class="offline-indicator flex items-center gap-2 text-xs text-[#696962] max-xs:text-[10px]">
+          <span class="size-[7px] rounded-full bg-[#56a574]" :class="matchLink || matchSyncStatus !== 'local' ? `sync-dot-${matchSyncStatus}` : ''"></span>
           {{ matchLink || matchSyncStatus !== 'local' ? t(`sync.status.${matchSyncStatus}`) : t('app.savedLocally') }}
         </span>
-        <button class="avatar" type="button" :aria-label="userProfile?.name ? `${t('app.profile')}: ${userProfile.name}` : t('app.profile')" :title="t('app.profile')" @click="userProfileOpen = true">          {{ userProfile?.name.trim().charAt(0).toLocaleUpperCase() || '?' }}
+        <button class="avatar grid size-[31px] cursor-pointer place-items-center rounded-full border-0 bg-[#f4e3d8] text-xs font-bold text-[#78503d] max-xs:size-[29px] max-xs:shrink-0 max-xs:basis-[29px]" type="button" :aria-label="userProfile?.name ? `${t('app.profile')}: ${userProfile.name}` : t('app.profile')" :title="t('app.profile')" @click="userProfileOpen = true">          {{ userProfile?.name.trim().charAt(0).toLocaleUpperCase() || '?' }}
         </button>
       </div>
     </header>
 
-    <div v-if="storageError" class="notice" role="alert">{{ storageError }}</div>
-    <div v-if="pageError" class="notice" role="alert">{{ pageError }}</div>
-    <div v-if="sharedInitialError" class="notice" role="alert">{{ sharedInitialError }}</div>
-    <div v-if="authCallbackBlocked" class="notice" role="alert">{{ t('statistics.authCallbackBlocked') }}</div>
-    <div v-if="!matchLink && matchSyncError" class="notice" role="alert">{{ matchSyncError }}</div>
-    <div v-if="offlineSetupError" class="notice" role="alert">{{ t('userProfile.offlineSetupError') }}</div>
-    <div v-if="wakeLockStatus === 'unsupported' || wakeLockStatus === 'error'" class="notice" role="status">
+    <AppNotice v-if="storageError" tone="error" role="alert">{{ storageError }}</AppNotice>
+    <AppNotice v-if="pageError" tone="error" role="alert">{{ pageError }}</AppNotice>
+    <AppNotice v-if="sharedInitialError" tone="error" role="alert">{{ sharedInitialError }}</AppNotice>
+    <AppNotice v-if="authCallbackBlocked" tone="error" role="alert">{{ t('statistics.authCallbackBlocked') }}</AppNotice>
+    <AppNotice v-if="!matchLink && matchSyncError" tone="error" role="alert">{{ matchSyncError }}</AppNotice>
+    <AppNotice v-if="offlineSetupError" tone="error" role="alert">{{ t('userProfile.offlineSetupError') }}</AppNotice>
+    <AppNotice v-if="wakeLockStatus === 'unsupported' || wakeLockStatus === 'error'" tone="error" role="status">
       {{ t(wakeLockStatus === 'unsupported' ? 'userProfile.screenWakeUnsupported' : 'userProfile.screenWakeError') }}
-    </div>
-    <div v-if="updateAvailable" class="notice" role="status">
+    </AppNotice>
+    <AppNotice v-if="updateAvailable" tone="error" role="status">
       {{ t('userProfile.updateAvailable') }}
       <span v-if="updateBlocked">{{ t('userProfile.updateAfterGame') }}</span>
       <button v-else type="button" class="text-button" @click="updateApp">{{ t('userProfile.updateNow') }}</button>
-    </div>
+    </AppNotice>
     <UserProfileDialog
       v-if="userProfileOpen"
       :profile="userProfile"

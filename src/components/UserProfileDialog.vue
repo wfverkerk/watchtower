@@ -6,6 +6,7 @@ import type { UserProfile } from '../services/userProfile'
 import type { ZoebasTeam } from '../services/zoebasTeams'
 import BaseDialog from './BaseDialog.vue'
 import DialogHeader from './DialogHeader.vue'
+import AppButton from './ui/AppButton.vue'
 
 const props = defineProps<{
   profile: UserProfile | null
@@ -60,8 +61,9 @@ function save() {
 
 <template>
   <BaseDialog
-    :backdrop-class="profile ? 'match-dialog-backdrop' : 'user-profile-page'"
-    :dialog-class="`panel user-profile-dialog ${profile ? 'user-profile-modal' : 'user-profile-onboarding'}`"
+    :variant="profile ? 'standard' : 'page'"
+    :size="profile ? 'lg' : 'wide'"
+    :dialog-class="`user-profile-dialog ${profile ? 'user-profile-modal' : 'user-profile-onboarding'}`"
     :modal="!!profile"
     :close-on-escape="!!profile"
     labelledby="user-profile-title"
@@ -84,7 +86,7 @@ function save() {
           <label v-for="language in appLocales" :key="language" class="profile-language-option">
             <input
               v-model="selectedLocale"
-              class="visually-hidden"
+              class="sr-only"
               type="radio"
               name="profile-language"
               :value="language"
@@ -99,7 +101,7 @@ function save() {
           <legend>{{ t('userProfile.appearance') }}</legend>
           <label v-for="option in (['light', 'dark'] as const)" :key="option" class="profile-language-option">
             <input
-              class="visually-hidden"
+              class="sr-only"
               type="radio"
               name="profile-theme"
               :value="option"
@@ -134,17 +136,17 @@ function save() {
         </label>
 
         <p class="profile-install-note">{{ t('userProfile.installStorageNote') }}</p>
-        <button v-if="profile" class="match-sync-secondary" type="button" @click="emit('coachLogin')">{{ t('statistics.coachLogin') }}</button>
-        <button v-if="profile && isAdmin" class="match-sync-secondary" type="button" @click="emit('admin')">{{ t('userProfile.adminDashboard') }}</button>
+        <AppButton v-if="profile" @click="emit('coachLogin')">{{ t('statistics.coachLogin') }}</AppButton>
+        <AppButton v-if="profile && isAdmin" @click="emit('admin')">{{ t('userProfile.adminDashboard') }}</AppButton>
 
         <p v-if="error" class="match-sync-error" role="alert">{{ error }}</p>
         <button v-if="profile" class="user-profile-reset" type="button" @click="emit('reset')">{{ t('userProfile.reset') }}</button>
         <p v-if="profile" class="profile-build-id">{{ t('userProfile.buildVersion') }}: {{ buildId }}</p>
         <footer class="user-profile-footer">
-          <button v-if="profile" class="match-sync-secondary" type="button" @click="emit('cancel')">{{ t('userProfile.cancel') }}</button>
-          <button class="match-sync-primary" type="submit" :disabled="!canSave">
+          <AppButton v-if="profile" @click="emit('cancel')">{{ t('userProfile.cancel') }}</AppButton>
+          <AppButton variant="primary" type="submit" :disabled="!canSave">
             {{ t(profile ? 'userProfile.save' : 'userProfile.continue') }}
-          </button>
+          </AppButton>
         </footer>
       </form>
   </BaseDialog>

@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
@@ -9,6 +10,7 @@ export default defineConfig(({ command }) => ({
     __BUILD_ID__: JSON.stringify(process.env.VITE_BUILD_ID?.trim().slice(0, 12) || (command === 'serve' ? 'dev' : `local-${Date.now().toString(36)}`)),
   },
   plugins: [
+    tailwindcss(),
     vue(),
     VitePWA({
       injectRegister: null,

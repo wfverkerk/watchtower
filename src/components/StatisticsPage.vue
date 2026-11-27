@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import PageHeader from './PageHeader.vue'
+import AppButton from './ui/AppButton.vue'
+import AppCard from './ui/AppCard.vue'
+import AppNotice from './ui/AppNotice.vue'
+import FormField from './ui/FormField.vue'
 import { errorMessage } from '../domain/guards'
 import { computed, onMounted, ref, watch } from 'vue'
 import { matchPlayerId, playerMatchStats, statKeys, sumPlayerStats, type PlayerStatKey } from '../domain/statistics'
@@ -203,21 +207,20 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
 <template>
   <section class="statistics-page">
     <PageHeader :eyebrow="t('statistics.eyebrow')" :title="t('statistics.title')">
-      <button class="match-sync-secondary" type="button" @click="emit('close')">{{ t('statistics.back') }}</button>
+      <AppButton @click="emit('close')">{{ t('statistics.back') }}</AppButton>
     </PageHeader>
-    <p v-if="error" class="notice" role="alert">{{ error }}</p>
+    <AppNotice v-if="error" tone="error" role="alert">{{ error }}</AppNotice>
     <p v-if="busy" class="statistics-hint" role="status">{{ t('statistics.loading') }}</p>
     <p v-if="!matchLink" class="statistics-hint">{{ t('statistics.shareFirst') }}</p>
-    <section class="panel statistics-card">
-      <h2>{{ t('statistics.teamAccess') }}</h2>
+    <AppCard :title="t('statistics.teamAccess')">
       <form class="statistics-inline" @submit.prevent="joinTeam">
-        <label class="match-sync-field">{{ t('statistics.teamCode') }}
+        <FormField>{{ t('statistics.teamCode') }}
           <input v-model="code" maxlength="24" autocomplete="off" autocapitalize="characters">
-        </label>
-        <button class="match-sync-primary" type="submit" :disabled="busy || !code.trim()">{{ t('statistics.joinTeam') }}</button>
+        </FormField>
+        <AppButton variant="primary" type="submit" :disabled="busy || !code.trim()">{{ t('statistics.joinTeam') }}</AppButton>
       </form>
       <p class="statistics-hint">{{ t('statistics.teamCodeHint') }}</p>
-      <button type="button" class="match-sync-secondary" @click="emit('coach-login')">{{ t('statistics.coachLogin') }}</button>
+      <AppButton @click="emit('coach-login')">{{ t('statistics.coachLogin') }}</AppButton>
       <label v-if="teams.length" class="match-sync-field statistics-team-select">{{ t('statistics.team') }}
         <select v-model="teamId" :disabled="busy"><option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option></select>
       </label>
@@ -225,10 +228,9 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
         <input v-model="includePractice" type="checkbox">
         {{ t('statistics.includePractice', { count: practiceCount }) }}
       </label>
-    </section>
+    </AppCard>
 
-    <section v-if="matchLink && scorers" class="panel statistics-card">
-      <h2>{{ t('statistics.currentMatch') }}</h2>
+    <AppCard v-if="matchLink && scorers" :title="t('statistics.currentMatch')">
       <p class="statistics-hint">{{ t('statistics.scorerHint') }}</p>
       <p v-if="scorers.scorerId" class="statistics-hint">{{ t('roles.scorerIs', { name: scorers.scorerName ?? '' }) }}</p>
       <template v-if="scorers.canManageLive && !scorers.scorerId">
@@ -237,7 +239,7 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
             <option v-for="scorer in scorers.scorers" :key="scorer.id" :value="scorer.id" :disabled="!scorer.updatedAt">{{ scorer.name }} · {{ scorer.updatedAt ? new Date(scorer.updatedAt).toLocaleString() : t('statistics.noSnapshot') }}</option>
           </select>
         </label>
-        <button type="button" class="match-sync-secondary" :disabled="busy || !liveScorerId || liveScorerId === scorers.liveTrackerId" @click="changeLiveScorer">{{ t('sessions.setLiveScorer') }}</button>
+        <AppButton :disabled="busy || !liveScorerId || liveScorerId === scorers.liveTrackerId" @click="changeLiveScorer">{{ t('sessions.setLiveScorer') }}</AppButton>
       </template>
       <label v-if="!scorers.scorerId" class="match-sync-field">{{ t('statistics.officialScorer') }}
         <select v-model="scorerId">
@@ -247,11 +249,11 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
         </select>
       </label>
       <p v-if="scorers.finishedAt" class="statistics-hint">{{ t('statistics.finishedAt', { date: new Date(scorers.finishedAt).toLocaleString() }) }}</p>
-      <button v-if="scorers.finishedAt && !scorers.scorerId" class="match-sync-primary" type="button" :disabled="busy || !scorerId" @click="changeScorer">{{ t('statistics.changeScorer') }}</button>
-      <button v-else-if="!scorers.finishedAt" class="match-sync-primary" type="button" :disabled="busy || !teamId || (!!currentTeamId && teamId !== currentTeamId) || !scorers.scorers.some((scorer) => scorer.id === scorerId && scorer.updatedAt) || syncStatus !== 'synced'" @click="finishMatch">{{ t('statistics.finishMatch') }}</button>
+      <AppButton v-if="scorers.finishedAt && !scorers.scorerId" variant="primary" :disabled="busy || !scorerId" @click="changeScorer">{{ t('statistics.changeScorer') }}</AppButton>
+      <AppButton v-else-if="!scorers.finishedAt" variant="primary" :disabled="busy || !teamId || (!!currentTeamId && teamId !== currentTeamId) || !scorers.scorers.some((scorer) => scorer.id === scorerId && scorer.updatedAt) || syncStatus !== 'synced'" @click="finishMatch">{{ t('statistics.finishMatch') }}</AppButton>
       <p v-if="!scorers.finishedAt && currentTeamId && teamId && teamId !== currentTeamId" class="statistics-hint">{{ t('statistics.wrongTeam') }}</p>
       <p v-if="!scorers.finishedAt && syncStatus !== 'synced'" class="statistics-hint">{{ t('statistics.syncBeforeFinish') }}</p>
-    </section>
+    </AppCard>
 
     <template v-if="selectedTeam">
       <details v-if="selectedTeam.isCoach" class="panel statistics-card statistics-roster-editor">
@@ -261,8 +263,8 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
           <label class="match-sync-field">{{ t('statistics.playerName') }}<input v-model="playerName" maxlength="100" required></label>
           <label class="match-sync-field">{{ t('statistics.jersey') }}<input v-model="playerNumber" inputmode="numeric" pattern="[0-9]{1,2}" required></label>
           <label><input v-model="playerPrivate" type="checkbox"> {{ t('statistics.private') }}</label>
-          <button class="match-sync-primary" type="submit" :disabled="busy">{{ t(editingPlayerId ? 'statistics.savePlayer' : 'statistics.addPlayer') }}</button>
-          <button v-if="editingPlayerId" type="button" class="match-sync-secondary" @click="editingPlayerId = null; playerName = ''; playerNumber = ''; playerPrivate = false">{{ t('statistics.cancel') }}</button>
+          <AppButton variant="primary" type="submit" :disabled="busy">{{ t(editingPlayerId ? 'statistics.savePlayer' : 'statistics.addPlayer') }}</AppButton>
+          <AppButton v-if="editingPlayerId" @click="editingPlayerId = null; playerName = ''; playerNumber = ''; playerPrivate = false">{{ t('statistics.cancel') }}</AppButton>
         </form>
         <ul class="statistics-roster">
           <li v-for="player in roster" :key="player.id">
@@ -272,8 +274,7 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
         </ul>
       </details>
 
-      <section class="panel statistics-card">
-        <h2>{{ t('statistics.players') }}</h2>
+      <AppCard :title="t('statistics.players')">
         <p v-if="!roster.length" class="statistics-hint">{{ t('statistics.emptyRoster') }}</p>
         <label v-else class="match-sync-field">{{ t('statistics.player') }}
           <select v-model="selectedPlayerId">
@@ -313,10 +314,9 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
             </div>
           </article>
         </template>
-      </section>
+      </AppCard>
 
-      <section class="panel statistics-card">
-        <h2>{{ t('statistics.history') }}</h2>
+      <AppCard :title="t('statistics.history')">
         <p class="statistics-hint">{{ t('statistics.mappingHint') }}</p>
         <p v-if="!visibleHistory.length" class="statistics-hint">{{ t('statistics.noHistory') }}</p>
         <article v-for="match in visibleHistory" :key="match.id" class="statistics-match">
@@ -334,7 +334,7 @@ async function updateLink(match: StatisticsMatch, localId: string, event: Event)
           </div>
           <p v-if="!match.canEdit" class="statistics-hint">{{ t('statistics.matchMemberToLink') }}</p>
         </article>
-      </section>
+      </AppCard>
     </template>
   </section>
 </template>

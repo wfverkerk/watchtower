@@ -21,6 +21,45 @@ npm install
 npm run dev
 ```
 
+### Styling
+
+De interface gebruikt Tailwind CSS 4 via `@tailwindcss/vite`. De configuratie en
+plugins staan in `vite.config.ts`; gedeelde themawaarden staan in `@theme` in
+`src/style.css`. Gebruik voor nieuwe of gewijzigde componenten rechtstreeks
+Tailwind utility classes in het Vue-template.
+
+- Houd styling bij het element dat hem gebruikt; voeg geen nieuwe globale
+  componentselectors of scoped `<style>`-blokken toe.
+- Gebruik de Tailwind-themawaarden, bijvoorbeeld `bg-panel`, `text-muted`,
+  `border-line` en `font-display`, in plaats van nieuwe letterlijke kleuren of
+  fonts.
+- Maak voor herhaalde, semantische UI-patronen een `@utility` of `@apply`-regel
+  in `src/style.css`. Beperk dit tot echte gedeelde bouwstenen, zoals knoppen,
+  formuliervelden en badges.
+- Gebruik varianten voor states en responsive styling (`hover:`, `focus-visible:`,
+  `disabled:`, `sm:`, `md:`, `lg:`, `xl:`, `2xl:` en de extra `xs:`-variant op
+  400px) in plaats van extra selectors of arbitrary breakpointwaarden.
+- Gebruik voor layoutwijzigingen uitsluitend de standaard
+  Tailwind-breakpoints en de aanvullende `xs`-breakpoint. Gebruik voor
+  landschapspecifieke regels de custom variants `landscape-coarse:` en
+  `landscape-short:`.
+- Geef runtimewaarden zoals teamkleuren via een CSS custom property door en
+  lees die uit met een Tailwind arbitrary value, bijvoorbeeld
+  `:style="{ '--team-color': team.color }"` met
+  `bg-[var(--team-color)]`. Houd alleen waarden die echt pas tijdens runtime
+  bekend worden inline.
+- SVG-eigenschappen, keyframes en uitzonderingen die niet duidelijk als
+  utilities uit te drukken zijn, mogen lokaal in de Tailwind-laag blijven.
+  Leg deze uitzonderingen klein en rechtstreeks naast de bijbehorende stijl.
+- Tijdens de migratie mag bestaande CSS tijdelijk naast Tailwind bestaan.
+  Verwijder oude selectors zodra hun component is gemigreerd; kopieer of voeg
+  geen oude selectors toe.
+
+Controleer stylingwijzigingen minimaal op desktop, mobiel portrait en mobiel
+landscape. Voor de live invoer gelden de bestaande landscape-maten en moet het
+scorebord, de actieknoppen en de relevante popover zonder ongewenste scrolling
+bruikbaar blijven.
+
 ## Controleren
 
 ```sh

@@ -4,6 +4,8 @@ import { errorMessage } from '../domain/guards'
 import { useLocale } from '../i18n/useLocale'
 import { loadAdminDashboard, removeTeamCoach, setTeamCoach, type AdminCoach, type AdminTeam, type CoachRight } from '../services/admin'
 import BaseDialog from './BaseDialog.vue'
+import AppButton from './ui/AppButton.vue'
+import DialogHeader from './DialogHeader.vue'
 
 const emit = defineEmits<{ close: [] }>()
 const { t } = useLocale()
@@ -60,16 +62,14 @@ onMounted(() => { void run(async () => {}) })
 
 <template>
   <BaseDialog
-    backdrop-class="match-dialog-backdrop"
-    dialog-class="match-dialog panel admin-dashboard"
+    dialog-class="admin-dashboard"
     :label="t('admin.title')"
     close-on-backdrop
     @close="emit('close')"
   >
-    <header class="match-dialog-header">
-      <h2>{{ t('admin.title') }}</h2>
-      <button type="button" class="match-sync-secondary" @click="emit('close')">{{ t('admin.close') }}</button>
-    </header>
+    <DialogHeader :title="t('admin.title')">
+      <AppButton @click="emit('close')">{{ t('admin.close') }}</AppButton>
+    </DialogHeader>
     <p class="match-dialog-description">{{ t('admin.hint') }}</p>
     <input v-model="query" class="admin-search" type="search" :placeholder="t('admin.search')" :aria-label="t('admin.search')">
     <p v-if="error" class="match-sync-error" role="alert">{{ error }}</p>
@@ -87,7 +87,7 @@ onMounted(() => { void run(async () => {}) })
             >
             {{ t(`admin.right.${right}`) }}
           </label>
-          <button type="button" class="match-sync-secondary" :disabled="busy" @click="removeCoach(team.id, coach)">{{ t('admin.remove') }}</button>
+          <AppButton :disabled="busy" @click="removeCoach(team.id, coach)">{{ t('admin.remove') }}</AppButton>
         </li>
       </ul>
       <form class="admin-add" @submit.prevent="addCoach(team.id)">
@@ -100,7 +100,7 @@ onMounted(() => { void run(async () => {}) })
           >
           {{ t(`admin.right.${right}`) }}
         </label>
-        <button type="submit" class="match-sync-primary" :disabled="busy">{{ t('admin.add') }}</button>
+        <AppButton variant="primary" type="submit" :disabled="busy">{{ t('admin.add') }}</AppButton>
       </form>
     </details>
   </BaseDialog>
